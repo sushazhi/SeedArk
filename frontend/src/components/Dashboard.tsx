@@ -55,7 +55,7 @@ export function Dashboard({ open, onClose }: { open: boolean; onClose: () => voi
 
   const total = torrents.length
   const ratio = stats.downloaded > 0 ? stats.uploaded / stats.downloaded : 0
-  const card = 'flex-1 min-w-[120px] rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3 text-center'
+  const card = 'flex-1 min-w-[120px] rounded-xl glass-section p-3 text-center'
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -90,11 +90,11 @@ export function Dashboard({ open, onClose }: { open: boolean; onClose: () => voi
 
         {/* 状态分布 + 速度历史 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+          <div className="rounded-xl glass-section p-3">
             <div className="text-body font-medium mb-2">{t('dashboard.statusDist')}</div>
             <StatusDonut byStatus={stats.byStatus} />
           </div>
-          <div className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+          <div className="rounded-xl glass-section p-3">
             <div className="text-body font-medium mb-2">{t('dashboard.speedHistory')}</div>
             <SpeedHistory />
           </div>
@@ -172,7 +172,7 @@ function BarList({ title, data }: {
   const entries = Object.entries(data).sort((a, b) => b[1].size - a[1].size).slice(0, 6)
   if (entries.length === 0) {
     return (
-      <div className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+      <div className="rounded-xl glass-section p-3">
         <div className="text-body font-medium mb-2">{title}</div>
         <div className="py-6 text-center text-footnote text-gray-400">{t('common.empty')}</div>
       </div>
@@ -180,7 +180,7 @@ function BarList({ title, data }: {
   }
   const max = Math.max(...entries.map(([, v]) => v.size), 1)
   return (
-    <div className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+    <div className="rounded-xl glass-section p-3">
       <div className="text-body font-medium mb-2">{title}</div>
       <div className="space-y-1.5">
         {entries.map(([k, v]) => (

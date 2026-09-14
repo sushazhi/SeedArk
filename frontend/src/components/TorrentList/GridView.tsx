@@ -7,13 +7,10 @@ import { statusColor, statusPulses } from '@/utils/status'
 import type { EditMode, EditTarget } from '@/components/TorrentMenu'
 import { buildTorrentMenu, EditModals, TorrentMenuDropdown } from '@/components/TorrentMenu'
 import { useTorrentActions } from '@/hooks/useTorrentActions'
+import { useTorrentMenuHandler } from '@/hooks/useTorrentMenuHandler'
 import { useResponsive } from '@/hooks/useResponsive'
-import { useRevealPath } from '@/hooks/useRevealPath'
 import { usePlatform } from '@/platform'
 import { RemoveTorrentDialog, ReplaceTrackerDialog } from '@/components/ToolsDialogs'
-import { mapPath } from '@/utils/pathMapping'
-import { copyText } from '@/utils/clipboard'
-import { toast } from '@/lib/toast'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ProgressBar } from '@/components/TorrentList/ProgressBar'
 import { EmptyList } from '@/components/TorrentList/EmptyList'
@@ -37,7 +34,6 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
   const { isCoarse } = useResponsive()
   const actions = useTorrentActions()
   const { can } = usePlatform()
-  const revealPath = useRevealPath()
   const selectedIds = useAppStore((s) => s.selectedIds)
   const showCheckboxes = useAppStore((s) => s.showCheckboxes)
   const toggleSelect = useAppStore((s) => s.toggleSelect)
@@ -107,28 +103,14 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
     setSelectAnchor(torrent.id)
   }
 
-  const handleMenuClick = (torrent: Torrent) => (key: string) => {
-    const id = torrent.id
-    const reportCopy = (ok: boolean) => (ok ? toast.success(t('toast.copied')) : toast.error(t('toast.copyFailed')))
-    if (key === 'start') actions.singleStart(id)
-    else if (key === 'startNow') actions.singleStartNow(id)
-    else if (key === 'stop') actions.singleStop(id)
-    else if (key === 'verify') actions.verify(id)
-    else if (key === 'reannounce') actions.reannounce(id)
-    else if (key === 'path') setEditTarget({ torrent, mode: 'path' })
-    else if (key === 'rename') setEditTarget({ torrent, mode: 'rename' })
-    else if (key === 'other') setEditTarget({ torrent, mode: 'other' })
-    else if (key === 'labels') setEditTarget({ torrent, mode: 'labels' })
-    else if (key === 'trackers') setEditTarget({ torrent, mode: 'trackers' })
-    else if (key === 'replaceTrackers') setTrackerOpen(true)
-    else if (key.startsWith('queue:')) actions.queue(id, key.split(':')[1] as 'top' | 'up' | 'down' | 'bottom')
-    else if (key === 'copyMagnet') void copyText(torrent.magnetLink).then(reportCopy)
-    else if (key === 'copyName') void copyText(torrent.name).then(reportCopy)
-    else if (key === 'copyPath') void mapPath(torrent.downloadDir).then(copyText).then(reportCopy)
-    else if (key === 'remove') setRemoveIds([id])
-    else if (key === 'openDir') { void revealPath(torrent.downloadDir || '') }
-    else if (key === 'deleteCompleted') onOpenBatchClean?.()
-  }
+  const handleMenuClick = useTorrentMenuHandler({
+    onOpenDetail,
+    onOpenBatchClean,
+    onEdit: setEditTarget,
+    onRemove: (id) => setRemoveIds([id]),
+    onReplaceTrackers: () => setTrackerOpen(true),
+    canRevealPath: can('fs.revealPath'),
+  })
 
   return (
     <div
@@ -249,27 +231,28 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
                     )}
                   </div>
 
-                  {/* 元信息：下行 / 上行 · 分享率 · 做种/剩余 —— 始终一整行（flex-nowrap），
-                      整行靠左紧凑排列：速度与分享率之间不留伸缩空白，相邻卡片不会有的折行有的不折行。
-                      窄屏下字号降一档、间隔收紧；真塞不下时只允许最右侧的做种/剩余段省略号截断，
-                      分享率永远完整 */}
-                  <div className="flex flex-nowrap items-center gap-x-1.5 md:gap-x-2.5 text-caption1 md:text-footnote text-gray-500 dark:text-gray-400 mt-1 min-w-0 overflow-hidden">
+                  {/* 元信息：下行 / 上行 · 分享率 · 做种/剩余。
+                      宽屏保持一整行紧凑排列（相邻卡片高度一致）；窄屏允许折行，
+                      而不是把塞不下的部分截断——此前 flex-nowrap + overflow-hidden
+                      在窄屏会把「做种时长」直接吃掉，信息静默丢失。
+                      速度与分享率各自 shrink-0 保住，只有尾部的做种/剩余可折到第二行 */}
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 md:gap-x-2.5 md:flex-nowrap text-caption1 md:text-footnote text-gray-500 dark:text-gray-400 mt-1 min-w-0">
                     <span className="shrink-0 inline-flex items-center gap-x-1.5 md:gap-x-2.5">
                       <span className="tm-mono text-green-600 dark:text-green-400">↓{formatSpeed(torrent.rateDownload)}</span>
                       <span className="tm-mono text-blue-600 dark:text-blue-400">↑{formatSpeed(torrent.rateUpload)}</span>
                     </span>
-                    <span className="inline-flex items-center gap-x-1.5 md:gap-x-2.5 min-w-0">
+                    <span className="inline-flex items-center gap-x-1.5 md:gap-x-2.5 min-w-0 flex-wrap">
                       <Sep />
                       <span className="tm-mono shrink-0">{t('columns.ratio')} {formatRatio(torrent.uploadRatio)}</span>
                       {seedingFor && (
                         <>
-                          <Sep />
+                          <Sep className="hidden md:inline" />
                           <span className="text-gray-400 dark:text-gray-500 truncate min-w-0">{seedingFor}</span>
                         </>
                       )}
                       {eta && (
                         <>
-                          <Sep />
+                          <Sep className="hidden md:inline" />
                           <span className="truncate min-w-0">{eta}</span>
                         </>
                       )}

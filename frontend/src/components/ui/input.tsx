@@ -16,7 +16,10 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         autoCorrect="off"
         spellCheck={false}
         className={cn(
-          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-subhead shadow-sm transition-colors file:border-0 file:bg-transparent file:text-body file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-body",
+          // 字号固定 text-body：此前是 text-subhead md:text-body，同一个输入框在
+          // 窄屏与宽屏下相差一档，与其它控件（Select/Button 均 text-body）不同源。
+          // 触屏端 ≥16px 的防缩放规则由 index.css 的 (pointer: coarse) 块统一承担
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-body shadow-sm transition-colors file:border-0 file:bg-transparent file:text-body file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         ref={ref}

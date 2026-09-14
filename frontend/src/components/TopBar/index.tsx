@@ -8,6 +8,7 @@ import {
   Gauge,
   Globe,
   Menu,
+  MoreHorizontal,
   Pause,
   Play,
   Plus,
@@ -35,6 +36,13 @@ import { translateError } from '@/utils/errorText'
 import { toast } from '@/lib/toast'
 import { copyText } from '@/utils/clipboard'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ListControls } from '@/components/ListHeader'
@@ -193,7 +201,7 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
 
         {/* Logo + 标题 */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--brand-grad-from)] to-[var(--brand-grad-to)] flex items-center justify-center shadow-lg shadow-primary/30">
+          <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--brand-grad-from)] to-[var(--brand-grad-to)] flex items-center justify-center shadow-[0_4px_14px_color-mix(in_srgb,var(--color-primary)_34%,transparent)]">
             <span className="text-white font-bold text-body tracking-tight">TR</span>
           </span>
           <div className="leading-tight hidden sm:flex items-center gap-2">
@@ -275,22 +283,46 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
           </div>
         )}
 
-        {/* 右侧操作 */}
+        {/* 右侧操作：只保留高频项（排序/视图/刷新/添加/头像），
+            低频的宿主目录与创建种子收进 ⋯ 溢出菜单。
+            此前这条常驻 9 颗图标按钮，顶栏永远处于"满配"状态，视觉上没有落点 */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* 排序 / 视图 / 刷新 / 统计（桌面端并入顶栏，移动端在 ListHeader） */}
+          {/* 排序 / 视图 / 刷新（桌面端并入顶栏，移动端在 ListHeader） */}
           {!isMobile && <ListControls compact onOpenDashboard={onOpenDashboard} />}
 
-          {/* 宿主快捷操作：仅桌面端 + 宿主支持文件管理器时显示 */}
-          {!isMobile && can('fs.revealPath') && (
-            <>
-              <span className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-0.5 shrink-0" aria-hidden />
-              <ToolBtn icon={FolderOpen} title={t('action.openDownloadDir')} onClick={() => void openDownloadDir()} />
-              <ToolBtn icon={FolderCog} title={t('action.configDir')} onClick={() => void configDir()} />
-            </>
+          {!isMobile && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="tm-press h-9 w-9 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  aria-label={t('topbar.moreActions')}
+                  title={t('topbar.moreActions')}
+                >
+                  <MoreHorizontal className="w-5 h-5" strokeWidth={1.75} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="glass-panel-strong w-56" align="end">
+                <DropdownMenuItem className="text-footnote gap-2" onSelect={onOpenCreate}>
+                  <FilePlus2 className="w-4 h-4 text-primary" />
+                  {t('createTorrent.title')}
+                </DropdownMenuItem>
+                {/* 宿主快捷操作：仅宿主支持文件管理器时显示 */}
+                {can('fs.revealPath') && (
+                  <>
+                    <DropdownMenuSeparator className="my-0.5" />
+                    <DropdownMenuItem className="text-footnote gap-2" onSelect={() => void openDownloadDir()}>
+                      <FolderOpen className="w-4 h-4 text-primary" />
+                      {t('action.openDownloadDir')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-footnote gap-2" onSelect={() => void configDir()}>
+                      <FolderCog className="w-4 h-4 text-primary" />
+                      {t('action.configDir')}
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-
-          {/* 创建种子：桌面端与添加任务并排（移动端在分类标题行） */}
-          {!isMobile && <ToolBtn icon={FilePlus2} title={t('createTorrent.title')} onClick={onOpenCreate} />}
 
           {!isMobile && (
             <Button
@@ -307,7 +339,7 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
           <Popover open={avatarOpen} onOpenChange={setAvatarOpen}>
             <PopoverTrigger asChild>
               <button
-                className="h-11 w-11 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-[var(--brand-grad-to)] to-[var(--brand-grad-from)] text-white text-body font-semibold flex items-center justify-center shadow-md hover:scale-105 transition-transform duration-[220ms] [transition-timing-function:var(--ease-spring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white/70 dark:focus-visible:ring-offset-gray-900"
+                className="h-11 w-11 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-[var(--brand-grad-to)] to-[var(--brand-grad-from)] text-white text-body font-semibold flex items-center justify-center shadow-[0_4px_14px_color-mix(in_srgb,var(--color-primary)_34%,transparent)] hover:scale-105 transition-transform duration-[220ms] [transition-timing-function:var(--ease-spring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white/70 dark:focus-visible:ring-offset-gray-900"
                 aria-label={t('topbar.quickSettings')}
               >
                 {language === 'zh' ? '中' : 'EN'}
@@ -341,7 +373,9 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
                       title={t(`theme.preset.${p.id}`)}
                       aria-label={t(`theme.preset.${p.id}`)}
                       className={cn(
-                        'w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-[220ms] [transition-timing-function:var(--ease-spring)] hover:scale-110 active:scale-90',
+                        // tm-hug：色板视觉 32px，触屏用透明 ::after 外扩到 44pt 命中区。
+                        // 弹层走 glass-panel-strong（非 .tm-dialog），吃不到全局的 40px 提升
+                        'tm-hug w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-[220ms] [transition-timing-function:var(--ease-spring)] hover:scale-110 active:scale-90',
                         themePreset === p.id && 'ring-2 ring-offset-2 ring-offset-white/80 dark:ring-offset-gray-900',
                       )}
                       style={{

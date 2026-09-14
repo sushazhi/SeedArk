@@ -13,6 +13,7 @@ iOS 27 beta 的方向保留「玻璃更透、用户可控」的无障碍降级�
 | float | `.glass-panel-strong` | 弹窗 / 菜单 / Toast / 悬浮胶囊（顶层浮层） | 40px / 200%，不随滚动变化 |
 | solid | `.glass-panel-solid` | 玻璃弹窗**内**的下拉 / 子菜单（二级浮层） | 无（实底 + 浮层阴影） |
 | subcard | `.glass-subcard` | 面板**内部**的子卡片、分组块 | 无（实色半透明 + 内高光） |
+| section | `.glass-section` | 玻璃弹窗/面板内的**分区块与规则行**（设置、统计卡片） | 无（极淡填充 + 内高光） |
 
 - **只有承载滚动内容的顶层面板允许 `backdrop-filter`**；玻璃容器内的子卡片用
   `.glass-subcard`、二级浮层（下拉/子菜单）用 `.glass-panel-solid`，禁止二次模糊叠加。
@@ -110,6 +111,26 @@ iOS 27 beta 的方向保留「玻璃更透、用户可控」的无障碍降级�
 | 7 | DesktopTable 表头裸 `backdrop-blur-xl bg-white/50` | 改 `tm-dock glass-panel`，纳入滚动联动材质 |
 | 8 | 焦点态缺失：周几按钮、手写右键菜单项、文件树按钮 | 统一补 `focus-visible:outline-none` + `focus-visible:ring-1 ring-ring`（菜单项用主题色底） |
 | 9 | Canvas 块位图硬编码 hex 色 | 绘制改读 `--color-green-500`/`--color-blue-500` 令牌（暗色 pending 用 gray-700），随 theme/themePreset 重绘；图例圆点化 |
+
+## 11. 合规审计（2026-09-11，第二轮）
+
+第一轮把规范立了起来，但执行到具体组件时仍有漂移；这一轮逐条收敛。
+
+| # | 问题 | 修复 |
+| --- | --- | --- |
+| 1 | DesktopTable 表头 `justify-center`、单元格 `text-right`，数字列无共同基线 | 表头对齐跟随 `NUMERIC_COLS` 分流（数字列 `justify-end`，其余 `justify-start`）；排序图标改为常驻等宽槽位，切排序时表头文字不再左右跳 |
+| 2 | TopBar 右侧常驻 9 颗图标，选中态再加 8 颗，顶栏从未"安静" | 低频项（创建种子、打开下载目录、配置目录）收进 `⋯` 溢出菜单，顶栏只留排序/视图/刷新/添加/头像 |
+| 3 | 第 10 节 #2 声称命中区已全站 32px，实际仍有 `w-7 h-7`（McpManager 复制钮、TorrentDetail 树展开钮）、`h-7`（SeedPolicy 清日志、App 标签模式分段控件） | 全部抬到 `h-8`/`w-8`；树展开钮用负边距抵消视觉尺寸，不改变行高 |
+| 4 | `shadow-md/lg/xl` 与 `border-gray-200/70 dark:border-gray-700/50` 散落 10+ 处，绕过令牌 | 新增 `.glass-section`（玻璃内分区块，含 `.dark` 与 `data-a11y-glass="reduce"` 降级）；Dashboard/AutoMove/SpeedPolicy/SeedPolicy/SettingsModal 的卡片全部换用；阴影改用具体令牌值或 `color-mix` |
+| 5 | 弹窗标题字号不一：TorrentDetail 用 `text-subhead`，其余用 `text-title2` | 统一回 `text-title2`；`ui/input.tsx` 的 `text-subhead md:text-body` 改为固定 `text-body`（触屏 ≥16px 由 CSS 层统一承担） |
+| 6 | 状态栏窄屏把计数/空间全部 `hidden md:` 隐藏，移动端用户看不到任何汇总 | 底栏保留图标级空间指示 + 新增窄屏摘要（任务数/活跃/异常）；明细补进「详情」浮层（`md:hidden` 分组） |
+| 7 | 侧栏单选（状态/站点）与多选（目录/标签/错误）分组外观一致，无法判断点击语义 | `SectionHeader` 增加 `mode` 属性，标题行显示「单选/多选」标识并带 `title` 说明（zh/en 文案 `nav.mode*`） |
+| 8 | 侧栏标签 chip 内名称/体积/计数同为 `opacity-70`，无主次 | 名称加 `truncate` 承担主体，体积与计数收进低对比度分组并用 `·` 分隔 |
+| 9 | GridView 元信息行 `flex-nowrap + overflow-hidden`，窄屏静默截断做种时长 | 窄屏允许折行（`flex-wrap`），宽屏保持 `md:flex-nowrap`；分隔点在折行时隐藏 |
+| 10 | 拖拽落点整屏 `bg-primary/20` + 16px 图标，深色下刺眼 | 底色降到 `/7`，提示内容收进 `.glass-panel-strong` 卡片，图标 11px 圆形衬底 |
+| 11 | 空列表两种语义（无数据 / 被筛选）共用 `AlertCircle`，正常空态带告警色彩 | 分化为 `Inbox`（无数据）与 `SearchX`（被筛选），并补 `focus-visible` 环 |
+
+**遗留（未处理，需产品决策）**：侧栏六个分组信息量仍偏大，若要根治需引入分组 Tab 或折叠默认值调整，属交互模型变更而非样式修正，留待单独评审。
 
 ## 参考
 

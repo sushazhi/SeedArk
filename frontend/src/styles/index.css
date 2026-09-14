@@ -617,18 +617,22 @@ html[data-wallpaper='on'].dark .tm-shell::before {
   background: rgba(255, 255, 255, 0.12);
 }
 .tm-progress-fill {
+  width: 100%;
   height: 100%;
   border-radius: 9999px;
   background: linear-gradient(90deg, var(--color-primary-soft), var(--color-primary));
   box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 45%, transparent);
   transform-origin: left center;
   transition: transform 0.5s var(--ease-spring);
+  will-change: transform;
 }
 .tm-progress-fill--error {
   background: linear-gradient(90deg, #ff6b61, #ff3b30);
   box-shadow: 0 0 8px rgba(255, 59, 48, 0.4);
 }
-/* 内嵌百分比文字的进度条：加高以容纳数字 */
+/* 内嵌百分比文字的进度条：加高以容纳数字。
+   18px 是 11px 文字 + 上下各 3.5px 的呼吸量；再矮则数字贴边、与同排
+   tm-mono 数值的视觉重量也对不上（表头行高 40/56px，进度列宽 160px） */
 .tm-progress-track--labeled {
   height: 18px;
 }
@@ -737,6 +741,32 @@ html[data-wallpaper='on'].dark .tm-shell::before {
   background: linear-gradient(180deg, rgba(255, 255, 255, calc(0.07 * var(--glass-user-opacity))) 0%, rgba(255, 255, 255, calc(0.03 * var(--glass-user-opacity))) 100%);
   border-color: rgba(255, 255, 255, 0.09);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* 玻璃面板内部的分区块（设置/统计等弹窗里的卡片、规则行）。
+   此前这些位置散落着 `border-gray-200/70 dark:border-gray-700/50` 硬编码，
+   亮色下那条灰边贴在玻璃上会显脏，且深浅色各自维护一份。
+   这里收敛为一档：介于 glass-subcard（更实）与纯描边之间，供只需要分隔感、
+   不需要填充的区块使用。新代码一律用它，不要再写十六进制/灰阶边框。 */
+.glass-section {
+  background: rgba(255, 255, 255, calc(0.42 * var(--glass-user-opacity)));
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.dark .glass-section {
+  background: rgba(255, 255, 255, calc(0.045 * var(--glass-user-opacity)));
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+/* 减弱玻璃时回落到实底，与其它材质同档 */
+html[data-a11y-glass='reduce'] .glass-section {
+  background: var(--color-gray-100);
+  border-color: var(--color-gray-300);
+  box-shadow: none;
+}
+html[data-a11y-glass='reduce'].dark .glass-section {
+  background: #2c2c2e;
+  border-color: #48484a;
 }
 
 /* Glass card (torrent cards)
@@ -1048,6 +1078,22 @@ html[data-wallpaper='on'].dark .tm-shell::before {
   }
 }
 
+/* 横屏手机等矮视口：40px 行高会让 17 项的种子菜单整体超出屏幕。
+   容器虽有 max-h-[80dvh] 可滚，但单行仍占掉近 1/8 屏，一屏只放得下三五行；
+   这里退回到 32px——仍高于单行文字本身，命中精度损失远小于可读项数的收益 */
+@media (hover: none), (pointer: coarse) {
+  @media (max-height: 500px) {
+    [role='menuitem'],
+    [role='menuitemradio'],
+    [role='menuitemcheckbox'],
+    .tm-ctx button,
+    .tm-dialog button:not([role='switch']),
+    .tm-sheet button:not([role='switch']) {
+      min-height: 32px;
+    }
+  }
+}
+
 /* 移动端列表不做虚拟滚动，改为让浏览器跳过屏外卡片的布局与绘制 */
 .tm-card {
   content-visibility: auto;
@@ -1142,7 +1188,12 @@ html[data-a11y-motion='reduce'] {
 html[data-a11y-motion='reduce'] * {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
+  /* 延迟同样必须归零：FloatingBar / TopBar 用内联 style 写 transitionDelay 做错峰
+     展开，内联延迟不受上面的 duration 压制，只压时长会让按钮"一个个延迟跳出来"，
+     正是本开关要消除的观感 */
+  animation-delay: 0ms !important;
   transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
   scroll-behavior: auto !important;
 }
 html[data-a11y-motion='reduce'] .glass-card:hover,

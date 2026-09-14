@@ -247,7 +247,7 @@ export function SeedPolicyManager({ open, onClose }: { open: boolean; onClose: (
           <p className="text-footnote text-gray-500 leading-relaxed">{t('seedPolicy.intro')}</p>
 
           {/* 安全保护：对所有规则生效的安全下限 */}
-          <div className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3 space-y-1">
+          <div className="rounded-xl glass-section p-3 space-y-1">
             <div className={sectionTitle}>{t('seedPolicy.guard')}</div>
             <div className={row}>
               <span className={label}>{t('seedPolicy.enforce')}</span>
@@ -284,7 +284,7 @@ export function SeedPolicyManager({ open, onClose }: { open: boolean; onClose: (
               <div className="py-6 text-center text-body text-gray-400">{t('seedPolicy.empty')}</div>
             )}
             {rules.map((rule) => (
-              <div key={rule.id} className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+              <div key={rule.id} className="rounded-xl glass-section p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Switch checked={rule.enabled} onCheckedChange={(v) => toggleRule(rule, v)} />
                   <span className="font-medium text-body flex-1 truncate">{rule.name || t('seedPolicy.untitled')}</span>
@@ -381,7 +381,7 @@ export function SeedPolicyManager({ open, onClose }: { open: boolean; onClose: (
             <div className="flex items-center justify-between">
               <div className={sectionTitle}>{t('seedPolicy.logs')}</div>
               {logs.length > 0 && (
-                <Button size="sm" variant="ghost" className="h-7 text-footnote" onClick={clearLogs}>{t('seedPolicy.clearLogs')}</Button>
+                <Button size="sm" variant="ghost" className="h-8 text-footnote" onClick={clearLogs}>{t('seedPolicy.clearLogs')}</Button>
               )}
             </div>
             {logs.length === 0 && (

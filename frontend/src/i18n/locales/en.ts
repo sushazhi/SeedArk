@@ -75,6 +75,12 @@ export default {
     dirs: 'Folders',
     sites: 'Sites',
     filter: 'Filters',
+    // Selection-mode badge on group headers: single- and multi-select groups
+    // look identical in the sidebar, so the mode needs an explicit label
+    modeSingle: 'Single',
+    modeMulti: 'Multi',
+    modeSingleHint: 'Single-select group: clicking switches the current category',
+    modeMultiHint: 'Multi-select group: clicking adds a filter, click again to remove',
     selectByDoubleClick: 'Double-click to select all in this category',
   },
   status: {
@@ -272,6 +278,7 @@ export default {
     searchAria: 'Search torrents by name, press / to focus',
     quickSettings: 'Open quick settings: theme, language and stats',
     addTask: 'Add Task',
+    moreActions: 'More actions: create torrent, open folders',
     selectAllFiltered: 'Select all results ({{n}})',
     deselectAllFiltered: 'Deselect current results ({{n}})',
   },

@@ -16,8 +16,10 @@ const Switch = React.forwardRef<
   >
     <SwitchPrimitives.Thumb
       className={cn(
-        // iOS 开关手感：滑块位移走 spring（带回弹），与全站位移类动效同一曲线语言
-        'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform duration-[250ms] [transition-timing-function:var(--ease-spring)] data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0'
+        // iOS 开关手感：滑块位移走 spring（带回弹），与全站位移类动效同一曲线语言。
+        // 阴影写成具体值而非 shadow-lg：滑块是开关里唯一的浮起元素，
+        // 需要与玻璃阴影令牌同一档，shadow-lg 的默认黑色投影在浅色玻璃上过重
+        'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-[0_2px_6px_rgba(60,80,120,0.28)] dark:shadow-[0_2px_6px_rgba(0,0,0,0.45)] ring-0 transition-transform duration-[250ms] [transition-timing-function:var(--ease-spring)] data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0'
       )}
     />
   </SwitchPrimitives.Root>

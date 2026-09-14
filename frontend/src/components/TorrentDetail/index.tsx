@@ -126,7 +126,8 @@ function FileRow({ node, depth, wanted, priorities, selectedRows, onToggleFile, 
         style={{ paddingLeft: depth * 20 + 8 }}
       >
         {isDir ? (
-          <button onClick={() => setOpen(!open)} className="w-7 h-7 -m-1.5 flex items-center justify-center text-gray-400 shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+          // 命中区抬到 32px（桌面最小档），负边距抵消视觉尺寸，不改变树行高度
+          <button onClick={() => setOpen(!open)} className="w-8 h-8 -m-2 flex items-center justify-center text-gray-400 shrink-0 rounded-md hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
             <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-90')} />
           </button>
         ) : (
@@ -884,7 +885,7 @@ export function TorrentDetail({ torrent, onClose, onOpenChange, isMobile }: { to
         <Sheet open={!!torrent} onOpenChange={(o) => { if (!o) closeDetail() }}>
           <SheetContent onDismiss={closeDetail} className="max-w-none max-h-[88dvh] flex flex-col">
             <SheetHeader className="px-4 pb-2 border-b border-gray-200/40 dark:border-gray-700/30">
-              <SheetTitle className="text-subhead pr-8">
+              <SheetTitle className="pr-8">
                 <span className="block truncate">{torrent?.name}</span>
               </SheetTitle>
             </SheetHeader>
@@ -895,7 +896,7 @@ export function TorrentDetail({ torrent, onClose, onOpenChange, isMobile }: { to
         <Dialog open={!!torrent} onOpenChange={(o) => { if (!o) closeDetail() }}>
           <DialogContent className="sm:max-w-3xl h-[90dvh] sm:h-auto sm:max-h-[85dvh] flex flex-col p-0">
             <DialogHeader className="px-4 pt-4 pb-2 border-b border-gray-200/40 dark:border-gray-700/30">
-              <DialogTitle className="flex items-center gap-2 text-subhead pr-8">
+              <DialogTitle className="flex items-center gap-2 pr-8">
                 <span className="truncate">{torrent?.name}</span>
               </DialogTitle>
             </DialogHeader>

@@ -170,7 +170,7 @@ export function SpeedPolicyManager({ open, onClose, preset }: {
           <p className="text-footnote text-gray-500 leading-relaxed">{t('speedPolicy.intro')}</p>
 
           {/* 引擎开关 */}
-          <div className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3 space-y-1">
+          <div className="rounded-xl glass-section p-3 space-y-1">
             <div className={row}>
               <div>
                 <span className={label}>{t('speedPolicy.enforce')}</span>
@@ -193,7 +193,7 @@ export function SpeedPolicyManager({ open, onClose, preset }: {
               <div className="py-6 text-center text-body text-gray-400">{t('speedPolicy.empty')}</div>
             )}
             {rules.map((rule) => (
-              <div key={rule.id} className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+              <div key={rule.id} className="rounded-xl glass-section p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Switch checked={rule.enabled} onCheckedChange={(v) => toggleRule(rule, v)} />
                   <span className="font-medium text-body flex-1 truncate">{rule.name || t('speedPolicy.untitled')}</span>

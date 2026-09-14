@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Settings } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { torrentApi, sessionApi, settingsApi } from '@/api/torrent'
 import { AddTorrent } from '@/components/AddTorrent'
@@ -233,38 +233,47 @@ export default function App() {
   }, [wsStatus, setTorrentSites])
 
   // 语义路径（仅 fnOS）：把 Transmission 报上的 /vol1/... 目录转成宿主展示名。
-  // 展示属增强：不可用（旧系统/网关拦截）即本会话不再重试，避免 2s 轮询下反复打转换接口。
-  const semanticDisabledRef = useRef(false)
+  // 展示属增强：失败按「暂不可用」处理，退避重试后仍失败才本会话放弃——
+  // 此前任何一次失败都直接永久放弃，宿主一次瞬时抖动就会让整个会话都看不到语义路径
+  // （只有切语言才能重置）。这里改为指数退避：瞬时故障可自愈，持续故障也不会在
+  // 2s 轮询下反复打转换接口。连续失败 3 次即认为宿主侧不可用，放弃本会话。
+  const [semanticAttempt, setSemanticAttempt] = useState(0)
   const canSemantic = ready && can('paths.semantic')
   const semanticDirsKey = useMemo(
     () => Array.from(new Set(torrents.map((x) => x.downloadDir).filter(Boolean))).join('\u0000'),
     [torrents],
   )
 
-  // 语言切换后旧映射全部失效：清空并解除不可用标记，让下方 effect 重新全量拉取
+  // 语言切换后旧映射全部失效：清空并重置退避，让下方 effect 重新全量拉取
   useEffect(() => {
     useAppStore.getState().resetSemantic()
-    semanticDisabledRef.current = false
+    setSemanticAttempt(0)
   }, [language])
 
   useEffect(() => {
-    if (!canSemantic || semanticDisabledRef.current) return
+    if (!canSemantic) return
     const known = useAppStore.getState().semanticDirs
     const missing = (semanticDirsKey ? semanticDirsKey.split('\u0000') : []).filter((d) => !(d in known))
     if (missing.length === 0) return
+    // 退避档位：0s（首次）→ 3s → 15s；用尽后本会话不再重试
+    const backoff = [0, 3000, 15000][semanticAttempt]
+    if (backoff === undefined) return
     const timer = setTimeout(() => {
       torrentApi
         .semanticPaths(missing, language)
         .then((res) => {
-          if (res.available) setSemanticDirs(res.map)
-          else semanticDisabledRef.current = true
+          if (res.available) {
+            setSemanticDirs(res.map)
+            // 成功即复位：后续新出现的目录仍走首次快速路径
+            setSemanticAttempt(0)
+          } else {
+            setSemanticAttempt((n) => n + 1)
+          }
         })
-        .catch(() => {
-          semanticDisabledRef.current = true
-        })
-    }, 500)
+        .catch(() => setSemanticAttempt((n) => n + 1))
+    }, backoff)
     return () => clearTimeout(timer)
-  }, [semanticDirsKey, language, canSemantic, setSemanticDirs])
+  }, [semanticDirsKey, language, canSemantic, setSemanticDirs, semanticAttempt])
 
   useEffect(() => {
     void i18n.changeLanguage(language)
@@ -371,15 +380,20 @@ export default function App() {
       {/* 内容层：全出血，列表从屏幕顶端开始滚动，才会真正穿过停靠玻璃 */}
       <div className="tm-content" style={{ left: contentLeft }} ref={dropRef}>
         {dragOver && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/20 border-2 border-dashed border-primary rounded-panel pointer-events-none backdrop-blur-sm">
-            <div className="text-center">
-              <Plus className="w-16 h-16 text-primary mb-4" />
-              <p className="text-title1 font-semibold text-primary">{t('common.dragToAdd')}</p>
+          // 拖拽落点提示：此前是整屏 bg-primary/20 + 16px 图标 + 20px 标题，
+          // 深色主题下大块品牌蓝非常刺眼，也与玻璃材质克制的观感冲突。
+          // 改为「轻着色 + 一枚玻璃卡片」：底色降到 /8，提示内容收进 glass-panel-strong
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/[0.07] border-2 border-dashed border-primary/50 rounded-panel pointer-events-none">
+            <div className="glass-panel-strong rounded-panel px-6 py-5 text-center max-w-md">
+              <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/12">
+                <Plus className="w-6 h-6 text-primary" strokeWidth={2.2} />
+              </span>
+              <p className="text-subhead font-semibold text-gray-800 dark:text-gray-100">{t('common.dragToAdd')}</p>
               {dragFiles.current.length > 0 && (
-                <p className="text-body mt-2 text-primary/80">{dragFiles.current.join(', ')}</p>
+                <p className="text-footnote mt-1.5 text-gray-500 dark:text-gray-400 break-all">{dragFiles.current.join(', ')}</p>
               )}
               {dragText.current && dragText.current.startsWith('magnet:') && (
-                <p className="text-body mt-1 text-primary/80 max-w-md truncate px-4">{dragText.current}</p>
+                <p className="text-footnote mt-1 text-gray-500 dark:text-gray-400 truncate">{dragText.current}</p>
               )}
             </div>
           </div>
@@ -476,7 +490,7 @@ export default function App() {
                 key={mode}
                 onClick={() => setLabelMode(mode)}
                 className={cn(
-                  'h-7 rounded-md text-footnote font-medium transition-colors',
+                  'h-8 rounded-md text-footnote font-medium transition-colors',
                   labelMode === mode
                     ? 'bg-white dark:bg-gray-700 text-primary shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 dark:text-gray-400',

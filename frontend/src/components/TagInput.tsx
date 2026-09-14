@@ -70,11 +70,11 @@ export function TagInput({
         className="flex-1 min-w-24 h-8 border-0 bg-transparent px-1 text-body shadow-none focus-visible:ring-0 focus-visible:outline-none"
       />
       {shownSuggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-md border border-input bg-popover shadow-lg max-h-56 overflow-y-auto overscroll-contain">
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-md glass-panel-solid max-h-56 overflow-y-auto overscroll-contain">
           {shownSuggestions.map((s) => (
             <button
               key={s}
-              className="w-full text-left px-3 py-1.5 text-body hover:bg-accent"
+              className="w-full text-left px-3 py-1.5 text-body hover:bg-accent focus-visible:outline-none focus-visible:bg-accent"
               onMouseDown={(e) => { e.preventDefault(); commit(s) }}
             >
               {s}

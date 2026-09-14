@@ -75,6 +75,11 @@ export default {
     dirs: '数据目录',
     sites: '站点',
     filter: '过滤器',
+    // 分组标题上的选中语义标识：侧栏里单选与多选分组外观一致，需文字说明
+    modeSingle: '单选',
+    modeMulti: '多选',
+    modeSingleHint: '该分组为单选：点击会切换当前分类',
+    modeMultiHint: '该分组可多选：点击会叠加筛选条件，再点取消',
     selectByDoubleClick: '双击选中该分类全部种子',
   },
   status: {
@@ -270,6 +275,7 @@ export default {
     searchAria: '按名称搜索种子，按斜杠键聚焦',
     quickSettings: '打开快速设置：主题、语言与统计',
     addTask: '添加任务',
+    moreActions: '更多操作：创建种子、打开目录',
     selectAllFiltered: '全选当前结果（{{n}} 项）',
     deselectAllFiltered: '取消选中当前结果（{{n}} 项）',
   },

@@ -113,7 +113,7 @@ export function AutoMoveManager({ open, onClose }: { open: boolean; onClose: () 
               <div className="py-8 text-center text-body text-gray-400">{t('autoMove.empty')}</div>
             )}
             {rules.map((rule) => (
-              <div key={rule.id} className="rounded-xl border border-gray-200/70 dark:border-gray-700/50 p-3">
+              <div key={rule.id} className="rounded-xl glass-section p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Switch checked={rule.enabled} onCheckedChange={(v) => {
                     void autoMoveApi.save({ ...rule, enabled: v }).then(load).catch(() => {})

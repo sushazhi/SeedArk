@@ -5,15 +5,13 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { torrentApi } from '@/api/torrent'
 import { useTorrentActions } from '@/hooks/useTorrentActions'
-import { useRevealPath } from '@/hooks/useRevealPath'
+import { useTorrentMenuHandler } from '@/hooks/useTorrentMenuHandler'
 import { useSemanticPath } from '@/hooks/useSemanticPath'
 import { usePlatform } from '@/platform'
 import { useAppStore } from '@/stores/appStore'
 import type { ColumnConfig, Torrent } from '@/types'
 import { formatBytes, formatDate, formatDuration, formatEta, formatRatio, formatSpeed } from '@/utils/format'
 import { translateError } from '@/utils/errorText'
-import { mapPath } from '@/utils/pathMapping'
-import { copyText } from '@/utils/clipboard'
 import { toast } from '@/lib/toast'
 import { cn, cssVars } from '@/lib/utils'
 import { tagColor } from '@/utils/tagColor'
@@ -165,7 +163,6 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
   const { t } = useTranslation()
   const actions = useTorrentActions()
   const { can } = usePlatform()
-  const revealPath = useRevealPath()
   const columns = useAppStore((s) => s.columns)
   const showCheckboxes = useAppStore((s) => s.showCheckboxes)
   const selectedIds = useAppStore((s) => s.selectedIds)
@@ -191,8 +188,13 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
   const parentRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const dragIdRef = useRef<number | null>(null)
+  // 拖拽排序的视觉反馈：只有按队列位置排序时拖拽才真正生效，因此
+  // canReorder 为假时直接禁用 draggable，而不是等用户拖完再弹警告
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
+  const [draggingId, setDraggingId] = useState<number | null>(null)
   const lastClickRef = useRef<{ id: number; t: number }>({ id: -1, t: 0 })
   const rowHeight = singleLine ? 40 : 56
+  const canReorder = sortField === 'queuePosition'
 
   // 表头横向滚动与内容区同步（表头独立于虚拟滚动容器，需手动镜像 scrollLeft）
   const syncHeaderScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -356,15 +358,12 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
 
   // 拖拽排序：按队列位置差执行 QueueMove。
   // 只有按「队列位置」排序时屏幕顺序才与队列顺序一致；其它排序下移动队列不会改变
-  // 行的显示位置（用户会以为拖拽失效），故直接提示并跳过，避免发一堆无意义请求
+  // 行的显示位置，故此时行不可拖（draggable=false，见 canReorder），这里只做兜底
   const handleDrop = async (dst: Torrent) => {
     const srcId = dragIdRef.current
     dragIdRef.current = null
     if (srcId == null || srcId === dst.id) return
-    if (sortField !== 'queuePosition') {
-      toast.warning(t('toast.queueSortRequired'))
-      return
-    }
+    if (sortField !== 'queuePosition') return
     const src = sortedTorrents.find((x) => x.id === srcId)
     if (!src) return
     const steps = src.queuePosition - dst.queuePosition
@@ -404,6 +403,15 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
     overscan: 12,
   })
 
+  // 行高随「单行模式」变化：estimateSize 换了实现，但 virtualizer 已经缓存了旧尺寸，
+  // 不重测会出现行高错位 / 滚动位置跳动
+  const singleLineRef = useRef(singleLine)
+  useEffect(() => {
+    if (singleLineRef.current === singleLine) return
+    singleLineRef.current = singleLine
+    virtualizer.measure()
+  }, [singleLine, virtualizer])
+
   const scrollTargetIds = useAppStore((s) => s.scrollTargetIds)
   const consumeScrollTarget = useAppStore((s) => s.consumeScrollTarget)
   // 从分组切回「全部」后滚回之前选中的种子；在绘制前定位，避免先闪一下旧位置。
@@ -421,35 +429,14 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
     }
   }, [scrollTargetIds, sortedTorrents, virtualizer, consumeScrollTarget])
 
-  const handleMenuClick = (torrent: Torrent) => (key: string) => {
-    const id = torrent.id
-    const reportCopy = (ok: boolean) => (ok ? toast.success(t('toast.copied')) : toast.error(t('toast.copyFailed')))
-    if (key === 'start') actions.singleStart(id)
-    else if (key === 'startNow') actions.singleStartNow(id)
-    else if (key === 'stop') actions.singleStop(id)
-    else if (key === 'verify') actions.verify(id)
-    else if (key === 'reannounce') actions.reannounce(id)
-    else if (key === 'path') setEditTarget({ torrent, mode: 'path' })
-    else if (key === 'rename') setEditTarget({ torrent, mode: 'rename' })
-    else if (key === 'other') setEditTarget({ torrent, mode: 'other' })
-    else if (key === 'labels') setEditTarget({ torrent, mode: 'labels' })
-    else if (key === 'trackers') setEditTarget({ torrent, mode: 'trackers' })
-    else if (key === 'replaceTrackers') setTrackerOpen(true)
-    else if (key.startsWith('queue:')) actions.queue(id, key.split(':')[1] as 'top' | 'up' | 'down' | 'bottom')
-    else if (key === 'copyMagnet') {
-      void copyText(torrent.magnetLink).then(reportCopy)
-    } else if (key === 'copyName') {
-      void copyText(torrent.name).then(reportCopy)
-    } else if (key === 'copyPath') {
-      void mapPath(torrent.downloadDir).then(copyText).then(reportCopy)
-    } else if (key === 'remove') {
-      setRemoveIds([id])
-    } else if (key === 'openDir') {
-      void revealPath(torrent.downloadDir || '')
-    } else if (key === 'deleteCompleted') {
-      onOpenBatchClean?.()
-    }
-  }
+  const handleMenuClick = useTorrentMenuHandler({
+    onOpenDetail,
+    onOpenBatchClean,
+    onEdit: setEditTarget,
+    onRemove: (id) => setRemoveIds([id]),
+    onReplaceTrackers: () => setTrackerOpen(true),
+    canRevealPath: can('fs.revealPath'),
+  })
 
   const menuCtx = { actions, t: (k: string) => t(k), onOpenDetail, canRevealPath: can('fs.revealPath'), onEdit: (mode: EditMode, tt: Torrent) => setEditTarget({ torrent: tt, mode }), onOpenBatchClean }
 
@@ -467,12 +454,13 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
     flex: `0 0 ${colWidth(col)}px`,
   })
 
-  // 可排序列的排序图标
+  // 可排序列的排序图标。图标槽位常驻（未排序时渲染等宽占位），
+  // 否则切换排序字段时表头文字会因为多/少一个箭头而左右跳动
   const sortIcon = (field: string) => {
-    if (sortField !== field) return null
+    if (sortField !== field) return <span className="w-3 h-3 shrink-0" aria-hidden />
     return sortOrder === 'asc'
-      ? <ArrowUpNarrowWide className="ml-0.5 w-3 h-3 text-primary" />
-      : <ArrowDownWideNarrow className="ml-0.5 w-3 h-3 text-primary" />
+      ? <ArrowUpNarrowWide className="w-3 h-3 shrink-0 text-primary" />
+      : <ArrowDownWideNarrow className="w-3 h-3 shrink-0 text-primary" />
   }
 
   return (
@@ -496,15 +484,21 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
               data-col-key={col.key}
               onMouseDown={(e) => startColDrag(e, col)}
               className={cn(
-                // 表头文字统一居中；数字列仅单元格右对齐，表头保持居中
-                'px-2 truncate relative flex items-center justify-center gap-0.5 select-none transition-colors',
+                // 表头对齐方式必须跟随该列的数据对齐：数字列若表头居中而单元格右对齐，
+                // 两者没有共同基线，纵向扫视时标签与数值对不上。末尾留出与单元格
+                // 等宽的排序图标位（w-3 + gap-0.5），否则加了箭头后文字会整体偏移
+                'px-2 relative flex items-center gap-0.5 select-none transition-colors',
+                NUMERIC_COLS.has(col.key) ? 'justify-end text-right' : 'justify-start text-left',
                 overCol === col.key ? 'bg-primary/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.06]',
                 dragCol === col.key && 'opacity-40',
               )}
               style={{ ...headerStyle(col), cursor: 'grab' }}
+              // 队列位置列：拖拽排序只在这一列排序时可用，把原因写在表头上，
+              // 免得用户拖不动时四处找开关
+              title={col.key === 'queuePosition' && !canReorder ? t('toast.queueSortRequired') : undefined}
               onClick={() => handleSort(col.key)}
             >
-              {t(col.label)}
+              <span className="truncate">{t(col.label)}</span>
               {isSortable && sortIcon(col.key)}
               {/* 列宽手柄：常驻 2px 分隔线（hover/拖拽时加粗成品牌色），
                   热区 12px 且跨列边界 5px，方便从两侧抓住 */}
@@ -544,22 +538,40 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
                 <TorrentMenuDropdown items={menuItems} onClick={handleMenuClick(torrent)} trigger="contextMenu" align="start">
                   <div
                     title={torrent.error > 0 ? (translateError(torrent.errorString, t) || torrent.name) : torrent.name}
-                    draggable
+                    draggable={canReorder}
                     onDragStart={(e) => {
                       dragIdRef.current = torrent.id
+                      setDraggingId(torrent.id)
                       e.dataTransfer.effectAllowed = 'move'
                     }}
-                    onDragOver={(e) => e.preventDefault()}
+                    onDragEnd={() => {
+                      draggingId === torrent.id && setDraggingId(null)
+                      setDragOverId(null)
+                    }}
+                    onDragOver={(e) => {
+                      if (!canReorder || dragIdRef.current === torrent.id) return
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (dragOverId !== torrent.id) setDragOverId(torrent.id)
+                    }}
+                    onDragLeave={() => {
+                      setDragOverId((cur) => (cur === torrent.id ? null : cur))
+                    }}
                     onDrop={(e) => {
                       e.preventDefault()
+                      setDragOverId(null)
+                      setDraggingId(null)
                       void handleDrop(torrent)
                     }}
                     onClick={(e) => handleSelect(torrent, e)}
-                    className={`tm-nav-item flex items-center px-3 h-full border-b border-gray-100/60 dark:border-white/[0.04] text-body cursor-default select-none ${
-                      selectedIds.includes(torrent.id)
-                        ? 'tm-row-selected'
-                        : ''
-                    } hover:bg-gray-100/50 dark:hover:bg-white/[0.04]`}
+                    className={cn(
+                      'tm-nav-item flex items-center px-3 h-full border-b border-gray-100/60 dark:border-white/[0.04] text-body cursor-default select-none',
+                      selectedIds.includes(torrent.id) && 'tm-row-selected',
+                      'hover:bg-gray-100/50 dark:hover:bg-white/[0.04]',
+                      // 拖拽中：源行淡出并标记，落点行上缘画出插入位（与表头列拖拽同一套语言）
+                      draggingId === torrent.id && 'opacity-40',
+                      dragOverId === torrent.id && 'shadow-[inset_0_2px_0_var(--color-primary)]',
+                    )}
                     onDoubleClick={() => onOpenDetail(torrent)}
                   >
                     {showCheckboxes && (
@@ -592,7 +604,7 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
       {/* 列拖拽跟随指针的实心胶囊（portal 到 body，避免 fixed 被 backdrop-filter 劫持） */}
       {dragPos && dragCol && createPortal(
         <div
-          className="fixed z-[200] pointer-events-none rounded-full border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 px-3 py-1.5 text-footnote font-medium text-gray-700 dark:text-gray-200 shadow-xl"
+          className="fixed z-[200] pointer-events-none rounded-full glass-panel-solid px-3 py-1.5 text-footnote font-medium text-gray-700 dark:text-gray-200"
           style={{ left: dragPos.x + 14, top: dragPos.y + 14 }}
         >
           {t(columns.find((c) => c.key === dragCol)?.label ?? dragCol)}

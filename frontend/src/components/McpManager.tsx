@@ -235,7 +235,8 @@ function CopyButton({ label, onClick }: { label: string; onClick: () => void }) 
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="tm-hug w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 active:bg-primary/10"
+      // 32px：规范里桌面最小命中区。此前 28px，与设置面板内其它图标按钮不同档
+      className="tm-hug w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 active:bg-primary/10"
     >
       <Copy className="w-3.5 h-3.5" aria-hidden />
     </button>

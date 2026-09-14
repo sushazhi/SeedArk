@@ -42,12 +42,17 @@ export function PwaUpdatePrompt() {
 
   if (!show) return null
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gray-800 dark:bg-gray-700 text-white text-body shadow-lg">
+    // 与 Toaster 同一档材质：此前是不透明灰块，贴在玻璃界面上会断层
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-panel glass-panel-strong text-body text-gray-700 dark:text-gray-200">
       <span>{t('pwa.newVersion')}</span>
-      <button className="text-primary font-medium hover:opacity-80" onClick={() => navigator.serviceWorker.getRegistration().then((r) => r?.update())}>
+      <button className="font-medium text-primary hover:opacity-80" onClick={() => navigator.serviceWorker.getRegistration().then((r) => r?.update())}>
         {t('pwa.refresh')}
       </button>
-      <button className="text-gray-400 hover:opacity-80" onClick={() => setShow(false)}>
+      <button
+        className="tm-hug grid h-6 w-6 place-items-center rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+        aria-label={t('common.close')}
+        onClick={() => setShow(false)}
+      >
         ✕
       </button>
     </div>

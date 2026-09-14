@@ -28,6 +28,7 @@ import { useAppStore } from '@/stores/appStore'
 import { sessionApi } from '@/api/torrent'
 import { matchesStatus } from '@/hooks/useFilter'
 import { useNavRail } from '@/hooks/useNavRail'
+import { useFloatingMenuPosition, useDismissOnOutside } from '@/hooks/useFloatingMenuPosition'
 import { useSemanticPath } from '@/hooks/useSemanticPath'
 import { usePlatform } from '@/platform'
 import { FloatingContextMenu } from '@/components/TorrentMenu'
@@ -368,7 +369,7 @@ export const DesktopSidebar: React.FC = () => {
           {/* 过滤器 */}
           {sidebarMenuVisible.status && (
             <div className="shrink-0">
-              <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} />
+              <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} mode="single" />
               <div ref={rail.boxRef} className="relative flex flex-col gap-0.5 mt-1">
                 <span ref={rail.railRef} className="tm-nav-rail" aria-hidden />
                 {STATUS_ITEMS.filter((item) => item.key === 'all' || statusFilterVisible[item.key] !== false).map((item) => {
@@ -430,6 +431,7 @@ export const DesktopSidebar: React.FC = () => {
                 icon={<FolderOpen className="w-3.5 h-3.5" />}
                 title={t('nav.dirs')}
                 count={dirCounts.length}
+                mode="multi"
                 collapsed={sidebarCollapsed.dirs}
                 onToggle={() => setSidebarCollapsed({ dirs: !sidebarCollapsed.dirs })}
               />
@@ -479,6 +481,7 @@ export const DesktopSidebar: React.FC = () => {
                 icon={<Tags className="w-3.5 h-3.5" />}
                 title={t('nav.labels')}
                 count={labelCounts.length}
+                mode="multi"
                 collapsed={sidebarCollapsed.labels}
                 onToggle={() => setSidebarCollapsed({ labels: !sidebarCollapsed.labels })}
               />
@@ -553,11 +556,17 @@ export const DesktopSidebar: React.FC = () => {
                         style={cssVars({ '--chip': color })}
                       >
                         {isActive && <Check className="w-3 h-3 shrink-0" strokeWidth={2.6} />}
-                        {label}
-                        {groupShowSize && size > 0 && (
-                          <span className="tm-mono text-caption2 opacity-70">{formatBytes(size)}</span>
-                        )}
-                        <span className="tm-mono text-caption2 opacity-70">{count}</span>
+                        <span className="truncate">{label}</span>
+                        {/* 体积与计数降为「次要信息」：此前两者与标签名同为 opacity-70
+                            且字号只差一档，一个 chip 里三组数字读起来没有主次。
+                            这里把元信息统一收进一个低对比度分组，并用分隔点断开 */}
+                        {(groupShowSize && size > 0) || count > 0 ? (
+                          <span className="flex items-center gap-1 shrink-0 text-caption2 opacity-60">
+                            {groupShowSize && size > 0 && <span className="tm-mono">{formatBytes(size)}</span>}
+                            {groupShowSize && size > 0 && count > 0 && <span aria-hidden>·</span>}
+                            {count > 0 && <span className="tm-mono">{count}</span>}
+                          </span>
+                        ) : null}
                       </button>
                     )
                   })}
@@ -573,6 +582,7 @@ export const DesktopSidebar: React.FC = () => {
                 icon={<ShieldAlert className="w-3.5 h-3.5" />}
                 title={t('nav.errors')}
                 count={errorCounts.length}
+                mode="multi"
                 collapsed={sidebarCollapsed.error}
                 onToggle={() => setSidebarCollapsed({ error: !sidebarCollapsed.error })}
               />
@@ -651,138 +661,28 @@ export const DesktopSidebar: React.FC = () => {
 
       {/* 右键菜单 */}
       {ctxMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-50"
-            onClick={() => { setCtxMenu(null); setSubmenuOpen(false) }}
-            onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); setSubmenuOpen(false) }}
-          />
-          <div
-            className="fixed z-50 min-w-44 rounded-tile glass-panel-strong p-1"
-            role="menu"
-            aria-orientation="vertical"
-            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 180), top: Math.min(ctxMenu.y, window.innerHeight - 220) }}
-          >
-            <CtxCheck
-              label={t('sidebar.status')}
-              checked={sidebarMenuVisible.status}
-              onClick={() => { setSidebarMenuVisible({ status: !sidebarMenuVisible.status }); setCtxMenu(null) }}
-            />
-
-            {/* 状态过滤器子菜单 */}
-            <div
-              className="relative"
-              onMouseEnter={() => { cancelSubmenuClose(); setSubmenuOpen(true) }}
-              onMouseLeave={closeSubmenuSoon}
-            >
-              <div className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-footnote text-left cursor-pointer hover:bg-white/60 dark:hover:bg-white/10">
-                <span className="w-3.5 shrink-0" />
-                <span className="flex-1">{t('sidebar.statusFilter')}</span>
-                <ChevronDown className="w-3 h-3 -rotate-90 text-gray-400" />
-              </div>
-              {submenuOpen && (
-                <div
-                  onMouseEnter={cancelSubmenuClose}
-                  onMouseLeave={closeSubmenuSoon}
-                  className={cn(
-                    // 嵌在已模糊的一级面板内，再叠 backdrop-filter 会二次模糊，故保持实底
-                    'absolute top-0 z-10 min-w-36 rounded-tile bg-white/95 dark:bg-gray-800/95 border border-gray-200/70 dark:border-white/10 p-1 shadow-xl',
-                    ctxMenu.x > window.innerWidth - 340 ? 'right-full mr-1' : 'left-full ml-1',
-                  )}
-                >
-                  {STATUS_ITEMS.map((item) => {
-                    // 'all' 是常驻项，不参与显隐控制：
-                    // 若允许取消，会写入永不生效的 statusFilterVisible.all=false 脏状态
-                    const isAll = item.key === 'all'
-                    const visible = isAll || statusFilterVisible[item.key] !== false
-                    return (
-                      <button
-                        key={item.key}
-                        disabled={isAll}
-                        onClick={() => setStatusFilterVisible(item.key, !visible)}
-                        className={cn(
-                          'w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-footnote text-left text-gray-700 dark:text-gray-200 hover:bg-white/60 dark:hover:bg-white/10',
-                          isAll && 'cursor-default opacity-60 hover:bg-transparent dark:hover:bg-transparent',
-                        )}
-                      >
-                        <span className="w-3.5 shrink-0 flex justify-center text-primary">{visible && <Check className="w-3.5 h-3.5" strokeWidth={2.4} />}</span>
-                        {t(item.label)}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />
-            <CtxCheck
-              label={t('sidebar.labels')}
-              checked={sidebarMenuVisible.labels}
-              onClick={() => { setSidebarMenuVisible({ labels: !sidebarMenuVisible.labels }); setCtxMenu(null) }}
-            />
-            <CtxCheck
-              label={t('sidebar.dirs')}
-              checked={sidebarMenuVisible.dirs}
-              onClick={() => { setSidebarMenuVisible({ dirs: !sidebarMenuVisible.dirs }); setCtxMenu(null) }}
-            />
-            <CtxCheck
-              label={t('sidebar.sites')}
-              checked={sidebarMenuVisible.sites}
-              onClick={() => { setSidebarMenuVisible({ sites: !sidebarMenuVisible.sites }); setCtxMenu(null) }}
-            />
-            <CtxCheck
-              label={t('sidebar.error')}
-              checked={sidebarMenuVisible.error}
-              onClick={() => { setSidebarMenuVisible({ error: !sidebarMenuVisible.error }); setCtxMenu(null) }}
-            />
-
-            <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />
-            <CtxCheck
-              label={t('sidebar.enableDoubleClickSelect')}
-              checked={enableDoubleClickSelect}
-              onClick={() => { setEnableDoubleClickSelect(!enableDoubleClickSelect); setCtxMenu(null) }}
-            />
-            <CtxCheck
-              label={t('sidebar.groupShowSize')}
-              checked={groupShowSize}
-              onClick={() => { setGroupShowSize(!groupShowSize); setCtxMenu(null) }}
-            />
-
-            <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />
-            <CtxCheck
-              label={t('sidebar.showStats')}
-              checked={showStats}
-              onClick={() => { setShowStats(!showStats); setCtxMenu(null) }}
-            />
-          </div>
-        </>
+        <SidebarCtxMenu
+          pos={ctxMenu}
+          onClose={() => { setCtxMenu(null); setSubmenuOpen(false) }}
+          submenuOpen={submenuOpen}
+          onSubmenuEnter={() => { cancelSubmenuClose(); setSubmenuOpen(true) }}
+          onSubmenuLeave={closeSubmenuSoon}
+          statusFilterVisible={statusFilterVisible}
+          setStatusFilterVisible={setStatusFilterVisible}
+          sidebarMenuVisible={sidebarMenuVisible}
+          setSidebarMenuVisible={setSidebarMenuVisible}
+          enableDoubleClickSelect={enableDoubleClickSelect}
+          setEnableDoubleClickSelect={setEnableDoubleClickSelect}
+          groupShowSize={groupShowSize}
+          setGroupShowSize={setGroupShowSize}
+          showStats={showStats}
+          setShowStats={setShowStats}
+        />
       )}
 
       {/* 站点 / 标签分组项右键：快速新建组内总限速规则 */}
       {groupCtx && (
-        <>
-          <div
-            className="fixed inset-0 z-50"
-            onClick={() => setGroupCtx(null)}
-            onContextMenu={(e) => { e.preventDefault(); setGroupCtx(null) }}
-          />
-          <div
-            className="fixed z-50 min-w-56 rounded-tile glass-panel-strong p-1"
-            role="menu"
-            style={{ left: Math.min(groupCtx.x, window.innerWidth - 240), top: Math.min(groupCtx.y, window.innerHeight - 120) }}
-          >
-            <div className="px-3 py-1.5 text-footnote text-gray-400 truncate max-w-[224px]" title={groupCtx.value}>
-              {groupCtx.kind === 'site' ? t('site.nav') : t('nav.labels')}: {groupCtx.value}
-            </div>
-            <button
-              onClick={() => groupLimit(groupCtx.kind, groupCtx.value)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-footnote text-left text-gray-700 dark:text-gray-200 hover:bg-white/60 dark:hover:bg-white/10"
-            >
-              <Gauge className="w-3.5 h-3.5 text-primary shrink-0" />
-              {t('sidebar.groupLimit')}
-            </button>
-          </div>
-        </>
+        <GroupCtxMenu pos={groupCtx} onClose={() => setGroupCtx(null)} onGroupLimit={groupLimit} />
       )}
     </aside>
   )
@@ -804,19 +704,25 @@ function CtxCheck({ label, checked, onClick }: { label: string; checked: boolean
 }
 
 // ========== 分组标题 ==========
+// mode 标明该分组的选中语义：单选（状态，滑动胶囊）或多选（目录/标签/站点/错误）。
+// 两种语义在侧栏里是并列的六个分组，此前外观完全一致，用户无法从界面判断
+// 「点第二个会不会把第一个取消」。这里在标题行右侧给一个常驻文字标识。
 function SectionHeader({
   icon,
   title,
   count,
   collapsed,
   onToggle,
+  mode,
 }: {
   icon: React.ReactNode
   title: string
   count?: number
   collapsed?: boolean
   onToggle?: () => void
+  mode?: 'single' | 'multi'
 }) {
+  const { t } = useTranslation()
   const inner = (
     <>
       {onToggle && (
@@ -824,6 +730,14 @@ function SectionHeader({
       )}
       <span className="text-primary">{icon}</span>
       <span className="text-body font-semibold uppercase tracking-wider">{title}</span>
+      {mode && (
+        <span
+          className="shrink-0 rounded-full border border-white/60 dark:border-white/10 px-1.5 py-px text-caption2 font-medium normal-case tracking-normal text-gray-400 dark:text-gray-500"
+          title={mode === 'single' ? t('nav.modeSingleHint') : t('nav.modeMultiHint')}
+        >
+          {mode === 'single' ? t('nav.modeSingle') : t('nav.modeMulti')}
+        </span>
+      )}
       {typeof count === 'number' && <span className="text-caption2 tm-mono text-gray-400 ml-auto">{count}</span>}
     </>
   )
@@ -895,6 +809,7 @@ const SiteNav: React.FC<SiteNavProps> = ({ sites, siteStats, currentSiteIds, onS
         icon={<Server className="w-3.5 h-3.5" />}
         title={t('site.nav')}
         count={siteEntries.length}
+        mode="single"
         collapsed={collapsed}
         onToggle={onToggle}
       />
@@ -1274,7 +1189,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
           {/* 状态筛选 */}
           {sidebarMenuVisible.status && (
           <div>
-            <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} />
+            <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} mode="single" />
             <div className="space-y-0.5 mt-1">
               {STATUS_ITEMS.filter((item) => item.key === 'all' || statusFilterVisible[item.key] !== false).map((item) => {
                 const Icon = item.icon
@@ -1383,6 +1298,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
                 icon={<AlertCircle className="w-3.5 h-3.5" />}
                 title={t('nav.errors')}
                 count={errorCounts.length}
+                mode="multi"
                 collapsed={sidebarCollapsed.error}
                 onToggle={() => setSidebarCollapsed({ error: !sidebarCollapsed.error })}
               />
@@ -1431,6 +1347,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
                 icon={<Tags className="w-3.5 h-3.5" />}
                 title={t('nav.labels')}
                 count={labelCounts.length}
+                mode="multi"
                 collapsed={sidebarCollapsed.labels}
                 onToggle={() => setSidebarCollapsed({ labels: !sidebarCollapsed.labels })}
               />
@@ -1521,6 +1438,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
               <SectionHeader
                 icon={<Server className="w-3.5 h-3.5" />}
                 title={t('site.nav')}
+                mode="single"
                 collapsed={sidebarCollapsed.sites}
                 onToggle={() => setSidebarCollapsed({ sites: !sidebarCollapsed.sites })}
               />
@@ -1628,5 +1546,168 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+// ========== 侧栏右键菜单（独立组件） ==========
+// 抽出来的原因：菜单尺寸随内容变化（标签/站点数量不定），原先用
+// Math.min(x, innerWidth - 180) 这类写死尺寸的写法，长菜单仍会溢出屏幕。
+// 统一交给 useFloatingMenuPosition 按实测尺寸翻转 + 双向夹取。
+interface SidebarCtxMenuProps {
+  pos: { x: number; y: number }
+  onClose: () => void
+  submenuOpen: boolean
+  onSubmenuEnter: () => void
+  onSubmenuLeave: () => void
+  statusFilterVisible: Record<string, boolean>
+  setStatusFilterVisible: (key: string, visible: boolean) => void
+  sidebarMenuVisible: { status: boolean; labels: boolean; dirs: boolean; sites: boolean; error: boolean }
+  setSidebarMenuVisible: (patch: Partial<{ status: boolean; labels: boolean; dirs: boolean; sites: boolean; error: boolean }>) => void
+  enableDoubleClickSelect: boolean
+  setEnableDoubleClickSelect: (v: boolean) => void
+  groupShowSize: boolean
+  setGroupShowSize: (v: boolean) => void
+  showStats: boolean
+  setShowStats: (v: boolean) => void
+}
+
+function SidebarCtxMenu(props: SidebarCtxMenuProps) {
+  const { t } = useTranslation()
+  const { ref, style } = useFloatingMenuPosition<HTMLDivElement>(props.pos)
+  useDismissOnOutside(ref, props.onClose)
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="fixed z-50 min-w-44 max-h-[80dvh] overflow-y-auto overscroll-contain rounded-tile glass-panel-strong p-1 animate-tm-pop-in"
+      role="menu"
+      aria-orientation="vertical"
+      style={style}
+      onPointerDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <CtxCheck
+        label={t('sidebar.status')}
+        checked={props.sidebarMenuVisible.status}
+        onClick={() => { props.setSidebarMenuVisible({ status: !props.sidebarMenuVisible.status }); props.onClose() }}
+      />
+
+      {/* 状态过滤器子菜单 */}
+      <div
+        className="relative"
+        onMouseEnter={props.onSubmenuEnter}
+        onMouseLeave={props.onSubmenuLeave}
+      >
+        <div className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-footnote text-left cursor-pointer hover:bg-white/60 dark:hover:bg-white/10">
+          <span className="w-3.5 shrink-0" />
+          <span className="flex-1">{t('sidebar.statusFilter')}</span>
+          <ChevronDown className="w-3 h-3 -rotate-90 text-gray-400" />
+        </div>
+        {props.submenuOpen && (
+          <div
+            onMouseEnter={props.onSubmenuEnter}
+            onMouseLeave={props.onSubmenuLeave}
+            className="absolute top-0 left-full ml-1 z-10 min-w-36 rounded-tile glass-panel-solid p-1"
+          >
+            {STATUS_ITEMS.map((item) => {
+              // 'all' 是常驻项，不参与显隐控制：
+              // 若允许取消，会写入永不生效的 statusFilterVisible.all=false 脏状态
+              const isAll = item.key === 'all'
+              const visible = isAll || props.statusFilterVisible[item.key] !== false
+              return (
+                <button
+                  key={item.key}
+                  disabled={isAll}
+                  onClick={() => props.setStatusFilterVisible(item.key, !visible)}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-footnote text-left text-gray-700 dark:text-gray-200 hover:bg-white/60 dark:hover:bg-white/10',
+                    isAll && 'cursor-default opacity-60 hover:bg-transparent dark:hover:bg-transparent',
+                  )}
+                >
+                  <span className="w-3.5 shrink-0 flex justify-center text-primary">{visible && <Check className="w-3.5 h-3.5" strokeWidth={2.4} />}</span>
+                  {t(item.label)}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />
+      <CtxCheck
+        label={t('sidebar.labels')}
+        checked={props.sidebarMenuVisible.labels}
+        onClick={() => { props.setSidebarMenuVisible({ labels: !props.sidebarMenuVisible.labels }); props.onClose() }}
+      />
+      <CtxCheck
+        label={t('sidebar.dirs')}
+        checked={props.sidebarMenuVisible.dirs}
+        onClick={() => { props.setSidebarMenuVisible({ dirs: !props.sidebarMenuVisible.dirs }); props.onClose() }}
+      />
+      <CtxCheck
+        label={t('sidebar.sites')}
+        checked={props.sidebarMenuVisible.sites}
+        onClick={() => { props.setSidebarMenuVisible({ sites: !props.sidebarMenuVisible.sites }); props.onClose() }}
+      />
+      <CtxCheck
+        label={t('sidebar.error')}
+        checked={props.sidebarMenuVisible.error}
+        onClick={() => { props.setSidebarMenuVisible({ error: !props.sidebarMenuVisible.error }); props.onClose() }}
+      />
+
+      <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />
+      <CtxCheck
+        label={t('sidebar.enableDoubleClickSelect')}
+        checked={props.enableDoubleClickSelect}
+        onClick={() => { props.setEnableDoubleClickSelect(!props.enableDoubleClickSelect); props.onClose() }}
+      />
+      <CtxCheck
+        label={t('sidebar.groupShowSize')}
+        checked={props.groupShowSize}
+        onClick={() => { props.setGroupShowSize(!props.groupShowSize); props.onClose() }}
+      />
+
+      <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />
+      <CtxCheck
+        label={t('sidebar.showStats')}
+        checked={props.showStats}
+        onClick={() => { props.setShowStats(!props.showStats); props.onClose() }}
+      />
+    </div>,
+    document.body,
+  )
+}
+
+// ========== 分组项右键菜单（站点 / 标签） ==========
+function GroupCtxMenu({ pos, onClose, onGroupLimit }: {
+  pos: { x: number; y: number; kind: 'site' | 'label'; value: string }
+  onClose: () => void
+  onGroupLimit: (kind: 'site' | 'label', value: string) => void
+}) {
+  const { t } = useTranslation()
+  const { ref, style } = useFloatingMenuPosition<HTMLDivElement>(pos)
+  useDismissOnOutside(ref, onClose)
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="fixed z-50 min-w-56 rounded-tile glass-panel-strong p-1 animate-tm-pop-in"
+      role="menu"
+      style={style}
+      onPointerDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="px-3 py-1.5 text-footnote text-gray-400 truncate max-w-[224px]" title={pos.value}>
+        {pos.kind === 'site' ? t('site.nav') : t('nav.labels')}: {pos.value}
+      </div>
+      <button
+        onClick={() => onGroupLimit(pos.kind, pos.value)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-footnote text-left text-gray-700 dark:text-gray-200 hover:bg-white/60 dark:hover:bg-white/10"
+      >
+        <Gauge className="w-3.5 h-3.5 text-primary shrink-0" />
+        {t('sidebar.groupLimit')}
+      </button>
+    </div>,
+    document.body,
   )
 }

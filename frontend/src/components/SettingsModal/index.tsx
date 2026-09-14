@@ -367,7 +367,7 @@ function AboutSection({ transmissionVersion }: { transmissionVersion?: string })
       </div>
       {canUpdate && transmissionVersion && <p className="text-caption1 text-gray-400">{t('session.checkUpdateHint')}</p>}
       {info && (
-        <div className="rounded-lg border border-gray-200/70 dark:border-gray-700/50 p-3 space-y-2">
+        <div className="rounded-lg glass-section p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             {info.hasUpdate ? (
               <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">{t('session.newVersionFound')}</Badge>
@@ -417,7 +417,7 @@ function AboutSection({ transmissionVersion }: { transmissionVersion?: string })
       )}
 
       {/* 问题反馈：界面与飞牛应用分属两处仓库，按问题类型引导到对应的 Issue 区 */}
-      <div className="rounded-lg border border-gray-200/70 dark:border-gray-700/50 p-3 space-y-2">
+      <div className="rounded-lg glass-section p-3 space-y-2">
         <div className="flex items-center gap-1.5 text-footnote font-medium text-gray-700 dark:text-gray-200">
           <Bug className="w-3.5 h-3.5 text-primary" />
           {t('session.feedback')}
@@ -1157,7 +1157,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <Section id="multiServer" title={t('session.multiServer.title')}>
             <div className="text-footnote text-gray-500 mb-3">{t('session.multiServer.hint')}</div>
             {servers.map((server, idx) => (
-              <div key={idx} className="rounded-lg border border-gray-200/70 dark:border-gray-700/50 p-2 mb-2 space-y-1.5">
+              <div key={idx} className="rounded-lg glass-section p-2 mb-2 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Input
                     value={server.name}

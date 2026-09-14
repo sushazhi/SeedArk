@@ -96,6 +96,8 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
   const activeCount = statusCounts.active ?? 0
   const pausedCount = statusCounts.paused ?? 0
   const verifyingCount = statusCounts.verifying ?? 0
+  // 窄屏摘要用：异常任务数是最需要被看见的一项，即使底栏再挤也要保留
+  const errorCount = statusCounts.error ?? 0
 
   const statusText = wsStatus === 'connected'
     ? t('common.connected')
@@ -141,7 +143,9 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
         )}
       </div>
 
-      {/* 实时统计 */}
+      {/* 实时统计：窄屏放不下时不再整块隐藏，而是把同样的明细收进「详情」里。
+          此前这几项全是 hidden md:flex，手机端底栏只剩连接状态与流量，
+          侧栏又是抽屉——移动端用户看不到任何任务汇总计数 */}
       <div className="ml-auto flex items-center gap-3 shrink-0">
         <span className="hidden md:flex items-center gap-1 shrink-0">
           <span className="text-gray-400">{t('common.torrentCount')}</span>
@@ -161,16 +165,24 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
           </span>
         )}
 
-        {/* 硬盘剩余空间 */}
+        {/* 硬盘剩余空间：窄屏降级为纯图标，数字收进 title 与详情弹层 */}
         {freeSpace && (
           <span
-            className="hidden md:flex items-center gap-1 shrink-0"
+            className="flex items-center gap-1 shrink-0"
             title={`${t('statusBar.freeSpace')}: ${formatBytes(freeSpace.freeSpace)} / ${formatBytes(freeSpace.totalSize)}`}
           >
             <HardDrive className="w-3 h-3 text-gray-400" />
-            <span className="tm-mono">{formatBytes(freeSpace.freeSpace)}</span>
+            <span className="tm-mono hidden md:inline">{formatBytes(freeSpace.freeSpace)}</span>
           </span>
         )}
+
+        {/* 窄屏汇总摘要：让「详情」在移动端也承担入口作用，而不是只显示两个字 */}
+        <span className="flex md:hidden items-center gap-1.5 shrink-0 tm-mono">
+          <span className="text-gray-400">{t('common.torrentCount')}</span>
+          <span>{torrents.length}</span>
+          {activeCount > 0 && <span className="text-primary">·{activeCount}</span>}
+          {errorCount > 0 && <span className="text-red-500">!{errorCount}</span>}
+        </span>
 
         {/* 统计详情弹窗 */}
         <Popover open={showStats} onOpenChange={setShowStats}>
@@ -181,6 +193,25 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
           </PopoverTrigger>
           <PopoverContent className="glass-panel-strong p-3 w-56" align="end">
             <div className="space-y-2 text-footnote">
+              {/* 会话流量与实时计数在窄屏从底栏移入此处，保证信息不丢失 */}
+              <div className="md:hidden space-y-1 pb-2 border-b border-white/60 dark:border-white/10">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{t('common.torrentCount')}</span>
+                  <span className="tm-mono">{torrents.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{t('nav.active')}</span>
+                  <span className="tm-mono text-primary">{activeCount}</span>
+                </div>
+                {freeSpace && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">{t('statusBar.freeSpace')}</span>
+                    <span className="tm-mono">
+                      {formatBytes(freeSpace.freeSpace)} / {formatBytes(freeSpace.totalSize)}
+                    </span>
+                  </div>
+                )}
+              </div>
               {stats && (
                 <>
                   <div className="flex justify-between">
