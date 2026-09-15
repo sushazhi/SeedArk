@@ -96,8 +96,6 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
   const activeCount = statusCounts.active ?? 0
   const pausedCount = statusCounts.paused ?? 0
   const verifyingCount = statusCounts.verifying ?? 0
-  // 窄屏摘要用：异常任务数是最需要被看见的一项，即使底栏再挤也要保留
-  const errorCount = statusCounts.error ?? 0
 
   const statusText = wsStatus === 'connected'
     ? t('common.connected')
@@ -107,7 +105,10 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
 
   return (
     <div className="tm-dock glass-panel rounded-dock h-9 flex items-center gap-2 px-4 text-footnote text-gray-500 dark:text-gray-400 tm-glass-label">
-      <div className="flex items-center gap-2 flex-wrap min-w-0">
+      {/* 左侧：连接状态 + 会话流量。流量紧跟在「已连接」之后——右侧那组统计由
+          ml-auto 顶到右边，中间正是可利用的空档，不必把流量整块藏起来。
+          窄屏只省掉「本次会话」这个文字标签，两个数字（↓/↑）始终保留。 */}
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         {/* 连接状态 */}
         <span
           role="status"
@@ -126,10 +127,10 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
           </>
         )}
 
-        {/* 本次会话流量 */}
+        {/* 本次会话流量：窄屏保留数字、只隐藏文字标签 */}
         {stats && (
           <span className="flex items-center gap-2 shrink-0 tm-mono">
-            <span className="text-gray-400 hidden lg:inline">{t('status.sessionTraffic')}</span>
+            <span className="text-gray-400 hidden sm:inline">{t('status.sessionTraffic')}</span>
             <span className="text-green-600 dark:text-green-400">↓{formatBytes(stats.current.downloadedBytes)}</span>
             <span className="text-blue-600 dark:text-blue-400">↑{formatBytes(stats.current.uploadedBytes)}</span>
           </span>
@@ -143,9 +144,9 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
         )}
       </div>
 
-      {/* 实时统计：窄屏放不下时不再整块隐藏，而是把同样的明细收进「详情」里。
-          此前这几项全是 hidden md:flex，手机端底栏只剩连接状态与流量，
-          侧栏又是抽屉——移动端用户看不到任何任务汇总计数 */}
+      {/* 右侧统计：md 以上常显各项计数；窄屏只留硬盘图标与「详情」入口，
+          完整明细在弹层里。刻意不在底栏塞窄屏摘要——底栏高度固定 36px，
+          任何新增内容都会把左侧挤到换行甚至被裁掉（WebView 下尤其明显） */}
       <div className="ml-auto flex items-center gap-3 shrink-0">
         <span className="hidden md:flex items-center gap-1 shrink-0">
           <span className="text-gray-400">{t('common.torrentCount')}</span>
@@ -175,14 +176,6 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
             <span className="tm-mono hidden md:inline">{formatBytes(freeSpace.freeSpace)}</span>
           </span>
         )}
-
-        {/* 窄屏汇总摘要：让「详情」在移动端也承担入口作用，而不是只显示两个字 */}
-        <span className="flex md:hidden items-center gap-1.5 shrink-0 tm-mono">
-          <span className="text-gray-400">{t('common.torrentCount')}</span>
-          <span>{torrents.length}</span>
-          {activeCount > 0 && <span className="text-primary">·{activeCount}</span>}
-          {errorCount > 0 && <span className="text-red-500">!{errorCount}</span>}
-        </span>
 
         {/* 统计详情弹窗 */}
         <Popover open={showStats} onOpenChange={setShowStats}>

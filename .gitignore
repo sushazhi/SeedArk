@@ -32,6 +32,10 @@ tm-state.json
 .vscode/
 *.swp
 
+# ===== 工具运行时产物（浏览器自动化调试输出，非源码） =====
+.playwright-cli/
+**/.playwright-cli/
+
 # ===== OS =====
 .DS_Store
 Thumbs.db
