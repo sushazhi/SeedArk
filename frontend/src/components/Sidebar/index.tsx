@@ -369,7 +369,7 @@ export const DesktopSidebar: React.FC = () => {
           {/* 过滤器 */}
           {sidebarMenuVisible.status && (
             <div className="shrink-0">
-              <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} mode="single" />
+              <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} />
               <div ref={rail.boxRef} className="relative flex flex-col gap-0.5 mt-1">
                 <span ref={rail.railRef} className="tm-nav-rail" aria-hidden />
                 {STATUS_ITEMS.filter((item) => item.key === 'all' || statusFilterVisible[item.key] !== false).map((item) => {
@@ -431,7 +431,6 @@ export const DesktopSidebar: React.FC = () => {
                 icon={<FolderOpen className="w-3.5 h-3.5" />}
                 title={t('nav.dirs')}
                 count={dirCounts.length}
-                mode="multi"
                 collapsed={sidebarCollapsed.dirs}
                 onToggle={() => setSidebarCollapsed({ dirs: !sidebarCollapsed.dirs })}
               />
@@ -481,7 +480,6 @@ export const DesktopSidebar: React.FC = () => {
                 icon={<Tags className="w-3.5 h-3.5" />}
                 title={t('nav.labels')}
                 count={labelCounts.length}
-                mode="multi"
                 collapsed={sidebarCollapsed.labels}
                 onToggle={() => setSidebarCollapsed({ labels: !sidebarCollapsed.labels })}
               />
@@ -582,7 +580,6 @@ export const DesktopSidebar: React.FC = () => {
                 icon={<ShieldAlert className="w-3.5 h-3.5" />}
                 title={t('nav.errors')}
                 count={errorCounts.length}
-                mode="multi"
                 collapsed={sidebarCollapsed.error}
                 onToggle={() => setSidebarCollapsed({ error: !sidebarCollapsed.error })}
               />
@@ -704,25 +701,19 @@ function CtxCheck({ label, checked, onClick }: { label: string; checked: boolean
 }
 
 // ========== 分组标题 ==========
-// mode 标明该分组的选中语义：单选（状态，滑动胶囊）或多选（目录/标签/站点/错误）。
-// 两种语义在侧栏里是并列的六个分组，此前外观完全一致，用户无法从界面判断
-// 「点第二个会不会把第一个取消」。这里在标题行右侧给一个常驻文字标识。
 function SectionHeader({
   icon,
   title,
   count,
   collapsed,
   onToggle,
-  mode,
 }: {
   icon: React.ReactNode
   title: string
   count?: number
   collapsed?: boolean
   onToggle?: () => void
-  mode?: 'single' | 'multi'
 }) {
-  const { t } = useTranslation()
   const inner = (
     <>
       {onToggle && (
@@ -730,14 +721,6 @@ function SectionHeader({
       )}
       <span className="text-primary">{icon}</span>
       <span className="text-body font-semibold uppercase tracking-wider">{title}</span>
-      {mode && (
-        <span
-          className="shrink-0 rounded-full border border-white/60 dark:border-white/10 px-1.5 py-px text-caption2 font-medium normal-case tracking-normal text-gray-400 dark:text-gray-500"
-          title={mode === 'single' ? t('nav.modeSingleHint') : t('nav.modeMultiHint')}
-        >
-          {mode === 'single' ? t('nav.modeSingle') : t('nav.modeMulti')}
-        </span>
-      )}
       {typeof count === 'number' && <span className="text-caption2 tm-mono text-gray-400 ml-auto">{count}</span>}
     </>
   )
@@ -809,7 +792,6 @@ const SiteNav: React.FC<SiteNavProps> = ({ sites, siteStats, currentSiteIds, onS
         icon={<Server className="w-3.5 h-3.5" />}
         title={t('site.nav')}
         count={siteEntries.length}
-        mode="single"
         collapsed={collapsed}
         onToggle={onToggle}
       />
@@ -1189,7 +1171,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
           {/* 状态筛选 */}
           {sidebarMenuVisible.status && (
           <div>
-            <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} mode="single" />
+            <SectionHeader icon={<Layers className="w-3.5 h-3.5" />} title={t('nav.filter')} />
             <div className="space-y-0.5 mt-1">
               {STATUS_ITEMS.filter((item) => item.key === 'all' || statusFilterVisible[item.key] !== false).map((item) => {
                 const Icon = item.icon
@@ -1298,7 +1280,6 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
                 icon={<AlertCircle className="w-3.5 h-3.5" />}
                 title={t('nav.errors')}
                 count={errorCounts.length}
-                mode="multi"
                 collapsed={sidebarCollapsed.error}
                 onToggle={() => setSidebarCollapsed({ error: !sidebarCollapsed.error })}
               />
@@ -1347,7 +1328,6 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
                 icon={<Tags className="w-3.5 h-3.5" />}
                 title={t('nav.labels')}
                 count={labelCounts.length}
-                mode="multi"
                 collapsed={sidebarCollapsed.labels}
                 onToggle={() => setSidebarCollapsed({ labels: !sidebarCollapsed.labels })}
               />
@@ -1438,7 +1418,6 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
               <SectionHeader
                 icon={<Server className="w-3.5 h-3.5" />}
                 title={t('site.nav')}
-                mode="single"
                 collapsed={sidebarCollapsed.sites}
                 onToggle={() => setSidebarCollapsed({ sites: !sidebarCollapsed.sites })}
               />

@@ -75,11 +75,6 @@ export default {
     dirs: '数据目录',
     sites: '站点',
     filter: '过滤器',
-    // 分组标题上的选中语义标识：侧栏里单选与多选分组外观一致，需文字说明
-    modeSingle: '单选',
-    modeMulti: '多选',
-    modeSingleHint: '该分组为单选：点击会切换当前分类',
-    modeMultiHint: '该分组可多选：点击会叠加筛选条件，再点取消',
     selectByDoubleClick: '双击选中该分类全部种子',
   },
   status: {

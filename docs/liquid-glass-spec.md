@@ -124,7 +124,7 @@ iOS 27 beta 的方向保留「玻璃更透、用户可控」的无障碍降级�
 | 4 | `shadow-md/lg/xl` 与 `border-gray-200/70 dark:border-gray-700/50` 散落 10+ 处，绕过令牌 | 新增 `.glass-section`（玻璃内分区块，含 `.dark` 与 `data-a11y-glass="reduce"` 降级）；Dashboard/AutoMove/SpeedPolicy/SeedPolicy/SettingsModal 的卡片全部换用；阴影改用具体令牌值或 `color-mix` |
 | 5 | 弹窗标题字号不一：TorrentDetail 用 `text-subhead`，其余用 `text-title2` | 统一回 `text-title2`；`ui/input.tsx` 的 `text-subhead md:text-body` 改为固定 `text-body`（触屏 ≥16px 由 CSS 层统一承担） |
 | 6 | 状态栏窄屏把计数/空间全部 `hidden md:` 隐藏，移动端用户看不到任何汇总 | 底栏保留图标级空间指示 + 新增窄屏摘要（任务数/活跃/异常）；明细补进「详情」浮层（`md:hidden` 分组） |
-| 7 | 侧栏单选（状态/站点）与多选（目录/标签/错误）分组外观一致，无法判断点击语义 | `SectionHeader` 增加 `mode` 属性，标题行显示「单选/多选」标识并带 `title` 说明（zh/en 文案 `nav.mode*`） |
+| 7 | ~~侧栏单选/多选分组无法判断点击语义~~（**已撤销**） | 曾加 `mode` 属性在标题行显示「单选/多选」标识，后判定为伪需求：两种语义本就由视觉语言区分——单选走滑动胶囊（`tm-nav-rail`，一次只亮一个且可见位移），多选走逐项 `tm-nav-active` + ✓（可同时亮多个）。标识反而在标题行制造噪声且重复 9 次，已移除 |
 | 8 | 侧栏标签 chip 内名称/体积/计数同为 `opacity-70`，无主次 | 名称加 `truncate` 承担主体，体积与计数收进低对比度分组并用 `·` 分隔 |
 | 9 | GridView 元信息行 `flex-nowrap + overflow-hidden`，窄屏静默截断做种时长 | 窄屏允许折行（`flex-wrap`），宽屏保持 `md:flex-nowrap`；分隔点在折行时隐藏 |
 | 10 | 拖拽落点整屏 `bg-primary/20` + 16px 图标，深色下刺眼 | 底色降到 `/7`，提示内容收进 `.glass-panel-strong` 卡片，图标 11px 圆形衬底 |
