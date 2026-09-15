@@ -63,6 +63,22 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
     }
   }, [scrollTargetIds, torrents, consumeScrollTarget])
 
+  // 所有 Hook 必须写在下面的空列表早返回之前。
+  // useTorrentMenuHandler 是自定义 Hook（内部调用 useTranslation / useTorrentActions /
+  // useRevealPath / useCallback），此前它排在 `torrents.length === 0` 的早返回之后：
+  // 首屏列表为空时走 EmptyList 分支（Hook 少几个），XHR 返回种子后重渲染就会多出 Hook，
+  // React 抛 #310（Rendered more hooks than during the previous render）并卸载整棵树 ——
+  // 表现为移动端「列表一闪之后整页空白」。移动端固定走卡片视图，桌面走表格，
+  // 所以这个崩溃只在移动端可见。
+  const handleMenuClick = useTorrentMenuHandler({
+    onOpenDetail,
+    onOpenBatchClean,
+    onEdit: setEditTarget,
+    onRemove: (id) => setRemoveIds([id]),
+    onReplaceTrackers: () => setTrackerOpen(true),
+    canRevealPath: can('fs.revealPath'),
+  })
+
   if (torrents.length === 0) {
     return <EmptyList />
   }
@@ -102,15 +118,6 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
     setSelection([torrent.id])
     setSelectAnchor(torrent.id)
   }
-
-  const handleMenuClick = useTorrentMenuHandler({
-    onOpenDetail,
-    onOpenBatchClean,
-    onEdit: setEditTarget,
-    onRemove: (id) => setRemoveIds([id]),
-    onReplaceTrackers: () => setTrackerOpen(true),
-    canRevealPath: can('fs.revealPath'),
-  })
 
   return (
     <div

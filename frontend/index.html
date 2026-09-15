@@ -15,6 +15,75 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      自愈脚本：仅在检测到「历史中毒缓存」时清理并重载一次。
+
+      背景（移动端刷新白屏）：旧版 sw.js 用固定缓存名 + 缓存优先，且后端 SPA 回退
+      曾对已删除的 /assets/*.js 返回 200 + HTML，导致 HTML 被当作脚本缓存下来，
+      此后每次刷新都空白且无法自愈。
+
+      判据刻意收得很窄：只有当缓存里确实存在「以 .js/.css 结尾、内容却是 HTML」
+      的条目（即真正的中毒特征）时才动手。健康的缓存不受影响，也不会出现
+      无差别清缓存或重载循环。清理后重载一次即拿到干净资源。
+    -->
+    <script>
+      (function () {
+        if (!window.caches) return
+        var KEY = 'tm-cache-heal-v2'
+        try {
+          if (sessionStorage.getItem(KEY)) return
+        } catch (e) {
+          return
+        }
+        var ASSET = /\.(js|mjs|css)$/i
+        caches
+          .keys()
+          .then(function (names) {
+            return Promise.all(
+              names.map(function (name) {
+                return caches.open(name).then(function (cache) {
+                  return cache.keys().then(function (reqs) {
+                    return Promise.all(
+                      reqs
+                        .filter(function (r) {
+                          return ASSET.test(new URL(r.url).pathname)
+                        })
+                        .map(function (r) {
+                          return cache.match(r).then(function (resp) {
+                            if (!resp) return false
+                            var ct = (resp.headers.get('content-type') || '').toLowerCase()
+                            // 脚本/样式的位置上放着 HTML —— 命中中毒特征
+                            return ct.indexOf('text/html') === 0
+                          })
+                        }),
+                    ).then(function (flags) {
+                      return flags.some(Boolean) ? name : null
+                    })
+                  })
+                })
+              }),
+            )
+          })
+          .then(function (poisoned) {
+            var bad = poisoned.filter(Boolean)
+            if (bad.length === 0) return
+            try {
+              sessionStorage.setItem(KEY, '1')
+            } catch (e) {
+              /* 存不进就不重载，避免无限循环 */
+              return
+            }
+            return Promise.all(
+              bad.map(function (n) {
+                return caches.delete(n)
+              }),
+            ).then(function () {
+              window.location.reload()
+            })
+          })
+          .catch(function () {})
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script src="/pwa-register.js" defer></script>
     </body>

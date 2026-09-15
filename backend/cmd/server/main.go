@@ -359,7 +359,30 @@ func serveStatic(r *gin.Engine, gatewayPrefix string) {
 			c.Data(http.StatusOK, ct, data)
 			return
 		}
-		// SPA 路由回退
+		// 静态资源未命中必须返回真 404，绝不能落到下面的 SPA 回退。
+		//
+		// 这是移动端"刷新即白屏"的成因：发布新版本后 index.html 里的资源哈希
+		// 全部变化，持有旧 HTML 的客户端（SW 缓存 / HTTP 缓存 / 已装 PWA）仍会
+		// 请求已删除的 /assets/index-OLDHASH.js。若此处返回 200 + HTML，
+		// 浏览器把 HTML 当作 ES module 解析必然失败，#root 永远为空；
+		// 更糟的是 SW 会把这份 200 的 HTML 当作该 JS 的合法响应写进缓存
+		// （见 frontend/public/sw.js），此后即使服务端已修复，本地依然永久白屏。
+		if isStaticAssetPath(path) {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		// SPA 路由回退：仅对"看起来像前端路由"的路径生效（如 /torrents/123）
 		c.Data(http.StatusOK, "text/html; charset=utf-8", index)
 	})
+}
+
+// isStaticAssetPath 判断路径是否属于构建产物（带哈希的资源、图标、清单等）。
+// 这类路径都是文件而非前端路由，未命中即为真 404，不能回退到 index.html。
+func isStaticAssetPath(p string) bool {
+	if strings.HasPrefix(p, "assets/") {
+		return true
+	}
+	// 其余带扩展名的请求同样按静态文件处理（favicon、sw.js、pwa-register.js…）；
+	// 前端路由不含扩展名，因此这个判据不会误伤 SPA 深链
+	return filepath.Ext(p) != ""
 }
