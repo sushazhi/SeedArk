@@ -387,11 +387,14 @@ func (c *Client) QueueMove(ctx context.Context, ids []int64, direction string) e
 	}
 }
 
-// GetTorrentSites 获取每个种子关联的 Tracker 站点（用于站点维度过滤）
+// GetTorrentSites 获取每个种子关联的 Tracker 站点（用于站点维度过滤）。
+// 只请求 id + trackers 两个字段：TorrentGetAll 会把全部种子的 files/peers/pieces
+// 一并序列化，590 个种子时 transmission 端耗时约 9s（真机实测 2026-09），
+// 首屏打开时该接口与列表并发，会把应用打开拖到秒级。
 func (c *Client) GetTorrentSites(ctx context.Context) (map[int64][]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	torrents, err := c.tr.TorrentGetAll(ctx)
+	torrents, err := c.tr.TorrentGet(ctx, []string{"id", "trackers"}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -424,11 +427,12 @@ func (c *Client) GetTorrentSites(ctx context.Context) (map[int64][]string, error
 }
 
 // ReplaceTracker 在所有种子中批量替换/追加 Tracker 地址（含匹配的 URL 替换为新地址或追加），
-// 返回受影响的种子数及种子名称列表（供前端预览）
+// 返回受影响的种子数及种子名称列表（供前端预览）。
+// 只请求替换所需字段，理由同 GetTorrentSites（TorrentGetAll 全字段在大量种子时极慢）。
 func (c *Client) ReplaceTracker(ctx context.Context, from, to string, appendMode bool) (int64, []string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	torrents, err := c.tr.TorrentGetAll(ctx)
+	torrents, err := c.tr.TorrentGet(ctx, []string{"id", "name", "trackers"}, nil)
 	if err != nil {
 		return 0, nil, err
 	}
