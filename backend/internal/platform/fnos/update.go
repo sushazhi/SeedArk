@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -38,7 +39,34 @@ const (
 var (
 	reFPKVersion  = regexp.MustCompile(`-([\d][\d.]*)-(?:amd64|arm64)\.fpk$`)
 	reManifestVer = regexp.MustCompile(`(?i)^\s*version\s*=\s*(.+?)\s*$`)
+
+	// changelog 归一化用：换行标签 / 其余 HTML 标签 / 连续空行
+	reBrTag      = regexp.MustCompile(`(?i)<br\s*/?>`)
+	reHTMLTag    = regexp.MustCompile(`(?s)</?[a-zA-Z][^>]*>`)
+	reBlankLines = regexp.MustCompile(`\n{3,}`)
 )
+
+// normalizeChangelog 把 Release body 归一化为纯文本更新日志。
+// fnOS manifest 的 changelog 用 <br> 分行，CI 原样作为 GitHub Release body 发布，
+// 前端按纯文本渲染时 <br> 会原样显示且不换行；这里统一转为真实换行、
+// 剥离其余 HTML 标签并解码实体，顺带去掉冗余的「更新日志」标题行。
+func normalizeChangelog(body string) string {
+	if strings.TrimSpace(body) == "" {
+		return ""
+	}
+	s := reBrTag.ReplaceAllString(body, "\n")
+	s = reHTMLTag.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+	lines := strings.Split(s, "\n")
+	if len(lines) > 1 {
+		first := strings.TrimSpace(lines[0])
+		if first == "更新日志" || strings.EqualFold(first, "changelog") || strings.EqualFold(first, "change log") {
+			lines = lines[1:]
+		}
+	}
+	s = reBlankLines.ReplaceAllString(strings.Join(lines, "\n"), "\n\n")
+	return strings.TrimSpace(s)
+}
 
 // appArch 当前部署架构（fnOS 仅提供 amd64 / arm64 更新包）
 func appArch() string {
@@ -176,7 +204,7 @@ func fetchLatestRelease() (*releaseInfo, error) {
 	}
 	return &releaseInfo{
 		Version:     strings.TrimPrefix(rel.TagName, "v"),
-		Changelog:   rel.Body,
+		Changelog:   normalizeChangelog(rel.Body),
 		PublishedAt: rel.PublishedAt,
 		ReleaseURL:  rel.HTMLURL,
 		FPKURL:      fpkURL,
