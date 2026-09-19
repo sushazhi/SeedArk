@@ -16,7 +16,7 @@
 - 根因、验证方式这类信息写进 commit 只会被埋没——放代码注释或本文件里更合适。
 - 一个 commit 只做一件事；修复与重构不要混在一起，方便回溯与回滚。
 
-## [未发布]
+## [v0.1.2] - 2026-09-19
 
 ### 新增
 
@@ -121,6 +121,6 @@
 - 收紧鉴权、路径读取与配置写入的安全边界
 - 网关模式下信任宿主认证，放宽同源校验
 
-[未发布]: https://github.com/sushazhi/trpanel/compare/v0.1.1...HEAD
+[v0.1.2]: https://github.com/sushazhi/trpanel/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sushazhi/trpanel/releases/tag/v0.1.1
 [v0.1.0]: https://github.com/sushazhi/trpanel/releases/tag/v0.1.0
