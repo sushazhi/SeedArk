@@ -3,9 +3,9 @@ package seedpolicy
 import (
 	"testing"
 
-	"github.com/trpanel/backend/internal/models"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 func okTracker(host string) models.TrackerStat {

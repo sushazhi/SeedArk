@@ -3,7 +3,7 @@
   本地开发一键启动（前端 Vite Dev Server + 后端 Go 服务），保证前端热更新可用
 .DESCRIPTION
   同时拉起前后端：前端 http://localhost:5173（HMR 实时热更），后端 http://localhost:8200。
-  所有开发运行时产物（后端状态文件 tm-state.json、前后端日志）统一写入
+  所有开发运行时产物（后端状态文件 sa-state.json、前后端日志）统一写入
   项目根 dev/ 目录，避免污染代码目录。
   -mock 额外启动下载器 mock：同时拉起 trmock（:9092）与 qbmock（:8080），
   并把状态文件写成「两台都启用」，后端启动即为多下载器聚合视图
@@ -151,8 +151,8 @@ Write-Host "[dev]   后端状态文件 -> $DataDir"         -ForegroundColor Dar
 Write-Host "[dev]   后端日志     -> $BackendLog"      -ForegroundColor DarkGray
 Write-Host "[dev]   前端日志     -> $FrontendLog"     -ForegroundColor DarkGray
 
-# 后端运行时数据（tm-state.json / .env.local 等）写入 dev/data，而非代码目录
-$env:TM_DATA_DIR = $DataDir
+# 后端运行时数据（sa-state.json / .env.local 等）写入 dev/data，而非代码目录
+$env:SA_DATA_DIR = $DataDir
 
 # 下载器 mock（可选）：-mock 时同时拉起 trmock（:9092）与 qbmock（:8080），
 # 并把状态文件写成「两台都启用」，后端启动后即为聚合视图（种子合并展示）。
@@ -161,18 +161,18 @@ $QBMockLog = Join-Path $LogDir "qbmock.log"
 $mockProcess = $null
 $qbMockProcess = $null
 if ($mock) {
-    # TR_TYPE 必须一起设：.env.local 里保存的 TR_TYPE 优先级低于环境变量，
-    # 只设 TR_URL 会在「界面里存过 qBittorrent」时配出 qbittorrent+trmock 的
+    # SA_TYPE 必须一起设：.env.local 里保存的 SA_TYPE 优先级低于环境变量，
+    # 只设 SA_URL 会在「界面里存过 qBittorrent」时配出 qbittorrent+trmock 的
     # 错配（表现为 app/preferences 404 之类的怪错），这里强制成一对。
-    $env:TR_TYPE = "transmission"
+    $env:SA_TYPE = "transmission"
     # 用 127.0.0.1 而非 localhost：mock 只监听 IPv4，而本机 localhost 会先解析到
     # IPv6 的 [::1]，那里没有监听 → 连接被拒（表现为后端轮询种子失败）。
-    $env:TR_URL  = "http://127.0.0.1:9092/transmission/rpc"
+    $env:SA_URL  = "http://127.0.0.1:9092/transmission/rpc"
 
     # 让后端一启动就连上两台 mock（聚合视图）。文件名与后端 state.DefaultStatePath 一致。
-    Initialize-MockAggregationState (Join-Path $DataDir "tm-state.json")
+    Initialize-MockAggregationState (Join-Path $DataDir "sa-state.json")
 
-    Write-Host "[dev] Mock Transmission: $($env:TR_URL) （日志 $MockLog）" -ForegroundColor DarkGray
+    Write-Host "[dev] Mock Transmission: $($env:SA_URL) （日志 $MockLog）" -ForegroundColor DarkGray
     $mockProcess = Start-Process -WindowStyle Hidden -FilePath "cmd.exe" `
         -WorkingDirectory (Join-Path $Root "backend") `
         -ArgumentList "/c", "go run ./cmd/trmock > `"$MockLog`" 2>&1" `

@@ -192,10 +192,10 @@ function DirInput({ field, session, onCommit, 'aria-label': ariaLabel }: {
 
 // ========== 关于与检查更新 ==========
 // 检查更新依赖宿主的 app.update 能力（后端也只在对应平台注册 /api/update 路由）
-// 问题反馈渠道：界面（本仓库，已由 Transmission-WebUI-for-fnOS 更名为 trpanel）
+// 问题反馈渠道：界面（本仓库，已由 Transmission-WebUI-for-fnOS 更名为 SeedArk）
 // 与飞牛应用分发（fpk 下载）分属两个 GitHub 仓库，
 // 与后端 fnos 平台的 updateRepo（sushazhi/fnos-transmission）保持一致
-const UI_REPO_ISSUES = 'https://github.com/sushazhi/trpanel/issues'
+const UI_REPO_ISSUES = 'https://github.com/sushazhi/seedark/issues'
 const FPK_REPO_ISSUES = 'https://github.com/sushazhi/fnos-transmission/issues'
 
 // framed=false 供桌面端双列布局使用：那时左栏导航已经写着「关于」，
@@ -264,7 +264,7 @@ function AboutSection({ transmissionVersion, framed = true }: { transmissionVers
       <div className="flex items-center justify-between gap-3 py-1.5">
         <div className="min-w-0">
           <span className="text-body text-gray-600 dark:text-gray-300">
-            trpanel{canUpdate ? ' for fnOS' : ''}
+            SeedArk{canUpdate ? ' for fnOS' : ''}
           </span>
           <p className="text-caption1 text-gray-400 mt-0.5">
             {transmissionVersion ? `Transmission ${transmissionVersion}` : t('session.checkUpdateHint')}
@@ -431,7 +431,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const [pass, setPass] = useState('')
   const [saving, setSaving] = useState(false)
   const [pollInterval, setPollInterval] = useState('2s')
-  // 下载器类型：决定地址占位符与提交的 TR_TYPE（qBittorrent 填 WebUI 根地址）
+  // 下载器类型：决定地址占位符与提交的 SA_TYPE（qBittorrent 填 WebUI 根地址）
   const [kind, setKind] = useState<DownloaderKind>('transmission')
   // 连接栏是本弹窗唯一的草稿区，存一份已保存快照用于判断是否"有未保存改动"
   const [connSnapshot, setConnSnapshot] = useState({ url: '', user: '', pollInterval: '2s', type: 'transmission' as DownloaderKind })

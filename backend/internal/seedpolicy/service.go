@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 const (

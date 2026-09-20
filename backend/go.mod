@@ -1,4 +1,4 @@
-module github.com/trpanel/backend
+module github.com/sushazhi/seedark/backend
 
 go 1.27.0
 

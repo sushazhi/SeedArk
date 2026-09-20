@@ -19,20 +19,20 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	static "github.com/trpanel/backend"
-	"github.com/trpanel/backend/internal/api"
-	"github.com/trpanel/backend/internal/automove"
-	"github.com/trpanel/backend/internal/config"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/mcpserver"
-	"github.com/trpanel/backend/internal/middleware"
-	"github.com/trpanel/backend/internal/platform"
+	static "github.com/sushazhi/seedark/backend"
+	"github.com/sushazhi/seedark/backend/internal/api"
+	"github.com/sushazhi/seedark/backend/internal/automove"
+	"github.com/sushazhi/seedark/backend/internal/config"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/mcpserver"
+	"github.com/sushazhi/seedark/backend/internal/middleware"
+	"github.com/sushazhi/seedark/backend/internal/platform"
 	// 空导入即完成 fnOS 平台注册；不导入时服务自动降级为通用部署
-	_ "github.com/trpanel/backend/internal/platform/fnos"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/seedpolicy"
-	"github.com/trpanel/backend/internal/speedpolicy"
-	"github.com/trpanel/backend/internal/state"
+	_ "github.com/sushazhi/seedark/backend/internal/platform/fnos"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
+	"github.com/sushazhi/seedark/backend/internal/speedpolicy"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 func main() {
@@ -62,7 +62,7 @@ func main() {
 
 	// 启动时检测连接
 	if version, err := manager.Ping(ctx); err != nil {
-		slog.Warn("下载器连接失败，请检查 TR_TYPE/TR_URL/TR_USER/TR_PASS", "kind", kind, "err", err)
+		slog.Warn("下载器连接失败，请检查 SA_TYPE/SA_URL/SA_USER/SA_PASS", "kind", kind, "err", err)
 	} else {
 		slog.Info("已连接下载器", "kind", kind, "version", version)
 	}

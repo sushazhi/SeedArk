@@ -1222,7 +1222,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
             <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--brand-grad-from)] to-[var(--brand-grad-to)] flex items-center justify-center">
               <span className="text-white font-bold text-footnote">SA</span>
             </span>
-            <span className="text-primary">trpanel</span>
+            <span className="text-primary">SeedArk</span>
             {can('app.update') && <span className="text-gray-400 dark:text-gray-500 font-medium text-footnote"> for fnOS</span>}
           </SheetTitle>
         </SheetHeader>

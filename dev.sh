@@ -39,13 +39,13 @@ for cmd in go pnpm; do
 done
 
 # 后端运行时数据写入 dev/data，而非代码目录
-export TM_DATA_DIR="$DATA_DIR"
+export SA_DATA_DIR="$DATA_DIR"
 
-# Mock Transmission（可选）：-mock 时拉起 trmock 并用 TR_URL 把后端指向它
+# Mock Transmission（可选）：-mock 时拉起 trmock 并用 SA_URL 把后端指向它
 MOCK_PID=""
 if [ "$MOCK" -eq 1 ]; then
-  export TR_URL="http://localhost:9092/transmission/rpc"
-  echo "[dev] Mock Transmission: $TR_URL （日志 $LOG_DIR/mock.log）"
+  export SA_URL="http://localhost:9092/transmission/rpc"
+  echo "[dev] Mock Transmission: $SA_URL （日志 $LOG_DIR/mock.log）"
   ( cd "$ROOT/backend" && go run ./cmd/trmock ) >"$LOG_DIR/mock.log" 2>&1 &
   MOCK_PID=$!
 fi

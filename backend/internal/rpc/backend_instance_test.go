@@ -3,7 +3,7 @@ package rpc
 import (
 	"testing"
 
-	"github.com/trpanel/backend/internal/qbittorrent"
+	"github.com/sushazhi/seedark/backend/internal/qbittorrent"
 )
 
 // TestActiveBackendInstanceMismatch 记录一个真实缺陷：

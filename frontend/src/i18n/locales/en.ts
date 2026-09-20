@@ -470,7 +470,7 @@ export default {
     feedback: 'Feedback',
     feedbackHint: 'Report UI / feature issues in the WebUI repo; fpk install or app update issues in the fnOS app repo',
     feedbackHintUi: 'Report UI / feature issues in the WebUI repo',
-    feedbackUi: 'UI repo · trpanel',
+    feedbackUi: 'UI repo · SeedArk',
     feedbackFpk: 'fnOS app repo · fnos-transmission (fpk)',
     updateLater: 'Remind me later',
     ignoreVersion: 'Ignore this version',

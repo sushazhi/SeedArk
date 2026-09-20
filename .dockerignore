@@ -17,18 +17,18 @@ frontend/.vite
 backend/web/dist
 
 # 本地编译产物与二进制
-backend/trpanel
-backend/trpanel.exe
+backend/seedark
+backend/seedark.exe
 backend/trmock
 backend/trmock.exe
 backend/server.exe
-backend/trpanel-linux-arm64
+backend/seedark-linux-arm64
 *.exe
 
 # 本地配置、日志与运行时状态
 .env
 .env.*
-tm-state.json
+sa-state.json
 *.log
 
 # 编辑器与系统

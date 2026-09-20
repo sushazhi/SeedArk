@@ -39,13 +39,13 @@ func Load() (*Config, error) {
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath("$HOME/.trpanel")
+	v.AddConfigPath("$HOME/.seedark")
 
 	// 默认值
-	v.SetDefault("tr_type", "transmission")
-	v.SetDefault("tr_url", "http://localhost:9091/transmission/rpc")
-	v.SetDefault("tr_user", "")
-	v.SetDefault("tr_pass", "")
+	v.SetDefault("sa_type", "transmission")
+	v.SetDefault("sa_url", "http://localhost:9091/transmission/rpc")
+	v.SetDefault("sa_user", "")
+	v.SetDefault("sa_pass", "")
 	v.SetDefault("server_host", "127.0.0.1")
 	v.SetDefault("server_port", 8200)
 	v.SetDefault("api_token", "")
@@ -71,9 +71,9 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// 数据目录（TM_DATA_DIR > config.yaml > 默认家目录），用于定位 .env/.env.local
+	// 数据目录（SA_DATA_DIR > config.yaml > 默认家目录），用于定位 .env/.env.local
 	dataDir := expandPath(v.GetString("data_dir"))
-	if envDir := os.Getenv("TM_DATA_DIR"); envDir != "" {
+	if envDir := os.Getenv("SA_DATA_DIR"); envDir != "" {
 		dataDir = expandPath(envDir)
 	}
 
@@ -96,18 +96,18 @@ func Load() (*Config, error) {
 
 	// 环境变量覆盖（最高优先级）
 	envKeys := map[string]string{
-		"tr_type":             "TR_TYPE",
-		"tr_url":              "TR_URL",
-		"tr_user":             "TR_USER",
-		"tr_pass":             "TR_PASS",
+		"sa_type":             "SA_TYPE",
+		"sa_url":              "SA_URL",
+		"sa_user":             "SA_USER",
+		"sa_pass":             "SA_PASS",
 		"server_host":         "SERVER_HOST",
 		"server_port":         "SERVER_PORT",
 		"api_token":           "API_TOKEN",
-		"platform":            "TM_PLATFORM",
+		"platform":            "SA_PLATFORM",
 		"gateway_prefix":      "GATEWAY_PREFIX",
 		"poll_interval":       "POLL_INTERVAL",
 		"log_level":           "LOG_LEVEL",
-		"data_dir":            "TM_DATA_DIR",
+		"data_dir":            "SA_DATA_DIR",
 		"mcp_enabled":         "MCP_ENABLED",
 		"mcp_allow_delete":    "MCP_ALLOW_DELETE",
 		"mcp_allow_dangerous": "MCP_ALLOW_DANGEROUS",
@@ -137,10 +137,10 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		TransmissionType:  strings.TrimSpace(v.GetString("tr_type")),
-		TransmissionURL:   v.GetString("tr_url"),
-		User:              v.GetString("tr_user"),
-		Password:          v.GetString("tr_pass"),
+		TransmissionType:  strings.TrimSpace(v.GetString("sa_type")),
+		TransmissionURL:   v.GetString("sa_url"),
+		User:              v.GetString("sa_user"),
+		Password:          v.GetString("sa_pass"),
 		Host:              v.GetString("server_host"),
 		Port:              fmt.Sprintf("%d", v.GetInt("server_port")),
 		APIToken:          v.GetString("api_token"),
@@ -170,11 +170,11 @@ func expandList(items []string) []string {
 	return out
 }
 
-// defaultDataDir 默认数据目录为 ~/.trpanel（与 config.yaml 搜索路径一致），
+// defaultDataDir 默认数据目录为 ~/.seedark（与 config.yaml 搜索路径一致），
 // 避免运行时生成的状态/配置文件落在代码或部署目录
 func defaultDataDir() string {
 	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".trpanel")
+		return filepath.Join(home, ".seedark")
 	}
 	return "."
 }

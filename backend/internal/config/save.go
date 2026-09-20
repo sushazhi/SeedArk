@@ -38,17 +38,17 @@ type LocalSettings struct {
 	MCPPort           string // 空 = 显式关闭直连端口（写入空值行，避免被 config.yaml 复活）；修改需重启生效
 }
 
-// SaveLocalSettings 将界面配置保存到数据目录（默认 ~/.trpanel）。
+// SaveLocalSettings 将界面配置保存到数据目录（默认 ~/.seedark）。
 // 连接与 MCP 设置共用此文件，任何入口保存都必须携带全部受管键的当前生效值
 func SaveLocalSettings(dataDir string, s LocalSettings) error {
 	values := []struct {
 		key, value string
 		always     bool // always：空值也要写入显式覆盖行，防止低优先级来源的旧值在重启后复活
 	}{
-		{"TR_TYPE", s.Type, true},
-		{"TR_URL", s.TransmissionURL, true},
-		{"TR_USER", s.User, true},
-		{"TR_PASS", s.Pass, true},
+		{"SA_TYPE", s.Type, true},
+		{"SA_URL", s.TransmissionURL, true},
+		{"SA_USER", s.User, true},
+		{"SA_PASS", s.Pass, true},
 		{"POLL_INTERVAL", s.PollInterval, false},
 		{"MCP_TOKEN", s.MCPToken, true},
 		{"MCP_PORT", s.MCPPort, true},

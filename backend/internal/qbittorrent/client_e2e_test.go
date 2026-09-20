@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
-	"github.com/trpanel/backend/internal/qbmock"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/qbmock"
 )
 
 // startMock 启动 qbmock 并返回其 URL（随测试结束自动关闭）

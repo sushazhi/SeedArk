@@ -57,13 +57,13 @@ jobs:
           for ARCH in amd64 arm64; do
             # 二进制统一命名，版本信息放进归档文件名
             (cd backend && CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" \
-              go build -trimpath -ldflags "-s -w" -o ../release/trpanel ./cmd/server)
-            tar -czf "release/trpanel-${TAG}-linux-${ARCH}.tar.gz" \
-              -C release trpanel
-            rm -f release/trpanel
+              go build -trimpath -ldflags "-s -w" -o ../release/seedark ./cmd/server)
+            tar -czf "release/seedark-${TAG}-linux-${ARCH}.tar.gz" \
+              -C release seedark
+            rm -f release/seedark
           done
           cd release
-          sha256sum trpanel-*.tar.gz > "checksums-${TAG}-sha256.txt"
+          sha256sum seedark-*.tar.gz > "checksums-${TAG}-sha256.txt"
 
       # Release 正文取 CHANGELOG.md 中「本版本」那一节（面向用户、已分好类），
       # 而不是 GitHub 自动生成的 commit 列表 + Full Changelog
@@ -116,5 +116,5 @@ jobs:
           body_path: ${{ steps.notes.outputs.has_notes == 'true' && 'release-notes.md' || '' }}
           generate_release_notes: ${{ steps.notes.outputs.has_notes != 'true' }}
           files: |
-            release/trpanel-*.tar.gz
+            release/seedark-*.tar.gz
             release/checksums-*-sha256.txt

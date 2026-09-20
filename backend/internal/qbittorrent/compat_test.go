@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/trpanel/backend/internal/qbmock"
+	"github.com/sushazhi/seedark/backend/internal/qbmock"
 )
 
 // newCountingServer 起一个按端点计数并可控响应的 mock：

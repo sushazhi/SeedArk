@@ -642,7 +642,7 @@ export const demoSettings: DemoSettings = {
   pollInterval: '2s',
   mcpEnabled: true,
   mcpAllowDelete: false,
-  mcpToken: 'trpanel-demo-token',
+  mcpToken: 'seedark-demo-token',
   mcpPort: '',
 }
 

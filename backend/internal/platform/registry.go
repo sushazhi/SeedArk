@@ -47,7 +47,7 @@ func Resolve(id string, cfg Config) Platform {
 }
 
 // Detect 推断当前宿主平台，优先级：
-//  1. 显式指定（服务配置的 platform 字段，或 PLATFORM / TM_PLATFORM 环境变量）
+//  1. 显式指定（服务配置的 platform 字段，或 PLATFORM / SA_PLATFORM 环境变量）
 //  2. 宿主注入的运行时环境变量（fnOS 应用提供 TRIM_APPDEST）
 //  3. 配置了网关前缀（由宿主网关挂载到子路径）
 //  4. 以上都不满足 → 通用部署

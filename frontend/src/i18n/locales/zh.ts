@@ -468,7 +468,7 @@ export default {
     feedback: '问题反馈',
     feedbackHint: '界面 / 功能问题请到 UI 仓库反馈；fpk 安装、应用更新等问题请到飞牛应用仓库反馈',
     feedbackHintUi: '界面 / 功能问题请到 UI 仓库反馈',
-    feedbackUi: 'UI 仓库 · trpanel',
+    feedbackUi: 'UI 仓库 · SeedArk',
     feedbackFpk: '飞牛应用仓库 · fnos-transmission (fpk)',
     updateLater: '稍后提醒',
     ignoreVersion: '忽略此版本',

@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // torrentInfo /api/v2/torrents/info 的单条记录（Web API v2，qBittorrent 5.x）

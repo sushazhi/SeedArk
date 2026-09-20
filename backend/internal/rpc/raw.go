@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // RawCall 发送任意 Transmission RPC 方法（绕过库未实现的字段/方法）

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // listSpeedPolicy 返回组内总限速规则与引擎开关

@@ -9,16 +9,16 @@ import (
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/automove"
-	"github.com/trpanel/backend/internal/config"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/middleware"
-	"github.com/trpanel/backend/internal/models"
-	"github.com/trpanel/backend/internal/platform"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/seedpolicy"
-	"github.com/trpanel/backend/internal/speedpolicy"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/automove"
+	"github.com/sushazhi/seedark/backend/internal/config"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/middleware"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/platform"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
+	"github.com/sushazhi/seedark/backend/internal/speedpolicy"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // McpControl MCP 服务的运行期开关：/mcp 路由常驻注册，由此控制是否服务请求，

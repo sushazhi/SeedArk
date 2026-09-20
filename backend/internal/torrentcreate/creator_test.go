@@ -80,7 +80,7 @@ func decodeValue(data []byte) (any, int, error) {
 // TestBuildSingleFile 单文件建种：info 结构与分片哈希正确
 func TestBuildSingleFile(t *testing.T) {
 	dir := t.TempDir()
-	content := bytes.Repeat([]byte("hello trpanel "), 4096) // 57344 字节
+	content := bytes.Repeat([]byte("hello seedark "), 4096) // 57344 字节
 	src := filepath.Join(dir, "sample.bin")
 	if err := os.WriteFile(src, content, 0o644); err != nil {
 		t.Fatal(err)

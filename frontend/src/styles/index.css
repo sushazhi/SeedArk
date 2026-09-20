@@ -2,7 +2,7 @@
 
 @variant dark (&:where(.dark, .dark *));
 
-/* ===================== Design Tokens (Liquid Glass · trpanel) ===================== */
+/* ===================== Design Tokens (Liquid Glass · SeedArk) ===================== */
 /* 可插值的玻璃变量：必须用 @property 注册，否则 var() 参与 backdrop-filter 时只会离散跳变、无法过渡 */
 @property --dock-blur {
   syntax: '<length>';

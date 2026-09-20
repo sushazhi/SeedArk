@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // Client qBittorrent Web API 客户端
@@ -441,7 +441,7 @@ func truncateStr(s string, n int) string {
 func buildMultipart(fields map[string]string, files map[string][]byte) ([]byte, string, error) {
 	var buf strings.Builder
 	// 手写 multipart：只需支持文本字段与单文件，避免引入 mime/multipart 的临时文件开销
-	const boundary = "----trpanelQbBoundary"
+	const boundary = "----seedarkQbBoundary"
 	addField := func(name, value string) {
 		buf.WriteString("--" + boundary + "\r\n")
 		buf.WriteString(fmt.Sprintf("Content-Disposition: form-data; name=%q\r\n\r\n", name))

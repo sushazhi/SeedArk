@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trpanel/backend/internal/qbmock"
+	"github.com/sushazhi/seedark/backend/internal/qbmock"
 )
 
 func main() {

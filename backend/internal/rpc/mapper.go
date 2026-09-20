@@ -6,7 +6,7 @@ import (
 
 	"github.com/hekmon/cunits/v2"
 	trpc "github.com/hekmon/transmissionrpc/v3"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // 类型别名，使 rpc 包直接使用 models 中的结构

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 func TestNormalizeBase(t *testing.T) {

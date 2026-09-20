@@ -1,7 +1,7 @@
 # Transmission 连接配置
-tr_url: "http://localhost:9091/transmission/rpc"
-tr_user: "admin"
-tr_pass: "password"
+sa_url: "http://localhost:9091/transmission/rpc"
+sa_user: "admin"
+sa_pass: "password"
 
 # 服务配置
 server_port: 8200

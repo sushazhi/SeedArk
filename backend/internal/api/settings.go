@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/config"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/config"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
 // getSettings 获取当前连接配置（不返回明文密码）与 MCP 服务开关。

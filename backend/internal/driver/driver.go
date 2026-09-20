@@ -1,6 +1,6 @@
 // Package driver 定义下载器后端抽象。
 //
-// trpanel 原先只对接 Transmission，rpc.Client 的方法签名直接透出了 hekmon 库的类型
+// SeedArk 原先只对接 Transmission，rpc.Client 的方法签名直接透出了 hekmon 库的类型
 // （TorrentSetPayload / SessionArguments），上层 API、做种策略、限速引擎、MCP 工具
 // 全都依赖它们，换一个下载器就要改遍全仓。
 //
@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // Kind 下载器类型

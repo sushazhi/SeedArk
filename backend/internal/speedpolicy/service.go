@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 const (

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/qbmock"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/qbmock"
 )
 
 // rawPrefs 直接读上游偏好表（绕过驱动的归一化），用于核对落地值

@@ -13,9 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/trpanel/backend/internal/models"
-	"github.com/trpanel/backend/internal/platform"
-	"github.com/trpanel/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/platform"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
 const (

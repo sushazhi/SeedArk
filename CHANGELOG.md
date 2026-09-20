@@ -18,6 +18,10 @@
 
 ## [未发布]
 
+### 升级说明
+
+- **项目更名为 SeedArk**：原名 trpanel 已不再贴切——它早已不只管 Transmission，还能接 qBittorrent 并聚合展示。仓库、镜像、二进制与界面标题统一改为 SeedArk（镜像 `sushazhi/seedark`、`jianhuayanyu/seedark`）。**升级需注意**：环境变量前缀由 `TR_` / `TM_` 改为 `SA_`（如 `TR_URL` → `SA_URL`、`TM_DATA_DIR` → `SA_DATA_DIR`），状态文件由 `tm-state.json` 改为 `sa-state.json`，数据目录默认由 `~/.trpanel` 改为 `~/.seedark`。老部署请按新变量名调整启动参数，并把旧状态文件与连接配置迁到新目录，否则需要重新配置连接与策略
+
 ### 新增
 
 - **qBittorrent 支持**：新增 qBittorrent 驱动（Web API v2，兼容 4.x / 5.x，支持 5.2+ API Key 登录），可与 Transmission 同时接入并聚合展示（种子列表合并、批量操作按种子自动路由到所属下载器、统计与站点维度跨服务器汇总）

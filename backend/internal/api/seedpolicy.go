@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // listSeedPolicy 返回做种策略规则、全局保护栏与执行记录

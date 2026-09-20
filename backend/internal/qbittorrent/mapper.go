@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // Transmission 状态码（前端 STATUS_META 的唯一来源，qBittorrent 状态映射到此）

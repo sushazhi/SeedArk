@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // appPreferences /api/v2/app/preferences（只声明面板会读写的字段，

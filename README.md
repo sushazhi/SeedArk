@@ -1,6 +1,6 @@
 <div align="center">
 
-# trpanel
+# SeedArk
 
 **基于 Go + React 重构的 Transmission 现代化 Web 管理面板**
 *专为飞牛 OS（fnOS）打造 · 前后端一体交付*
@@ -13,9 +13,9 @@
 [![fnOS](https://img.shields.io/badge/Optimized%20for-fnOS-FF6B35?style=flat-square)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Release](https://img.shields.io/badge/release-v0.1.0-blue?style=flat-square)](../../releases)
-[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-jianhuayanyu%2Ftrpanel-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/r/jianhuayanyu/trpanel)
-[![GHCR](https://img.shields.io/badge/GHCR-trpanel-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/sushazhi/trpanel/pkgs/container/trpanel)
-[![在线预览](https://img.shields.io/badge/在线预览-Demo-8A2BE2?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQTEwIDEwIDAgMSAwIDIyIDEyIDEwIDEwIDAgMCAwIDEyIDJ6bTAgMmE4IDggMCAxIDEgOCA4IDggOCAwIDEgLTggOHptLTEtMTJ2NGw0LTQtNC00eiIvPjwvc3ZnPg==)](https://sushazhi.github.io/trpanel/)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-jianhuayanyu%2Fseedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/r/jianhuayanyu/seedark)
+[![GHCR](https://img.shields.io/badge/GHCR-seedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/sushazhi/seedark/pkgs/container/seedark)
+[![在线预览](https://img.shields.io/badge/在线预览-Demo-8A2BE2?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQTEwIDEwIDAgMSAwIDIyIDEyIDEwIDEwIDAgMCAwIDEyIDJ6bTAgMmE4IDggMCAxIDEgOCA4IDggOCAwIDEgLTggOHptLTEtMTJ2NGw0LTQtNC00eiIvPjwvc3ZnPg==)](https://sushazhi.github.io/seedark/)
 
 </div>
 
@@ -53,8 +53,8 @@
 
 | | 地址 | 说明 |
 |:--|:--|:--|
-| 🖥️ | **[电脑版预览](https://sushazhi.github.io/trpanel/)** | 桌面布局：虚拟滚动表格、右键菜单、拖拽排序 |
-| 📱 | **[移动版预览](https://sushazhi.github.io/trpanel/mobile.html)** | 手机壳样式的移动版预览；真机打开自动进入应用本体 |
+| 🖥️ | **[电脑版预览](https://sushazhi.github.io/seedark/)** | 桌面布局：虚拟滚动表格、右键菜单、拖拽排序 |
+| 📱 | **[移动版预览](https://sushazhi.github.io/seedark/mobile.html)** | 手机壳样式的移动版预览；真机打开自动进入应用本体 |
 
 > 演示模式为纯前端构建（`pnpm build:demo`），不连接任何后端；推送到 `master` 自动部署（[工作流](.github/workflows/demo-pages.yml)）。首次启用需在仓库 **Settings → Pages** 将 Source 设为 **GitHub Actions**。
 
@@ -84,7 +84,7 @@
 
 ## 🚀 快速开始
 
-> trpanel **是一个独立的 Transmission 管理面板**，需要你已有一台运行中的 Transmission（已开启 RPC）。它通过浏览器提供增强界面；**并非 Transmission 本体，也不通过 `TRANSMISSION_WEB_HOME` 替换其自带 Web 界面**。
+> SeedArk **是一个独立的 Transmission 管理面板**，需要你已有一台运行中的 Transmission（已开启 RPC）。它通过浏览器提供增强界面；**并非 Transmission 本体，也不通过 `TRANSMISSION_WEB_HOME` 替换其自带 Web 界面**。
 
 ### ✅ 前置条件
 
@@ -94,13 +94,13 @@
 ### 🐳 方式一：Docker 部署（推荐）
 
 ```bash
-docker run -d --name trpanel \
+docker run -d --name seedark \
   -p 8200:8200 \
-  -e TR_TYPE=transmission \
-  -e TR_URL=http://host.docker.internal:9091/transmission/rpc \
+  -e SA_TYPE=transmission \
+  -e SA_URL=http://host.docker.internal:9091/transmission/rpc \
   -e API_TOKEN=change-me \
-  -v trpanel-data:/data \
-  jianhuayanyu/trpanel:latest
+  -v seedark-data:/data \
+  jianhuayanyu/seedark:latest
 ```
 
 也可以直接用仓库自带的 [`docker-compose.yml`](docker-compose.yml)：
@@ -111,25 +111,25 @@ API_TOKEN=change-me docker compose up -d
 
 | 项 | 值 |
 |:--|:--|
-| 镜像 | `jianhuayanyu/trpanel`（Docker Hub，推荐）／`ghcr.io/sushazhi/trpanel`（GHCR） |
+| 镜像 | `jianhuayanyu/seedark`（Docker Hub，推荐）／`ghcr.io/sushazhi/seedark`（GHCR） |
 | 架构 | `linux/amd64`、`linux/arm64` |
 | 标签 | `v1.2.3`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
-| 数据卷 | `/data`（即 `TM_DATA_DIR`，存放 `tm-state.json` 与界面保存的连接配置） |
+| 数据卷 | `/data`（即 `SA_DATA_DIR`，存放 `sa-state.json` 与界面保存的连接配置） |
 | 健康检查 | `GET /` 每 30s |
 
 > ⚠️ 容器内 `SERVER_HOST=0.0.0.0`，**未设置 `API_TOKEN` 时服务会拒绝启动**（防止局域网裸奔）；令牌在浏览器首次访问时粘贴一次即可，之后持久化在本地。
 > 镜像由 [Docker 工作流](.github/workflows/docker.yml)自动构建发布：仅推送 `v*` 标签触发多架构构建；PR 只验证构建不推送。同一次构建会同时推送到 Docker Hub 与 GHCR，**两个仓库的镜像内容完全一致**，拉取哪个都行（Docker Hub 在国内通常更快）。
-> GHCR 包首次发布后需在仓库 **Packages → Package settings** 中把可见性改为 Public，才能匿名拉取；Docker Hub 推送需在仓库 Secrets 中配置 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`（目标仓库默认为 `jianhuayanyu/trpanel`，可用仓库变量 `DOCKERHUB_REPO` 覆盖）。
+> GHCR 包首次发布后需在仓库 **Packages → Package settings** 中把可见性改为 Public，才能匿名拉取；Docker Hub 推送需在仓库 Secrets 中配置 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`（目标仓库默认为 `jianhuayanyu/seedark`，可用仓库变量 `DOCKERHUB_REPO` 覆盖）。
 
 ### 📦 方式二：二进制 / 源码构建
 
 #### 1️⃣ 获取程序
 
-- **直接下载**：在 [Releases](../../releases) 下载 `trpanel-*.tar.gz`，解压即用
+- **直接下载**：在 [Releases](../../releases) 下载 `seedark-*.tar.gz`，解压即用
 - **自行构建**：
 
   ```bash
-  cd backend && go build -o trpanel ./cmd/server
+  cd backend && go build -o seedark ./cmd/server
   ```
 
 #### 2️⃣ 配置连接
@@ -140,9 +140,9 @@ API_TOKEN=change-me docker compose up -d
 <summary><b>环境变量</b>（启动前 export）</summary>
 
 ```bash
-export TR_URL=http://<transmission-ip>:9091/transmission/rpc
-export TR_USER=admin
-export TR_PASS=password
+export SA_URL=http://<transmission-ip>:9091/transmission/rpc
+export SA_USER=admin
+export SA_PASS=password
 ```
 </details>
 
@@ -169,8 +169,8 @@ transmission:
 #### 3️⃣ 运行
 
 ```bash
-./trpanel        # Linux / macOS
-trpanel.exe      # Windows
+./seedark        # Linux / macOS
+seedark.exe      # Windows
 ```
 
 #### 4️⃣ 访问
@@ -184,7 +184,7 @@ cd frontend && pnpm install && pnpm build
 cd ../backend
 Copy-Item ..\frontend\dist\* web\dist\ -Recurse -Force   # PowerShell
 # cp -r ../frontend/dist/* web/dist/                      # Linux/macOS
-go build -o trpanel ./cmd/server
+go build -o seedark ./cmd/server
 ```
 
 ---
@@ -228,11 +228,11 @@ go build -o trpanel ./cmd/server
 
 ```
 dev/
-├── data/        # tm-state.json、界面保存的连接配置 .env.local
+├── data/        # sa-state.json、界面保存的连接配置 .env.local
 └── logs/        # backend.log、frontend.log、mock.log
 ```
 
-> `dev/` 已在 `.gitignore` 中整体忽略。后端数据目录通过 `TM_DATA_DIR` 指向 `dev/data`；生产部署不设置时仍使用默认 `~/.trpanel`。
+> `dev/` 已在 `.gitignore` 中整体忽略。后端数据目录通过 `SA_DATA_DIR` 指向 `dev/data`；生产部署不设置时仍使用默认 `~/.seedark`。
 
 ### 🧪 没有可用的 Transmission？用内置 Mock
 
@@ -256,7 +256,7 @@ qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录�
 **运行时在 mock 与真实远端之间热切换**：
 
 - 界面切换：设置 → 连接地址，填 `http://localhost:9092/transmission/rpc`（mock）或真实远端，保存即生效
-- 启动时指定：`TR_URL=http://localhost:9092/transmission/rpc`
+- 启动时指定：`SA_URL=http://localhost:9092/transmission/rpc`
 
 ---
 
@@ -337,13 +337,13 @@ qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录�
 - 在系统文件管理器中定位目录
 - 系统主题 / 语言同步
 - 「设置 → 关于」中的应用更新（下载 GitHub Release 的 fpk 包到应用中心安装）
-- 问题反馈入口（界面 / 功能问题反馈到 `trpanel`；fpk 安装 / 应用更新等问题反馈到 `fnos-transmission`）
+- 问题反馈入口（界面 / 功能问题反馈到 `SeedArk`；fpk 安装 / 应用更新等问题反馈到 `fnos-transmission`）
 
 新增一套宿主只需：后端实现 `platform.Platform` 接口并在 `init` 中 `Register`，前端实现 `HostPlatform` 接口并声明能力——**业务代码一行都不用改**。
 
 ### MCP（AI 客户端接入）
 
-trpanel 内置 MCP（Model Context Protocol）服务，AI 客户端可通过自然语言管理下载器（Transmission / qBittorrent）。推荐直接在 Web「设置 → 自动化 → MCP 服务」中开启并配置（即时生效，保存后写入 `.env.local`）；也可在配置文件中设置启动初值：
+SeedArk 内置 MCP（Model Context Protocol）服务，AI 客户端可通过自然语言管理下载器（Transmission / qBittorrent）。推荐直接在 Web「设置 → 自动化 → MCP 服务」中开启并配置（即时生效，保存后写入 `.env.local`）；也可在配置文件中设置启动初值：
 
 ```yaml
 mcp_enabled: true          # 启用 MCP 端点 /mcp
@@ -357,7 +357,7 @@ mcp_token: ""              # 接入令牌，留空 = 不启用鉴权
 ```json
 {
   "mcpServers": {
-    "trpanel": {
+    "seedark": {
       "url": "http://192.168.1.10:8200/mcp",
       "headers": { "Authorization": "Bearer <你的 MCP 接入令牌>" }
     }
@@ -409,16 +409,16 @@ mcp_token: ""              # 接入令牌，留空 = 不启用鉴权
 
 | 变量 | 默认值 | 说明 |
 |:--|:--|:--|
-| `TR_TYPE` | `transmission` | 下载器类型：`transmission` / `qbittorrent`（qBittorrent 下 `TR_URL` 填 WebUI 根地址，密码可填 5.2+ API Key） |
-| `TR_URL` | `http://localhost:9091/transmission/rpc` | 下载器 RPC 端点 |
-| `TR_USER` | 空 | RPC 用户名 |
-| `TR_PASS` | 空 | RPC 密码 |
+| `SA_TYPE` | `transmission` | 下载器类型：`transmission` / `qbittorrent`（qBittorrent 下 `SA_URL` 填 WebUI 根地址，密码可填 5.2+ API Key） |
+| `SA_URL` | `http://localhost:9091/transmission/rpc` | 下载器 RPC 端点 |
+| `SA_USER` | 空 | RPC 用户名 |
+| `SA_PASS` | 空 | RPC 密码 |
 | `SERVER_PORT` | `8200` | 本服务端口 |
 | `SERVER_HOST` | `127.0.0.1` | 监听地址（非回环地址需配置 `API_TOKEN`） |
 | `API_TOKEN` | 空 | REST 接口访问令牌（不含 `/mcp`）；非空时浏览器首次访问弹出令牌输入框 |
 | `POLL_INTERVAL` | `2s` | WebSocket 轮询间隔 |
 | `LOG_LEVEL` | `info` | 日志级别 |
-| `TM_PLATFORM` | 自动推断 | 宿主平台：`generic`（默认） / `fnos` |
+| `SA_PLATFORM` | 自动推断 | 宿主平台：`generic`（默认） / `fnos` |
 | `GATEWAY_PREFIX` | 空 | 宿主网关挂载的 URL 前缀（如 `/app/transmission`） |
 | `TORRENT_PATH_ROOTS` | `/vol,/mnt,/media,/volume1` | 「按路径添加种子」允许读取的根目录（逗号分隔；按解析符号链接后的真实路径判定，仅允许普通文件） |
 | `PATH_MAPPINGS` | 空 | 远端→本地路径映射（逗号分隔，每项 `远端路径=本地路径`）；Transmission 跑在容器内等路径不一致场景，用于「打开所在文件夹」「复制路径」的展示转换 |
@@ -452,7 +452,7 @@ pnpm typecheck
 ## 📁 目录结构
 
 ```
-trpanel/
+seedark/
 ├── Dockerfile                        # 多阶段构建：Node 前端 → Go 后端 → alpine 运行镜像
 ├── docker-compose.yml                # 容器部署示例
 ├── .github/workflows/
@@ -476,7 +476,7 @@ trpanel/
 │   │   ├── seedpolicy/               # 做种策略引擎
 │   │   └── state/                    # 运行时状态持久化
 │   ├── web/dist/                     # 内嵌前端构建产物
-│   └── trpanel(.exe)                 # 已编译产物
+│   └── seedark(.exe)                 # 已编译产物
 └── frontend/                         # React + TypeScript 前端
     └── src/
         ├── platform/                 # 宿主能力抽象（web / fnos）
@@ -495,14 +495,14 @@ trpanel/
 
 ## 💬 反馈与支持
 
-- 界面 / 功能问题 → [trpanel Issues](../../issues)
+- 界面 / 功能问题 → [SeedArk Issues](../../issues)
 - fpk 安装、应用更新等问题 → 联系飞牛 OS 应用仓库 `fnos-transmission`
 
 ---
 
 <div align="center">
 
-**trpanel** · 一份独立、精致、开箱即用的 Transmission 管理面板
+**SeedArk** · 一份独立、精致、开箱即用的 Transmission 管理面板
 
 Made with ❤️ for the **飞牛 OS** community
 

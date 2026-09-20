@@ -3,7 +3,7 @@ package rpc
 import (
 	"testing"
 
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // TestEncodeDecodeID 聚合 ID 编解码必须可逆，且不能与「未编码的活动服务器 ID」混淆。

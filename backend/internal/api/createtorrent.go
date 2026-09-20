@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/torrentcreate"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/torrentcreate"
 )
 
 // createJob 一次后端建种任务的运行时状态（内存态，进程重启即失效）。
@@ -123,7 +123,7 @@ func (h *Handler) createTorrent(c *gin.Context) {
 		AnnounceList: parseAnnounceTiers(body.AnnounceList),
 		Comment:      body.Comment,
 		Private:      body.Private,
-		CreatedBy:    "trpanel",
+		CreatedBy:    "SeedArk",
 		WebSeeds:     body.WebSeeds,
 		PieceLength:  body.PieceLength,
 	}

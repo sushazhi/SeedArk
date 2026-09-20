@@ -1,4 +1,4 @@
-// Package mcpserver 把 trpanel 的种子管理能力以 MCP（Model Context Protocol）工具
+// Package mcpserver 把 seedark 的种子管理能力以 MCP（Model Context Protocol）工具
 // 暴露给 AI 客户端：streamable HTTP 传输，鉴权复用与 REST 相同的令牌机制（中间件层处理）。
 package mcpserver
 
@@ -9,11 +9,11 @@ import (
 	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/platform"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/seedpolicy"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/platform"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // Server MCP 工具服务：复用 RPC 管理器、做种策略引擎与文件访问白名单
@@ -78,7 +78,7 @@ func (s *Server) server() *mcp.Server {
 	if srv, ok := s.cache[sig]; ok {
 		return srv
 	}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "trpanel", Version: version()}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "SeedArk", Version: version()}, nil)
 	registerTools(srv, s, sig)
 	s.cache[sig] = srv
 	return srv

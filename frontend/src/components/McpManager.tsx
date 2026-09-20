@@ -118,7 +118,7 @@ export function McpManager({ open, onClose }: { open: boolean; onClose: () => vo
     : `${window.location.origin}${APP_BASE}/mcp`
   const serverConfig: { type: string; url: string; headers?: Record<string, string> } = { type: 'http', url: endpoint }
   if (token) serverConfig.headers = { Authorization: `Bearer ${token}` }
-  const clientConfig = JSON.stringify({ mcpServers: { trpanel: serverConfig } })
+  const clientConfig = JSON.stringify({ mcpServers: { seedark: serverConfig } })
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>

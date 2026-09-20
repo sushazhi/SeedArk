@@ -1,6 +1,6 @@
 {
-  "name": "trpanel for fnOS",
-  "short_name": "trpanel",
+  "name": "SeedArk for fnOS",
+  "short_name": "SeedArk",
   "description": "Modern Transmission BitTorrent Web UI",
   "id": "./",
   "start_url": "./",

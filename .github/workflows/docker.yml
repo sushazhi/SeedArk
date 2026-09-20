@@ -97,7 +97,7 @@ jobs:
           set -e
           images="ghcr.io/${GITHUB_REPOSITORY,,}"
           if [ -n "${DOCKERHUB_USERNAME}" ]; then
-            images="${images}"$'\n'"docker.io/${DOCKERHUB_USERNAME}/trpanel"
+            images="${images}"$'\n'"docker.io/${DOCKERHUB_USERNAME}/seedark"
           fi
           {
             echo 'images<<EOF'
@@ -245,7 +245,7 @@ jobs:
           set -e
           images="ghcr.io/${GITHUB_REPOSITORY,,}"
           if [ -n "${DOCKERHUB_USERNAME}" ]; then
-            images="${images}"$'\n'"docker.io/${DOCKERHUB_USERNAME}/trpanel"
+            images="${images}"$'\n'"docker.io/${DOCKERHUB_USERNAME}/seedark"
           fi
           {
             echo 'images<<EOF'

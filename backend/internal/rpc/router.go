@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // 本文件为 Manager 提供一层「路由包装」：

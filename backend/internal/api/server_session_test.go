@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/qbmock"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/qbmock"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // memberFixture 两台 qBittorrent 服务器，各自一个 mock 后端：
@@ -42,7 +42,7 @@ func newMemberFixtureWith(t *testing.T, primaryIdx int) *memberFixture {
 	mocks := []*httptest.Server{ts0, ts1}
 
 	dir := t.TempDir()
-	st, err := state.Load(filepath.Join(dir, "tm-state.json"))
+	st, err := state.Load(filepath.Join(dir, "sa-state.json"))
 	if err != nil {
 		t.Fatalf("加载状态文件失败: %v", err)
 	}

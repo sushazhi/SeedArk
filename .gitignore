@@ -9,8 +9,8 @@ frontend/package-lock.json
 backend/web/dist/
 backend/server.exe
 backend/trmock.exe
-backend/trpanel
-backend/trpanel.exe
+backend/seedark
+backend/seedark.exe
 
 # ===== 开发服务器运行时产物（统一目录 dev/） =====
 dev/
@@ -24,8 +24,8 @@ dev/
 !.env.example
 backend/.env
 backend/.env.local
-# 运行期状态文件明文保存各服务器凭据（TM_DATA_DIR 指向仓库时勿提交）
-tm-state.json
+# 运行期状态文件明文保存各服务器凭据（SA_DATA_DIR 指向仓库时勿提交）
+sa-state.json
 
 # ===== IDE =====
 .idea/
@@ -39,7 +39,7 @@ tm-state.json
 # ===== OS =====
 .DS_Store
 Thumbs.db
-backend/trpanel-linux-arm64
+backend/seedark-linux-arm64
 
 # ===== TS 增量构建缓存 =====
 *.tsbuildinfo

@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
 // maxTorrentFileSize 上传种子文件大小上限（10MB）

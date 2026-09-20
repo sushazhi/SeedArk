@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/config"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/config"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // listServers 获取服务器列表（脱敏密码）

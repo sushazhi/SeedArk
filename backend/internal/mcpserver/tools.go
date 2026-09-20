@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
-	"github.com/trpanel/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
 // registerTools 按当前下载器注册工具。
@@ -35,7 +35,7 @@ func registerTools(srv *mcp.Server, s *Server, sig driverSig) {
 	}, s.getStats)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_seed_policy_report",
-		Description: "trpanel 做种策略报告：列出已配置规则，以及当前已达标但尚未处理的种子与达标依据；只读评估，不会执行暂停或删除",
+		Description: "SeedArk 做种策略报告：列出已配置规则，以及当前已达标但尚未处理的种子与达标依据；只读评估，不会执行暂停或删除",
 	}, s.getSeedPolicyReport)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "add_torrent",

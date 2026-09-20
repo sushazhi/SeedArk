@@ -14,8 +14,8 @@ import (
 	"time"
 
 	trpc "github.com/hekmon/transmissionrpc/v3"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
 // Client Transmission RPC 客户端封装（实现 driver.Backend）

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/models"
-	"github.com/trpanel/backend/internal/qbittorrent"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/qbittorrent"
 )
 
 // idShift 聚合模式下种子 ID 的服务器编号位移。

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trpanel/backend/internal/rpc"
-	"github.com/trpanel/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/state"
 )
 
 // Service 自动文件管理：已完成种子按规则移动到目标目录

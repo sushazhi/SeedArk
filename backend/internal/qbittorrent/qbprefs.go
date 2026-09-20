@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/trpanel/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/driver"
 )
 
 // qBittorrent 偏好字段自述。

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/trpanel/backend/internal/driver"
-	"github.com/trpanel/backend/internal/rpc"
+	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
 // backendSig 用与运行时相同的工厂构造一次后端，取它声明的类型与能力。
@@ -52,7 +52,7 @@ func listTools(t *testing.T, srv *mcp.Server) map[string]string {
 // toolsFor 按驱动签名注册一份工具清单（handlers 不会被调用，Server 允许为 nil）
 func toolsFor(t *testing.T, sig driverSig) map[string]string {
 	t.Helper()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "trpanel", Version: "test"}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "SeedArk", Version: "test"}, nil)
 	registerTools(srv, nil, sig)
 	return listTools(t, srv)
 }

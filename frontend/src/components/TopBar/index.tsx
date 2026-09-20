@@ -206,7 +206,7 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
           </span>
           <div className="leading-tight hidden sm:flex items-center gap-2">
             <span className="font-semibold text-subhead text-gray-800 dark:text-gray-100">
-              <span className="text-primary">trpanel</span>
+              <span className="text-primary">SeedArk</span>
               {can('app.update') && <span className="text-gray-400 dark:text-gray-500 font-medium text-body"> for fnOS</span>}
             </span>
             {DEMO_MODE && (

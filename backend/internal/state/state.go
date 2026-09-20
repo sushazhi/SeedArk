@@ -297,9 +297,9 @@ func (s *Store) save() error {
 // DefaultStatePath 返回默认状态文件路径
 func DefaultStatePath(dir string) string {
 	if dir != "" {
-		return filepath.Join(dir, "tm-state.json")
+		return filepath.Join(dir, "sa-state.json")
 	}
-	return "tm-state.json"
+	return "sa-state.json"
 }
 
 // PolicyKey 构造做种策略已处理标记键
