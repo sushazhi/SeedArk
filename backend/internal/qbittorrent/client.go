@@ -67,6 +67,15 @@ type Client struct {
 	trackerMu   sync.RWMutex
 	trackers    map[string][]string
 	trackerTime time.Time
+
+	// 版本兼容层缓存（机制与用法见 compat.go）：
+	// endpointGone 记忆 404 端点避免重复浪费往返；webAPI* 缓存 WebAPI 版本判定
+	goneMu       sync.RWMutex
+	endpointGone map[string]time.Time
+	compatMu     sync.Mutex
+	webAPIMajor  int
+	webAPIMinor  int
+	webAPIKnown  bool
 }
 
 // New 创建 qBittorrent 客户端
@@ -95,6 +104,12 @@ func New(rawURL, user, pass string) (*Client, error) {
 	}
 	return c, nil
 }
+
+// errEndpointMissing 该 qBittorrent 版本没有此端点（HTTP 404），调用方按版本回退
+var errEndpointMissing = errors.New("端点不存在")
+
+// errAlreadyExists HTTP 409：种子已存在
+var errAlreadyExists = errors.New("种子已存在")
 
 // isAPIKey 判断是否为 qBittorrent 5.2+ 的 API Key（qbt_ + 28 位，共 32 位）
 func isAPIKey(s string) bool {
@@ -200,6 +215,8 @@ func (c *Client) Ping(ctx context.Context) (string, error) {
 	if version == "" {
 		return "", fmt.Errorf("qBittorrent 未返回版本信息")
 	}
+	// 服务器可达且响应正常：端点缺失记忆可能源于网络抖动或对端升级，重置之
+	c.clearMissing()
 	return version, nil
 }
 
@@ -239,11 +256,17 @@ func (c *Client) get(ctx context.Context, endpoint string, params url.Values, ou
 	if len(params) > 0 {
 		apiURL += "?" + params.Encode()
 	}
-	data, err := c.raw(ctx, http.MethodGet, apiURL, nil, nil, "", false)
+	data, err := c.raw(ctx, http.MethodGet, apiURL, nil, nil, "", true)
 	if err != nil {
 		return err
 	}
 	if out == nil {
+		return nil
+	}
+	// app/version、app/webapiVersion 等端点返回纯文本（如 "v5.2.3"），
+	// 目标为 *string 时原样写入，其余场景仍要求 JSON
+	if s, ok := out.(*string); ok && !looksJSON(data) {
+		*s = string(data)
 		return nil
 	}
 	return decodeJSON(data, out)
@@ -264,6 +287,11 @@ func (c *Client) raw(ctx context.Context, method, apiURL string, form url.Values
 		// 缺省会被 403。这里对每个请求都带上，跨域反代场景也能过。
 		req.Header.Set("Referer", c.base+"/")
 		req.Header.Set("Origin", c.base)
+		// Web API 2.15+（qBittorrent 5.2）的 torrents/add 带 Accept 头时返回
+		// added_torrent_ids JSON 结果，可精确定位新种子；旧版本忽略该头回 "Ok."。
+		if endpointOf(apiURL) == "torrents/add" {
+			req.Header.Set("Accept", "application/json")
+		}
 		if c.apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+c.apiKey)
 		}
@@ -304,10 +332,11 @@ func (c *Client) raw(ctx context.Context, method, apiURL string, form url.Values
 	}
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
-		// 端点不存在通常意味着版本过旧（如 5.2 的 torrents/setTags）
-		return nil, fmt.Errorf("qBittorrent 不支持该接口（HTTP 404）：%s", endpointOf(apiURL))
+		// 端点不存在通常意味着版本过旧（如 4.x 没有 torrents/stop 与 setTags）。
+		// 用 sentinel 包装：调用方据此回退到旧端点（errors.Is 判定）
+		return nil, fmt.Errorf("qBittorrent 不支持该接口（HTTP 404）：%s：%w", endpointOf(apiURL), errEndpointMissing)
 	case resp.StatusCode == http.StatusConflict:
-		return nil, errors.New("qBittorrent 拒绝该请求（HTTP 409）：参数冲突或种子不存在")
+		return nil, fmt.Errorf("qBittorrent 拒绝该请求（HTTP 409）：参数冲突或种子已存在：%w", errAlreadyExists)
 	case resp.StatusCode == http.StatusUnsupportedMediaType:
 		return nil, errors.New("qBittorrent 拒绝该请求（HTTP 415）：种子文件无效")
 	case resp.StatusCode >= 400:

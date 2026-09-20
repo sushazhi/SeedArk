@@ -31,6 +31,11 @@ type Client struct {
 	listMu     sync.Mutex // 保护列表缓存
 	listCache  []*Torrent // 列表缓存（共享只读，调用方不得修改元素）
 	listCached time.Time
+
+	// 版本兼容层缓存（用法见 RPCVersionAtLeast）：
+	// rpc-version 在服务器运行期间不变，首次查询后缓存，供新版本字段/方法做版本门卫
+	compatMu   sync.Mutex
+	rpcVersion int64
 }
 
 // listCacheTTL 列表缓存有效期。590+ 种子时 Transmission 全量响应约 5s，
@@ -586,7 +591,53 @@ func (c *Client) GetSession(ctx context.Context) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mapSession(sess), nil
+	out := mapSession(sess)
+	c.cacheRPCVersion(out.RPCVersion)
+	return out, nil
+}
+
+// ---- 版本兼容层 ----
+//
+// Transmission 的 RPC 协议长期稳定（rpc-version 14~18 字段只增不改），
+// 这里仅提供最小适配设施，未来 Transmission 5.x / rpc-version 19+ 出现
+// 行为差异时按两种模式扩展：
+//
+//  1. 版本门卫：新字段/新语义先用 RPCVersionAtLeast 判定再走新路径，
+//     旧版本保持现状——与本文件既有字段映射逻辑共存，不动老代码：
+//
+//	if ok, err := c.RPCVersionAtLeast(ctx, 19); err == nil && ok {
+//	    // 走新版本独有的参数/方法
+//	}
+//
+//  2. 库封装缺口：transmissionrpc 库尚未封装的新方法/新字段，
+//     用 RawCall 直接透传原始 RPC（见 raw.go），拿到 JSON 后自行解析；
+//     配合 session-get 已返回的 rpc-version 决定字段取舍。
+
+// cacheRPCVersion 缓存会话中拿到的 rpc-version
+func (c *Client) cacheRPCVersion(v int64) {
+	if v <= 0 {
+		return
+	}
+	c.compatMu.Lock()
+	c.rpcVersion = v
+	c.compatMu.Unlock()
+}
+
+// RPCVersionAtLeast 报告远端 rpc-version 是否 >= v。
+// 未获取过会话时惰性查询一次（rpc-version 运行期不变，查询后缓存）。
+// 查询失败返回错误——调用方应保持旧行为，不要把通信故障当成版本过旧。
+func (c *Client) RPCVersionAtLeast(ctx context.Context, v int64) (bool, error) {
+	c.compatMu.Lock()
+	known := c.rpcVersion
+	c.compatMu.Unlock()
+	if known <= 0 {
+		sess, err := c.GetSession(ctx)
+		if err != nil {
+			return false, err
+		}
+		known = sess.RPCVersion
+	}
+	return known >= v, nil
 }
 
 // SetSession 更新会话配置（patch 为下载器无关的字段集，限速单位 KB/s）

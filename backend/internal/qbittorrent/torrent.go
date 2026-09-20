@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -417,21 +418,39 @@ func (c *Client) AddTorrentByURL(ctx context.Context, link, downloadDir string, 
 	return 0, fmt.Errorf("添加成功但未返回种子标识（旧版本 qBittorrent 不支持回传 hash，请刷新列表）")
 }
 
-// addedHash 解析 5.2+ 的添加响应
+// torrentAddReport Web API 2.15（qBittorrent 5.2）的 torrents/add JSON 响应：
+// 成功 / 等待元数据 / 失败的计数与 added_torrent_ids（hash 列表）一同返回；
+// 4.x 只回 "Ok." 文本，走不到这条解析。
+type torrentAddReport struct {
+	AddedIDs   []string `json:"added_torrent_ids"`
+	SuccessCnt int      `json:"success_count"`
+	PendingCnt int      `json:"pending_count"`
+	FailureCnt int      `json:"failure_count"`
+}
+
+// addedHash 解析 5.2+ 的添加响应，返回首个 hash
 func addedHash(resp []byte) string {
-	var out struct {
-		AddedIDs []string `json:"added_torrent_ids"`
-	}
-	if len(resp) == 0 || !looksJSON(resp) {
-		return ""
-	}
-	if err := json.Unmarshal(resp, &out); err != nil {
-		return ""
-	}
-	if len(out.AddedIDs) > 0 {
-		return strings.ToLower(strings.TrimSpace(out.AddedIDs[0]))
+	r, _ := parseAddReport(resp)
+	if r != nil && len(r.AddedIDs) > 0 {
+		return strings.ToLower(strings.TrimSpace(r.AddedIDs[0]))
 	}
 	return ""
+}
+
+// parseAddReport 解析添加结果；非 JSON（旧版本 "Ok."）返回 (nil, nil)
+func parseAddReport(resp []byte) (*torrentAddReport, error) {
+	if len(resp) == 0 || !looksJSON(resp) {
+		return nil, nil
+	}
+	var out torrentAddReport
+	if err := json.Unmarshal(resp, &out); err != nil {
+		return nil, nil
+	}
+	if out.FailureCnt > 0 && len(out.AddedIDs) == 0 {
+		return &out, fmt.Errorf("qBittorrent 报告添加失败（success=%d pending=%d failure=%d）",
+			out.SuccessCnt, out.PendingCnt, out.FailureCnt)
+	}
+	return &out, nil
 }
 
 // hashFromMagnet 从磁力链接取 btih（v1/v2）
@@ -444,14 +463,18 @@ func hashFromMagnet(link string) string {
 }
 
 // ---- 基本操作 ----
+// 端点版本差异统一走 compat.go 的回退链：新版本端点在前，旧版本在后，
+// 未来端点再改名时只需把新名字插入链头。
 
-// StartTorrents 恢复（resume）种子
+// StartTorrents 开始种子。Web API 2.11+（qBittorrent 5.0）用 torrents/start，
+// 4.x 没有该端点（404）时回退到经典的 torrents/resume。
 func (c *Client) StartTorrents(ctx context.Context, ids []int64) error {
 	hashes, err := c.requireHashes(ids)
 	if err != nil {
 		return err
 	}
-	return c.post(ctx, "torrents/resume", url.Values{"hashes": {hashes}})
+	return c.postFallback(ctx, url.Values{"hashes": {hashes}},
+		"torrents/start", "torrents/resume")
 }
 
 // StartTorrentsNow 强制开始（忽略队列限制）
@@ -463,13 +486,15 @@ func (c *Client) StartTorrentsNow(ctx context.Context, ids []int64) error {
 	return c.post(ctx, "torrents/setForceStart", url.Values{"hashes": {hashes}, "value": {"true"}})
 }
 
-// StopTorrents 暂停种子
+// StopTorrents 暂停种子。5.0 改名为 torrents/stop（pause 标记废弃），
+// 4.x 只有 torrents/pause：404 时回退，同一套面板同时管理新旧版本。
 func (c *Client) StopTorrents(ctx context.Context, ids []int64) error {
 	hashes, err := c.requireHashes(ids)
 	if err != nil {
 		return err
 	}
-	return c.post(ctx, "torrents/stop", url.Values{"hashes": {hashes}})
+	return c.postFallback(ctx, url.Values{"hashes": {hashes}},
+		"torrents/stop", "torrents/pause")
 }
 
 // VerifyTorrents 重新校验本地数据
@@ -669,8 +694,11 @@ func resolveLimit(limit *int64, enabled *bool) int64 {
 
 // setTags 整体覆盖标签（优先 5.1+ 的 setTags，旧版本回退 addTags/removeTags）
 func (c *Client) setTags(ctx context.Context, hashes, tags string) error {
-	if err := c.post(ctx, "torrents/setTags", url.Values{"hashes": {hashes}, "tags": {tags}}); err == nil {
+	// postKnown 带 404 记忆：旧版本上后续写标签不再重复浪费一次 404 往返
+	if err := c.postKnown(ctx, "torrents/setTags", url.Values{"hashes": {hashes}, "tags": {tags}}); err == nil {
 		return nil
+	} else if !errors.Is(err, errEndpointMissing) {
+		return err
 	}
 	// 旧版本没有 setTags：先算出差集，再增删
 	want := splitTags(tags)

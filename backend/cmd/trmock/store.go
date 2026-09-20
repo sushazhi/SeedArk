@@ -9,14 +9,14 @@ import (
 
 // Transmission 状态码（与 rpc-spec 一致）
 const (
-	stStopped       = 0
-	stCheckWait     = 1
-	stCheck         = 2
-	stDownloadWait  = 3
-	stDownload      = 4
-	stSeedWait      = 5
-	stSeed          = 6
-	stIsolated      = 7
+	stStopped      = 0
+	stCheckWait    = 1
+	stCheck        = 2
+	stDownloadWait = 3
+	stDownload     = 4
+	stSeedWait     = 5
+	stSeed         = 6
+	stIsolated     = 7
 )
 
 // mockFile / mockFileStat / mockTracker / mockTrackerStat / mockPeer 为详情子结构，
@@ -82,54 +82,54 @@ type mockPeer struct {
 // mockTorrent 单个种子的内部状态。尺寸一律字节、日期一律 unix 秒，
 // 与 Transmission RPC wire 语义一致（见 rpc.go）。
 type mockTorrent struct {
-	ID            int64
-	Name          string
-	HashString    string
-	Creator       string
-	TotalSize     int64 // 字节
-	PercentDone   float64
-	Status        int64
-	RateDownload  int64 // B/s
-	RateUpload    int64 // B/s
-	ETA           int64 // 秒；完成为 -1，未知为 -2
-	UploadedEver  int64
-	DownloadedEver int64
-	UploadRatio   float64
-	SecondsSeeding int64
-	SecondsDownloading int64
-	Error         int64
-	ErrorString   string
-	Labels        []string
-	QueuePosition int64
-	PeersConnected int64
-	PeersSendingToUs int64
-	PeersGettingFromUs int64
-	DownloadDir   string
-	AddedDate     int64
-	DoneDate      int64
-	ActivityDate  int64
-	StartDate     int64
-	IsFinished    bool
-	IsStalled     bool
-	IsPrivate   bool
-	MagnetLink  string
-	FileCount   int64
-	HaveValid     int64
-	HaveUnchecked int64
-	Comment       string
-	PeerLimit     int64
-	Sequential  bool
-	SeedIdleLimit int64 // 分钟
-	SeedIdleMode  int64
-	SeedRatioLimit float64
-	SeedRatioMode int64
-	BandwidthPriority int64
-	DownloadLimited bool
-	DownloadLimit int64
-	UploadLimited bool
-	UploadLimit   int64
+	ID                  int64
+	Name                string
+	HashString          string
+	Creator             string
+	TotalSize           int64 // 字节
+	PercentDone         float64
+	Status              int64
+	RateDownload        int64 // B/s
+	RateUpload          int64 // B/s
+	ETA                 int64 // 秒；完成为 -1，未知为 -2
+	UploadedEver        int64
+	DownloadedEver      int64
+	UploadRatio         float64
+	SecondsSeeding      int64
+	SecondsDownloading  int64
+	Error               int64
+	ErrorString         string
+	Labels              []string
+	QueuePosition       int64
+	PeersConnected      int64
+	PeersSendingToUs    int64
+	PeersGettingFromUs  int64
+	DownloadDir         string
+	AddedDate           int64
+	DoneDate            int64
+	ActivityDate        int64
+	StartDate           int64
+	IsFinished          bool
+	IsStalled           bool
+	IsPrivate           bool
+	MagnetLink          string
+	FileCount           int64
+	HaveValid           int64
+	HaveUnchecked       int64
+	Comment             string
+	PeerLimit           int64
+	Sequential          bool
+	SeedIdleLimit       int64 // 分钟
+	SeedIdleMode        int64
+	SeedRatioLimit      float64
+	SeedRatioMode       int64
+	BandwidthPriority   int64
+	DownloadLimited     bool
+	DownloadLimit       int64
+	UploadLimited       bool
+	UploadLimit         int64
 	HonorsSessionLimits bool
-	RecheckProgress float64
+	RecheckProgress     float64
 
 	Files        []mockFile
 	FileStats    []mockFileStat
@@ -152,30 +152,30 @@ func (t *mockTorrent) sizeWhenDone() int64  { return t.TotalSize }
 
 // mockSession 会话配置（仅保留后端会消费的键）
 type mockSession struct {
-	DownloadDir         string
-	SpeedLimitDown      int64
-	SpeedLimitDownOn    bool
-	SpeedLimitUp        int64
-	SpeedLimitUpOn      bool
-	AltSpeedDown        int64
-	AltSpeedUp          int64
-	AltSpeedEnabled     bool
-	PeerLimitGlobal     int64
-	PeerPort            int64
-	PEXEnabled          bool
-	DHTEnabled          bool
-	LPDEnabled          bool
-	UTPEnabled          bool
-	Encryption          string
-	SeedRatioLimit      float64
-	StartAdded          bool
-	DownloadQueueSize   int64
+	DownloadDir          string
+	SpeedLimitDown       int64
+	SpeedLimitDownOn     bool
+	SpeedLimitUp         int64
+	SpeedLimitUpOn       bool
+	AltSpeedDown         int64
+	AltSpeedUp           int64
+	AltSpeedEnabled      bool
+	PeerLimitGlobal      int64
+	PeerPort             int64
+	PEXEnabled           bool
+	DHTEnabled           bool
+	LPDEnabled           bool
+	UTPEnabled           bool
+	Encryption           string
+	SeedRatioLimit       float64
+	StartAdded           bool
+	DownloadQueueSize    int64
 	DownloadQueueEnabled bool
-	SeedQueueSize       int64
-	SeedQueueEnabled    bool
-	BlocklistEnabled    bool
-	BlocklistSize       int64
-	CacheSizeMB         int64
+	SeedQueueSize        int64
+	SeedQueueEnabled     bool
+	BlocklistEnabled     bool
+	BlocklistSize        int64
+	CacheSizeMB          int64
 	// Extra 记录 session-set 收到的全部键值（含未在结构体中建模的），
 	// session-get 时叠加回显，保证设置改动可往返验证。
 	Extra map[string]any
@@ -443,22 +443,22 @@ func (s *Store) addLocked(name, downloadDir string, paused bool, labels []string
 	s.nextID++
 	size := int64(500*1024*1024) + s.rng.Int63n(4*1024*1024*1024)
 	t := &mockTorrent{
-		ID:          id,
-		Name:        name,
-		HashString:  fakeHash(s.rng),
-		TotalSize:   size,
-		Status:      stDownload,
-		DownloadDir: downloadDir,
-		AddedDate:   now,
-		ActivityDate: now,
-		StartDate:   now,
-		Labels:      labels,
+		ID:            id,
+		Name:          name,
+		HashString:    fakeHash(s.rng),
+		TotalSize:     size,
+		Status:        stDownload,
+		DownloadDir:   downloadDir,
+		AddedDate:     now,
+		ActivityDate:  now,
+		StartDate:     now,
+		Labels:        labels,
 		QueuePosition: int64(len(s.torrents)),
-		PeerLimit:   60,
-		baseDown:    2*1024*1024 + s.rng.Int63n(8*1024*1024),
-		baseUp:      256*1024 + s.rng.Int63n(1024*1024),
-		PieceCount:  size/(16*1024*1024) + 1,
-		PieceSize:   16 * 1024 * 1024,
+		PeerLimit:     60,
+		baseDown:      2*1024*1024 + s.rng.Int63n(8*1024*1024),
+		baseUp:        256*1024 + s.rng.Int63n(1024*1024),
+		PieceCount:    size/(16*1024*1024) + 1,
+		PieceSize:     16 * 1024 * 1024,
 	}
 	if downloadDir == "" {
 		t.DownloadDir = s.session.DownloadDir

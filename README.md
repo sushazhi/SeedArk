@@ -245,6 +245,14 @@ dev/
 
 单独运行：`cd backend && go run ./cmd/trmock`（`127.0.0.1:9092`，`-h` 查看 `-seed` / `-tick` / `-static` 等选项）。
 
+qBittorrent 同样有对应的 mock（`backend/cmd/qbmock`），对齐 qBittorrent 5.2.3 / Web API v2.15.1（API Key 认证、CSRF 校验、`torrents/add` 的 JSON 响应等），并支持 `-compat 4.x` 模拟旧版本以验证驱动回退：
+
+```bash
+cd backend && go run ./cmd/qbmock   # 127.0.0.1:18080，-h 查看 -user / -pass / -api-key / -compat 选项
+```
+
+qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录、5.x 端点与 4.x 回退、限速单位换算等），`cd backend && go test ./internal/qbittorrent/` 即可运行。
+
 **运行时在 mock 与真实远端之间热切换**：
 
 - 界面切换：设置 → 连接地址，填 `http://localhost:9092/transmission/rpc`（mock）或真实远端，保存即生效
@@ -430,7 +438,8 @@ trpanel/
 ├── backend/                          # Go 后端（单二进制）
 │   ├── cmd/
 │   │   ├── server/                   # 入口（解析平台 + 组装服务）
-│   │   └── trmock/                   # Transmission RPC 开发用 mock
+│   │   ├── trmock/                   # Transmission RPC 开发用 mock
+│   │   └── qbmock/                   # qBittorrent WebAPI 开发用 mock（5.2.3 / 4.x 兼容模式）
 │   ├── internal/
 │   │   ├── api/                      # REST API + WebSocket Hub（宿主无关）
 │   │   ├── config/                   # 配置加载（环境变量/.env/config.yaml）

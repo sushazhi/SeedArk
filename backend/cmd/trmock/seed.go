@@ -63,23 +63,23 @@ func seedTorrents(s *Store, n int) []*mockTorrent {
 		name := sampleNames[i%len(sampleNames)]
 		size := int64(200*1024*1024) + rng.Int63n(30*1024*1024*1024)
 		t := &mockTorrent{
-			ID:          s.nextID,
-			Name:        name,
-			HashString:  fakeHash(rng),
-			Creator:     "Transmission " + fmt.Sprintf("%d.%d", 4, rng.Intn(2)),
-			TotalSize:   size,
-			AddedDate:   now.Add(-time.Duration(rng.Intn(60*24)) * time.Hour).Unix(),
-			DownloadDir: dirs[rng.Intn(len(dirs))],
-			Labels:      append([]string(nil), sampleLabels[i%len(sampleLabels)]...),
-			QueuePosition: int64(i),
-			PeerLimit:   60,
-			Comment:     "mock torrent for development",
+			ID:                  s.nextID,
+			Name:                name,
+			HashString:          fakeHash(rng),
+			Creator:             "Transmission " + fmt.Sprintf("%d.%d", 4, rng.Intn(2)),
+			TotalSize:           size,
+			AddedDate:           now.Add(-time.Duration(rng.Intn(60*24)) * time.Hour).Unix(),
+			DownloadDir:         dirs[rng.Intn(len(dirs))],
+			Labels:              append([]string(nil), sampleLabels[i%len(sampleLabels)]...),
+			QueuePosition:       int64(i),
+			PeerLimit:           60,
+			Comment:             "mock torrent for development",
 			HonorsSessionLimits: true,
-			baseDown:    1*1024*1024 + rng.Int63n(10*1024*1024),
-			baseUp:      128*1024 + rng.Int63n(2*1024*1024),
-			PieceCount:  size/(16*1024*1024) + 1,
-			PieceSize:   16 * 1024 * 1024,
-			IsPrivate:   rng.Intn(4) == 0,
+			baseDown:            1*1024*1024 + rng.Int63n(10*1024*1024),
+			baseUp:              128*1024 + rng.Int63n(2*1024*1024),
+			PieceCount:          size/(16*1024*1024) + 1,
+			PieceSize:           16 * 1024 * 1024,
+			IsPrivate:           rng.Intn(4) == 0,
 		}
 		s.nextID++
 
@@ -200,7 +200,9 @@ func buildFiles(t *mockTorrent, rng *rand.Rand) {
 }
 
 func genPeers(rng *rand.Rand) []mockPeer {
-	n := rng.Intn(5)
+	// 至少 1 个 peer：活动种子语义上必有连接（PeersConnected >= 3），
+	// 明细为空会让按 id 拉详情的集成测试偶发落空（约 1/5 概率）
+	n := 1 + rng.Intn(5)
 	clients := []string{"qBittorrent/4.6.2", "Transmission/4.0", "Deluge/2.1", "libtorrent/2.0"}
 	var peers []mockPeer
 	for i := 0; i < n; i++ {

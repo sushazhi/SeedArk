@@ -6,10 +6,10 @@
 // 且 SW 会把这份 HTML 当作该 JS 的合法响应写进缓存，导致白屏不可自愈。
 //
 // 这里直接驱动真实的 serveStatic 路由，断言：
-//   1. 缺失的 /assets/*.js 返回 404，且响应体不是 HTML
-//   2. 缺失的带扩展名静态文件同样 404
-//   3. 前端路由（无扩展名）仍然回退 index.html
-//   4. 存在的资源正常返回
+//  1. 缺失的 /assets/*.js 返回 404，且响应体不是 HTML
+//  2. 缺失的带扩展名静态文件同样 404
+//  3. 前端路由（无扩展名）仍然回退 index.html
+//  4. 存在的资源正常返回
 package main
 
 import (
@@ -41,11 +41,11 @@ func TestMissingAssetReturns404(t *testing.T) {
 	r := newStaticRouter(t)
 
 	cases := []string{
-		"/assets/index-OLDHASH.js",   // 旧版本脚本：白屏事故的直接触发路径
-		"/assets/index-OLDHASH.css",  // 旧版本样式
-		"/assets/vendor-OLDHASH.js",  // 旧版本 vendor
-		"/favicon-oldhash.png",       // 带扩展名的其它静态文件
-		"/sw.js.bak",                 // 任意带扩展名路径
+		"/assets/index-OLDHASH.js",  // 旧版本脚本：白屏事故的直接触发路径
+		"/assets/index-OLDHASH.css", // 旧版本样式
+		"/assets/vendor-OLDHASH.js", // 旧版本 vendor
+		"/favicon-oldhash.png",      // 带扩展名的其它静态文件
+		"/sw.js.bak",                // 任意带扩展名路径
 	}
 	for _, p := range cases {
 		w := doGet(r, p)
