@@ -9,7 +9,7 @@
 #   ./dev.sh             前台运行，Ctrl+C 一并退出前后端
 #   ./dev.sh -bg         后台运行，日志写入 dev/logs/，不占用终端
 #   ./dev.sh -mock       额外启动下载器 mock：同时拉起 trmock（:9092）与
-#                        qbmock（:8080），并把状态文件写成「两台都启用」，
+#                         qbmock（:8080），并把状态文件写成「两台都启用」，
 #                        后端启动即为多下载器聚合视图（Transmission 与
 #                        qBittorrent 的种子合并展示，默认连的是 trmock）；
 #                        切回真实远端时去掉 -mock，并在设置里把连接地址改回真实下载器

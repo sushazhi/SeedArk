@@ -216,10 +216,11 @@ go build -o seedark ./cmd/server
 .\dev.ps1 -stop    # Windows：停掉占用开发端口的现有进程后退出
 ./dev.sh           # Linux / macOS：前台运行
 ./dev.sh -bg       # Linux / macOS：后台运行
-./dev.sh -mock     # Linux / macOS：额外拉起 trmock（:9092）并把后端指向它
+./dev.sh -mock     # Linux / macOS：额外拉起 trmock + qbmock，启动即多下载器聚合视图
+./dev.sh -stop     # Linux / macOS：停掉占用开发端口的现有进程后退出
 ```
 
-> `-mock` 在两端能力不同：`dev.ps1` 会同时拉起 trmock（`:9092`）与 qbmock（`:8080`）并把两台写进状态文件，后端启动即为聚合视图；`dev.sh` 目前只拉起 trmock。
+> 两端行为一致。`-stop` 除端口占用者外，还会按进程名兜底清理 `air` / `trmock` / `qbmock` 等残留监督进程；启动前若端口被占会直接报错退出（`vite` 在 `strictPort` 下会静默失败，留下的将是不热更的旧实例）。
 
 启动后：
 
@@ -260,9 +261,11 @@ dev/
 仓库自带实现 Transmission RPC 协议的 mock（`backend/cmd/trmock`），内置覆盖各状态的种子数据并实时推进进度 / 速度：
 
 ```bash
-./dev.sh -mock       # Linux / macOS：trmock（:9092），后端指向它
-.\dev.ps1 -mock      # Windows：trmock（:9092）+ qbmock（:8080），启动即聚合视图
+./dev.sh -mock       # Linux / macOS
+.\dev.ps1 -mock      # Windows
 ```
+
+两端都会拉起 **trmock（`:9092`）+ qbmock（`:8080`）**，并把两台写进状态文件的 `servers`，后端启动即为多下载器聚合视图。
 
 单独运行：`cd backend && go run ./cmd/trmock`（`127.0.0.1:9092`，`-h` 查看 `-seed` / `-tick` / `-static` 等选项）。
 

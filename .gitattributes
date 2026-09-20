@@ -1,3 +1,5 @@
 # Shell 脚本强制 LF：Windows 上 core.autocrlf=true 会把检出文件转成 CRLF，
 # 而 bash 读到行尾的 \r 会直接报 syntax error（表现为 dev.sh 完全无法执行）。
+# 本文件自身也固定为 LF，免得每次 git 操作都提示将被转换。
+.gitattributes text eol=lf
 *.sh text eol=lf
