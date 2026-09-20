@@ -2,8 +2,8 @@
 
 # SeedArk
 
-**基于 Go + React 重构的 Transmission 现代化 Web 管理面板**
-*专为飞牛 OS（fnOS）打造 · 前后端一体交付*
+**基于 Go + React 的下载器现代化 Web 管理面板**
+*Transmission / qBittorrent 双驱动 · 支持多下载器聚合 · 专为飞牛 OS（fnOS）打造 · 前后端一体交付*
 
 <br>
 
@@ -12,7 +12,7 @@
 [![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=flat-square&logo=pwa&logoColor=white)]()
 [![fnOS](https://img.shields.io/badge/Optimized%20for-fnOS-FF6B35?style=flat-square)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue?style=flat-square)](../../releases)
+[![Release](https://img.shields.io/badge/release-v0.1.2-blue?style=flat-square)](../../releases)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-jianhuayanyu%2Fseedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/r/jianhuayanyu/seedark)
 [![GHCR](https://img.shields.io/badge/GHCR-seedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/sushazhi/seedark/pkgs/container/seedark)
 [![在线预览](https://img.shields.io/badge/在线预览-Demo-8A2BE2?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQTEwIDEwIDAgMSAwIDIyIDEyIDEwIDEwIDAgMCAwIDEyIDJ6bTAgMmE4IDggMCAxIDEgOCA4IDggOCAwIDEgLTggOHptLTEtMTJ2NGw0LTQtNC00eiIvPjwvc3ZnPg==)](https://sushazhi.github.io/seedark/)
@@ -29,17 +29,18 @@
 | 📁 | **文件操作** | 文件树设优先级、重命名，自动重新校验；按路径添加种子受白名单保护 |
 | ⚡ | **实时推送** | WebSocket 推送速度 / 进度 / Peers / Tracker 状态 / 块位图 |
 | 🔍 | **模糊搜索** | 忽略大小写、空格与标点，保留字母 / 数字 / 中日韩文字，`m team` 也能命中 `M-Team` |
-| 🧰 | **多维筛选 / 排序** | 状态 / 标签 / 站点 / 目录 / 错误状态 / **下载器**（聚合时按台筛选） + 状态优先级 + 二级字段多级排序 |
+| 🧰 | **多维筛选 / 排序** | 状态 / 标签 / 站点 / 目录 / 错误状态 / **下载器**（聚合时侧边栏按台分组，显示每台种子数与体积，可点选 / 多选 / 整组隐藏） + 状态优先级 + 二级字段多级排序 |
 | 🖥️ | **桌面交互** | 鼠标虚拟滚动表格 + 右键菜单 + 拖拽排序 + 可伸缩侧栏（持久化） + 表头右键管理列 |
 | 📱 | **触屏交互** | 玻璃卡片列表，长按 / ⋮ 唤出菜单，左右滑切换分类，勾选进入批量，动作条"全选"补齐分组，底部悬浮胶囊承载添加 / 启停 / 清理 |
-| 🌐 | **会话与全局** | 多服务器切换、全局限速、带宽定时调度、下载 / 做种队列、轮询间隔、**带宽组管理**（Transmission 4.x） |
+| 🚦 | **分组限速** | 按站点 / 标签 / 名称把种子归为一组，**整组共享一个总速度上限**（上 / 下行可分别设）；引擎定期把「上限 − 组内已单独限速种子占用」的余量均分给组内正在运行且未单独限速的种子，使整组合计不超上限 |
+| 🌐 | **会话与全局** | 多服务器切换、全局与备用限速（含定时调度）、下载 / 做种队列、轮询间隔、**带宽组管理**（Transmission 4.x） |
 | 🔀 | **多下载器聚合** | 支持 **Transmission 与 qBittorrent**（Web API v2，qBittorrent 4.x / 5.x，含 5.2+ API Key）；「设置 → 多服务器管理」启用 2 台及以上即进入聚合视图：种子列表合并展示、每颗种子标明所属下载器（**下载器**列，服务器名按类型着色、名字看不出类型时补 TR / QB 徽标；进入聚合视图时自动开启，可表头右键关闭）、批量操作按种子自动路由到所属下载器、统计与站点维度跨服务器汇总 |
 | 🛠 | **工具集** | 浏览器端 `.torrent` 创建（bencode + 分片 SHA1）、**服务器路径建种**（后端多线程哈希，大文件秒级完成）、按分享率 / 做种时长批量清理已完成种子 |
 | 🤖 | **自动化** | 已完成种子按站点归档；**做种策略**按站点分享率 / 做种天数 / 上传量目标达标后暂停 / 删除 / 删除并清理文件 |
 | 🤝 | **MCP 服务** | 内置 MCP 端点（`/mcp`，工具清单随当前下载器能力自适应），Claude / Qoder 等 AI 客户端可直接查询种子 / 站点 / 会话配置与磁盘空间，执行添加、启停、校验、重宣告、限速、打标签、队列调整等操作；「设置 → 自动化 → MCP 服务」开启，独立接入令牌鉴权，删除与移动 / 重命名 / 立即执行做种策略等高危操作默认关闭 |
 | 📈 | **图表统计** | 速度历史曲线 + 统计仪表盘 |
 | 📲 | **PWA** | 可安装、离线缓存、新版本更新提示、键盘快捷键（`N` / `Space` / `Delete` / `Ctrl+A` / `/` / `Esc` / `Ctrl±`） |
-| 🎨 | **外观** | 明 / 暗主题、中 / 英文、**可调玻璃浓度**、**背景壁纸**（作为玻璃折射色源形成色彩流动） |
+| 🎨 | **外观** | 明 / 暗主题、中 / 英文、**可调玻璃浓度**、**背景壁纸**（作为玻璃折射色源形成色彩流动）、无障碍降级（减弱透明 / 减弱动效 / 增强对比度） |
 | 🍃 | **飞牛 OS 深度集成** | 原生文件选择器、主题 / 语言同步、"打开所在文件夹"、应用更新（fpk）、问题反馈入口 |
 | 🔌 | **宿主平台抽象** | 后端 `internal/platform/` + 前端 `src/platform/`，同一套代码跑 Docker / 物理机 / fnOS，新宿主零业务改动 |
 
@@ -78,18 +79,20 @@
   </tr>
 </table>
 
-> 截图基于内置 Transmission Mock（`./dev.ps1 -mock`）生成，14 个种子覆盖各种状态。
+> 截图基于内置 mock（`./dev.ps1 -mock`）生成，默认 14 个种子覆盖下载 / 做种 / 校验 / 暂停 / 报错等状态。
 
 ---
 
 ## 🚀 快速开始
 
-> SeedArk **是一个独立的 Transmission 管理面板**，需要你已有一台运行中的 Transmission（已开启 RPC）。它通过浏览器提供增强界面；**并非 Transmission 本体，也不通过 `TRANSMISSION_WEB_HOME` 替换其自带 Web 界面**。
+> SeedArk **是一个独立的下载器管理面板**，需要你已有一台运行中的 **Transmission**（已开启 RPC）或 **qBittorrent**（已开启 Web UI）。它通过浏览器提供增强界面；**并非下载器本体，也不通过 `TRANSMISSION_WEB_HOME` 替换 Transmission 自带 Web 界面**。
 
 ### ✅ 前置条件
 
-- 一台运行中的 Transmission，**已开启 RPC**（默认 `http://localhost:9091/transmission/rpc`）
-- 与 Transmission 网络互通（同机 / 局域网 / 容器网络皆可）
+- 一台运行中的下载器：
+  - **Transmission**：已开启 RPC（默认 `http://localhost:9091/transmission/rpc`）
+  - **qBittorrent**：已开启 Web UI（默认 `http://localhost:8080`，支持 4.x / 5.x，5.2+ 可用 API Key 代替密码）
+- 与下载器网络互通（同机 / 局域网 / 容器网络皆可）
 
 ### 🐳 方式一：Docker 部署（推荐）
 
@@ -103,6 +106,15 @@ docker run -d --name seedark \
   jianhuayanyu/seedark:latest
 ```
 
+连 qBittorrent 只需替换下载器相关的三行（`SA_URL` 填 WebUI 根地址，**不带** `/api/v2`；`SA_PASS` 在 5.2+ 也可填 API Key）：
+
+```bash
+  -e SA_TYPE=qbittorrent \
+  -e SA_URL=http://host.docker.internal:8080 \
+  -e SA_USER=admin \
+  -e SA_PASS=password \
+```
+
 也可以直接用仓库自带的 [`docker-compose.yml`](docker-compose.yml)：
 
 ```bash
@@ -113,7 +125,7 @@ API_TOKEN=change-me docker compose up -d
 |:--|:--|
 | 镜像 | `jianhuayanyu/seedark`（Docker Hub，推荐）／`ghcr.io/sushazhi/seedark`（GHCR） |
 | 架构 | `linux/amd64`、`linux/arm64` |
-| 标签 | `v1.2.3`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
+| 标签 | `v0.1.2`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
 | 数据卷 | `/data`（即 `SA_DATA_DIR`，存放 `sa-state.json` 与界面保存的连接配置） |
 | 健康检查 | `GET /` 每 30s |
 
@@ -134,13 +146,14 @@ API_TOKEN=change-me docker compose up -d
 
 #### 2️⃣ 配置连接
 
-任选其一（优先级：**环境变量 > `.env.local` > `config.yaml` > 默认值**）：
+任选其一（优先级：**环境变量 > `.env.local` > `.env` > `config.yaml` > 默认值**；`.env` / `.env.local` 既读当前工作目录，也读数据目录）：
 
 <details>
 <summary><b>环境变量</b>（启动前 export）</summary>
 
 ```bash
-export SA_URL=http://<transmission-ip>:9091/transmission/rpc
+export SA_TYPE=transmission                                  # transmission / qbittorrent
+export SA_URL=http://<下载器IP>:9091/transmission/rpc         # qBittorrent 填 WebUI 根地址
 export SA_USER=admin
 export SA_PASS=password
 ```
@@ -150,20 +163,23 @@ export SA_PASS=password
 <summary><b>配置文件</b>（以 <code>backend/config.example.yaml</code> 为模板）</summary>
 
 ```yaml
-# backend/config.yaml
-server:
-  port: 8200
-transmission:
-  url: "http://<transmission-ip>:9091/transmission/rpc"
-  username: "admin"
-  password: "password"
+# backend/config.yaml（顶层键，非嵌套；完整模板见 backend/config.example.yaml）
+sa_type: "transmission"     # transmission / qbittorrent
+sa_url: "http://<下载器IP>:9091/transmission/rpc"
+sa_user: "admin"
+sa_pass: "password"         # qBittorrent 5.2+ 可填 API Key
+
+server_port: 8200
+poll_interval: "2s"
+log_level: "info"
+platform: "generic"         # generic（默认） / fnos；留空时自动推断
 ```
 </details>
 
 <details>
 <summary><b>界面设置</b>（启动后填写，热更新无需重启）</summary>
 
-「设置」→ 连接地址 → 填写 RPC 地址 / 账号 → 保存。
+「设置」→ 连接配置：选下载器类型、填地址与账号 → 保存（热更新，写入 `.env.local`，无需重启）。多服务器在「设置 → 多服务器管理」里逐台添加，启用 2 台及以上自动进入聚合视图。
 </details>
 
 #### 3️⃣ 运行
@@ -196,9 +212,14 @@ go build -o seedark ./cmd/server
 ```bash
 .\dev.ps1          # Windows：前台运行，Ctrl+C 一并退出
 .\dev.ps1 -bg      # Windows：后台运行，日志写入 dev/logs/
+.\dev.ps1 -mock    # Windows：额外拉起 trmock + qbmock，启动即多下载器聚合视图
+.\dev.ps1 -stop    # Windows：停掉占用开发端口的现有进程后退出
 ./dev.sh           # Linux / macOS：前台运行
 ./dev.sh -bg       # Linux / macOS：后台运行
+./dev.sh -mock     # Linux / macOS：额外拉起 trmock（:9092）并把后端指向它
 ```
+
+> `-mock` 在两端能力不同：`dev.ps1` 会同时拉起 trmock（`:9092`）与 qbmock（`:8080`）并把两台写进状态文件，后端启动即为聚合视图；`dev.sh` 目前只拉起 trmock。
 
 启动后：
 
@@ -229,18 +250,18 @@ go build -o seedark ./cmd/server
 ```
 dev/
 ├── data/        # sa-state.json、界面保存的连接配置 .env.local
-└── logs/        # backend.log、frontend.log、mock.log
+└── logs/        # backend.log、frontend.log、mock.log（trmock）、qbmock.log
 ```
 
 > `dev/` 已在 `.gitignore` 中整体忽略。后端数据目录通过 `SA_DATA_DIR` 指向 `dev/data`；生产部署不设置时仍使用默认 `~/.seedark`。
 
-### 🧪 没有可用的 Transmission？用内置 Mock
+### 🧪 没有可用的下载器？用内置 Mock
 
-仓库自带说 Transmission RPC 协议的 mock（`backend/cmd/trmock`），内置覆盖各状态的种子数据并实时推进进度 / 速度：
+仓库自带实现 Transmission RPC 协议的 mock（`backend/cmd/trmock`），内置覆盖各状态的种子数据并实时推进进度 / 速度：
 
 ```bash
-./dev.sh -mock       # Linux / macOS
-.\dev.ps1 -mock      # Windows（mock 监听 :9092）
+./dev.sh -mock       # Linux / macOS：trmock（:9092），后端指向它
+.\dev.ps1 -mock      # Windows：trmock（:9092）+ qbmock（:8080），启动即聚合视图
 ```
 
 单独运行：`cd backend && go run ./cmd/trmock`（`127.0.0.1:9092`，`-h` 查看 `-seed` / `-tick` / `-static` 等选项）。
@@ -253,10 +274,12 @@ cd backend && go run ./cmd/qbmock   # 127.0.0.1:8080，-h 查看 -user / -pass /
 
 qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录、5.x 端点与 4.x 回退、限速单位换算等），`cd backend && go test ./internal/qbittorrent/` 即可运行。
 
-**运行时在 mock 与真实远端之间热切换**：
+**运行时在 mock 与真实远端之间热切换**（无需重启）：
 
-- 界面切换：设置 → 连接地址，填 `http://localhost:9092/transmission/rpc`（mock）或真实远端，保存即生效
-- 启动时指定：`SA_URL=http://localhost:9092/transmission/rpc`
+- 界面切换：设置 → 连接配置，改地址保存即生效。`http://127.0.0.1:9092/transmission/rpc` 是 Transmission mock，`http://127.0.0.1:8080` 是 qBittorrent mock
+- 启动时指定：`SA_URL=http://127.0.0.1:9092/transmission/rpc`（连 qBittorrent mock 时同时设 `SA_TYPE=qbittorrent`）
+
+> 用 `127.0.0.1` 而非 `localhost`：mock 只监听 IPv4，而部分环境下 `localhost` 会先解析到 IPv6 的 `[::1]`，导致连接被拒。
 
 ---
 
@@ -265,7 +288,7 @@ qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录�
 ### 首次连接
 
 1. 浏览器访问 `http://<服务器IP>:8200`（本机 `http://localhost:8200`）
-2. 若 Transmission 不在本机或开启了认证，打开「设置」（桌面顶栏右侧头像菜单 / 移动侧滑抽屉底部）填写 RPC 地址、用户名、密码并保存；亦可环境变量 / `config.yaml` 预先配置
+2. 若下载器不在本机或开启了认证，打开「设置」（桌面顶栏右侧头像菜单 / 移动侧滑抽屉底部）选择下载器类型、填写地址与账号并保存；亦可环境变量 / `config.yaml` 预先配置。多台下载器在「设置 → 多服务器管理」里逐台添加
 3. 连接成功后主界面实时显示速度、进度与种子列表
 
 ### 添加任务
@@ -288,7 +311,9 @@ qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录�
 
 ### 会话与全局设置
 
-「设置」面板内可切换多服务器、查看会话统计、配置备用带宽定时调度、全局限速、下载 / 做种队列、轮询间隔，以及清除目录历史。
+「设置」面板内可切换多服务器、查看会话统计、配置全局与备用限速（含定时调度）、下载 / 做种队列、轮询间隔，以及清除目录历史。
+
+**分组限速**：「设置 → 自动化 → 分组限速」新建规则，或直接在侧边栏的站点 / 标签分组上右键选「为此分组添加限速规则」——按站点 / 标签 / 名称圈定一组种子，给整组设上 / 下行总上限（0 = 该方向不限）。点「立即应用」可马上跑一轮；关闭「启用引擎」则不再改动任何种子，此前下发过的限速（含「跟随全局限速」标记）会按接管前的状态还原。
 
 下载器设置按当前连接显示：连的是哪个就显示哪个的面板，多服务器时顶部一台一个标签，切换标签即读回该台自己的设置，读写互不影响（只有当前连接那台能改连接地址与执行端口测试）。
 
@@ -398,7 +423,7 @@ mcp_token: ""              # 接入令牌，留空 = 不启用鉴权
 ### 进阶
 
 - **PWA 安装**：手机浏览器或桌面 Chrome / Edge 选择「添加到主屏幕 / 安装应用」，可全屏使用并离线缓存，有新版本会提示刷新
-- **Peer 地理位置**：启动时自动从镜像下载 GeoLite2 数据库到数据目录（仅首次，约 60MB）；也可手动将 `GeoLite2-City.mmdb` 放入 `backend/mmdb/`（手动放置优先生效）
+- **Peer 地理位置**：启动时后台自动从镜像下载 GeoLite2 数据库到 **`<数据目录>/mmdb/`**（仅首次，约 60MB，不阻塞服务）；也可手动放一份 `mmdb/GeoLite2-City.mmdb` 到**程序工作目录**下（手动放置优先，缺失时优雅降级为空查询）
 - **浏览器内做种**：工具集「创建种子」可在本地用 bencode 分片 SHA1 生成 `.torrent`，生成后可一键添加
 - **批量清理**：按分享率 / 做种时长过滤，批量清理已完成种子
 - **做种策略**：「设置 → 自动化 → 做种策略」按站点设置分享率 / 做种天数 / 上传量目标，达标后自动暂停、删除种子（保留文件）或删除种子及文件；默认只生成待处理清单，需手动开启「自动执行」；下载未完成、本地报错、所有 tracker 都没 announce 成功的种子一律跳过；另有全局最低做种时长与站点 / 标签排除名单；站点匹配口径与「自动文件管理」「侧边栏站点分组」一致——**按站点名或简称（如 `m-team`）匹配，而非 tracker 主机名**
@@ -418,11 +443,13 @@ mcp_token: ""              # 接入令牌，留空 = 不启用鉴权
 | `API_TOKEN` | 空 | REST 接口访问令牌（不含 `/mcp`）；非空时浏览器首次访问弹出令牌输入框 |
 | `POLL_INTERVAL` | `2s` | WebSocket 轮询间隔 |
 | `LOG_LEVEL` | `info` | 日志级别 |
+| `SA_DATA_DIR` | `~/.seedark` | 数据目录：状态文件 `sa-state.json`、界面保存的 `.env.local`、自动下载的 GeoIP 库 `<数据目录>/mmdb/` |
 | `SA_PLATFORM` | 自动推断 | 宿主平台：`generic`（默认） / `fnos` |
 | `GATEWAY_PREFIX` | 空 | 宿主网关挂载的 URL 前缀（如 `/app/transmission`） |
 | `TORRENT_PATH_ROOTS` | `/vol,/mnt,/media,/volume1` | 「按路径添加种子」允许读取的根目录（逗号分隔；按解析符号链接后的真实路径判定，仅允许普通文件） |
 | `PATH_MAPPINGS` | 空 | 远端→本地路径映射（逗号分隔，每项 `远端路径=本地路径`）；Transmission 跑在容器内等路径不一致场景，用于「打开所在文件夹」「复制路径」的展示转换 |
-| `SERVER_SOCKET` | 空 | Unix socket 监听路径（宿主网关接入用） |
+| `SERVER_SOCKET` | 空 | Unix socket 监听路径（宿主网关接入用，非空时不再监听 TCP） |
+| `SERVER_SOCKET_MODE` | `0666` | Unix socket 权限（八进制）；确认属主关系后可收紧为 `0660` |
 | `MCP_ENABLED` | `false` | 启用 MCP 服务（`/mcp` 端点，供 AI 客户端接入） |
 | `MCP_ALLOW_DELETE` | `false` | 允许通过 MCP 删除种子（`deleteData=true` 时连同本地文件） |
 | `MCP_ALLOW_DANGEROUS` | `false` | 允许通过 MCP 执行其它高危操作（移动 / 重命名种子文件、立即执行做种策略） |
@@ -457,37 +484,49 @@ seedark/
 ├── docker-compose.yml                # 容器部署示例
 ├── .github/workflows/
 │   ├── release.yml                   # 打 v* 标签时交叉编译并发布 Release
-│   └── docker.yml                    # 构建并发布多架构镜像（GHCR + Docker Hub）
+│   ├── docker.yml                    # 构建并发布多架构镜像（GHCR + Docker Hub）
+│   └── demo-pages.yml                # 推送 master 时部署在线预览（GitHub Pages）
 ├── backend/                          # Go 后端（单二进制）
+│   ├── config.example.yaml           # 配置文件模板
+│   └── .env.example                  # 环境变量模板
 │   ├── cmd/
 │   │   ├── server/                   # 入口（解析平台 + 组装服务）
 │   │   ├── trmock/                   # Transmission RPC 开发用 mock
 │   │   └── qbmock/                   # qBittorrent WebAPI 开发用 mock（5.2.3 / 4.x 兼容模式）
 │   ├── internal/
-│   │   ├── api/                      # REST API + WebSocket Hub（宿主无关）
-│   │   ├── config/                   # 配置加载（环境变量/.env/config.yaml）
+│   │   ├── api/                      # REST API + WebSocket Hub（宿主无关，含 GeoIP）
+│   │   ├── config/                   # 配置加载（环境变量/.env/config.yaml + 界面回写）
 │   │   ├── middleware/               # CORS、安全头、鉴权（策略由平台提供）
 │   │   ├── models/                   # 数据结构
 │   │   ├── platform/                 # 宿主平台抽象
 │   │   │   ├── generic.go            # 通用部署（默认，最小权限）
+│   │   │   ├── file.go               # 本地文件读取白名单
 │   │   │   └── fnos/                 # 飞牛 fnOS（网关集成 + fpk 更新）
-│   │   ├── rpc/                      # Transmission RPC 封装 + 热更新管理
+│   │   ├── driver/                   # **下载器抽象层**：Backend 接口、Kind、能力声明
+│   │   ├── rpc/                      # Transmission 驱动（RPC 封装 + 多服务器路由 + 热更新）
+│   │   ├── qbittorrent/              # qBittorrent 驱动（Web API v2，4.x / 5.x 兼容）
+│   │   ├── qbmock/                   # qBittorrent mock 的能力自述（供 cmd/qbmock 复用）
+│   │   ├── mcpserver/                # MCP 服务与工具集（清单随驱动能力自适应）
+│   │   ├── torrentcreate/            # 后端建种（多线程分片 SHA1）
 │   │   ├── automove/                 # 自动文件管理（已完成种子按站点归档）
 │   │   ├── seedpolicy/               # 做种策略引擎
-│   │   └── state/                    # 运行时状态持久化
+│   │   ├── speedpolicy/              # 分组限速引擎（组内总上限摊到种子）
+│   │   └── state/                    # 运行时状态持久化（sa-state.json）
 │   ├── web/dist/                     # 内嵌前端构建产物
 │   └── seedark(.exe)                 # 已编译产物
 └── frontend/                         # React + TypeScript 前端
     └── src/
         ├── platform/                 # 宿主能力抽象（web / fnos）
-        ├── components/               # UI 组件
+        ├── components/               # UI 组件（设置弹窗、表格 / 卡片、图表……）
         ├── layout/                   # 整体布局骨架
         ├── stores/                   # Zustand 状态
         ├── hooks/                    # 自定义 Hook
         ├── api/                      # 后端接口封装
-        ├── lib/                      # 通用工具
+        ├── utils/                    # 通用工具
+        ├── lib/                      # 通用库
         ├── types/                    # 类型定义
         ├── i18n/                     # 中 / 英国际化
+        ├── demo/                     # 纯前端演示模式（在线预览用，不连后端）
         └── styles/                   # 全局样式（Liquid Glass 令牌）
 ```
 
@@ -502,7 +541,7 @@ seedark/
 
 <div align="center">
 
-**SeedArk** · 一份独立、精致、开箱即用的 Transmission 管理面板
+**SeedArk** · 一份独立、精致、开箱即用的下载器管理面板（Transmission / qBittorrent）
 
 Made with ❤️ for the **飞牛 OS** community
 
