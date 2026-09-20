@@ -1,40 +1,70 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
-	trpc "github.com/hekmon/transmissionrpc/v3"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/models"
 	"github.com/trpanel/backend/internal/rpc"
 )
 
-// getSession 获取会话配置
+// getSession 获取会话配置。
+// 附带下载器类型与能力自述：界面据此显示当前连接的是 Transmission 还是
+// qBittorrent，并隐藏该下载器不支持的入口（如 qBittorrent 无带宽组/黑名单）。
 func (h *Handler) getSession(c *gin.Context) {
-	sess, err := h.rpc.Client().GetSession(c.Request.Context())
+	sess, err := h.rpc.GetSession(c.Request.Context())
 	if err != nil {
 		respondError(c, http.StatusBadGateway, "获取会话信息失败: "+err.Error())
 		return
+	}
+	if sess != nil {
+		sess.Type = h.rpc.Kind().String()
+		caps := h.rpc.Capabilities()
+		sess.Caps = &caps
 	}
 	respond(c, sess)
 }
 
 // sessionStatus 连接状态检测
 func (h *Handler) sessionStatus(c *gin.Context) {
-	version, err := h.rpc.Client().Ping(c.Request.Context())
+	caps := h.rpc.Capabilities()
+	st := models.SessionStatus{Type: h.rpc.Kind().String(), Caps: &caps}
+	if errs := h.rpc.AggregateErrors(); len(errs) > 0 {
+		// 聚合成员整体失败会让列表静默变空，必须在状态里暴露出来
+		keys := make([]string, 0, len(errs))
+		for k := range errs {
+			keys = append(keys, strconv.Itoa(k+1))
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			i, _ := strconv.Atoi(k)
+			st.AggregateErrors = append(st.AggregateErrors,
+				fmt.Sprintf("服务器%s：%s", k, rpc.SanitizeClientMsg(errs[i-1])))
+		}
+	}
+	st.Aggregate = h.rpc.AggregateEnabled()
+	version, err := h.rpc.Ping(c.Request.Context())
 	if err != nil {
 		// 该接口以 200 返回连接状态，绕过了 respondError 的统一脱敏，需自行抹掉错误里的凭据
-		respond(c, models.SessionStatus{Connected: false, Error: rpc.SanitizeClientMsg(err.Error())})
+		st.Connected = false
+		st.Error = rpc.SanitizeClientMsg(err.Error())
+		respond(c, st)
 		return
 	}
-	respond(c, models.SessionStatus{Connected: true, Version: version})
+	st.Connected = true
+	st.Version = version
+	respond(c, st)
 }
 
 // portTest 测试端口是否开放
 func (h *Handler) portTest(c *gin.Context) {
-	open, err := h.rpc.Client().TestPort(c.Request.Context())
+	open, err := h.rpc.TestPort(c.Request.Context())
 	if err != nil {
-		respondError(c, http.StatusBadGateway, "端口测试失败: "+err.Error())
+		respondBackendError(c, "端口测试失败", err)
 		return
 	}
 	respond(c, gin.H{"open": open})
@@ -42,9 +72,9 @@ func (h *Handler) portTest(c *gin.Context) {
 
 // blocklistUpdate 更新 Blocklist 规则
 func (h *Handler) blocklistUpdate(c *gin.Context) {
-	entries, err := h.rpc.Client().UpdateBlocklist(c.Request.Context())
+	entries, err := h.rpc.UpdateBlocklist(c.Request.Context())
 	if err != nil {
-		respondError(c, http.StatusBadGateway, "更新 Blocklist 失败: "+err.Error())
+		respondBackendError(c, "更新 Blocklist 失败", err)
 		return
 	}
 	respond(c, gin.H{"entries": entries})
@@ -64,8 +94,8 @@ func (h *Handler) systemCommand(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "不支持的系统命令: "+action)
 		return
 	}
-	if err := h.rpc.Client().SystemCommand(c.Request.Context(), action); err != nil {
-		respondError(c, http.StatusBadGateway, "执行失败: "+err.Error())
+	if err := h.rpc.SystemCommand(c.Request.Context(), action); err != nil {
+		respondBackendError(c, "执行失败", err)
 		return
 	}
 	respond(c, gin.H{"action": action})
@@ -73,7 +103,7 @@ func (h *Handler) systemCommand(c *gin.Context) {
 
 // sessionStats 获取会话统计（累计/当前）
 func (h *Handler) sessionStats(c *gin.Context) {
-	stats, err := h.rpc.Client().GetSessionStats(c.Request.Context())
+	stats, err := h.rpc.GetSessionStats(c.Request.Context())
 	if err != nil {
 		respondError(c, http.StatusBadGateway, "获取会话统计失败: "+err.Error())
 		return
@@ -88,9 +118,9 @@ func (h *Handler) freeSpace(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "缺少 path 参数")
 		return
 	}
-	free, total, err := h.rpc.Client().GetFreeSpace(c.Request.Context(), path)
+	free, total, err := h.rpc.GetFreeSpace(c.Request.Context(), path)
 	if err != nil {
-		respondError(c, http.StatusBadGateway, "查询失败: "+err.Error())
+		respondBackendError(c, "查询失败", err)
 		return
 	}
 	respond(c, gin.H{"path": path, "freeSpace": free, "totalSize": total})
@@ -161,16 +191,16 @@ func (h *Handler) setSession(c *gin.Context) {
 		}
 	}
 
-	payload := trpc.SessionArguments{
+	payload := driver.SessionPatch{
 		DownloadDir:                      body.DownloadDir,
 		SpeedLimitDown:                   body.SpeedLimitDown,
-		SpeedLimitDownEnabled:            body.SpeedLimitDownOn,
+		SpeedLimitDownOn:                 body.SpeedLimitDownOn,
 		SpeedLimitUp:                     body.SpeedLimitUp,
-		SpeedLimitUpEnabled:              body.SpeedLimitUpOn,
+		SpeedLimitUpOn:                   body.SpeedLimitUpOn,
 		AltSpeedDown:                     body.AltSpeedDown,
 		AltSpeedUp:                       body.AltSpeedUp,
 		AltSpeedEnabled:                  body.AltSpeedEnabled,
-		StartAddedTorrents:               body.StartAdded,
+		StartAdded:                       body.StartAdded,
 		PeerLimitGlobal:                  body.PeerLimitGlobal,
 		PEXEnabled:                       body.PEXEnabled,
 		DHTEnabled:                       body.DHTEnabled,
@@ -205,13 +235,10 @@ func (h *Handler) setSession(c *gin.Context) {
 		PeerPort:                         body.PeerPort,
 		PeerPortRandomOnStart:            body.PeerPortRandomOnStart,
 	}
-	if body.Encryption != nil {
-		enc := trpc.Encryption(*body.Encryption)
-		payload.Encryption = &enc
-	}
+	payload.Encryption = body.Encryption
 
-	if err := h.rpc.Client().SetSession(c.Request.Context(), payload); err != nil {
-		respondError(c, http.StatusBadGateway, "更新会话失败: "+err.Error())
+	if err := h.rpc.SetSession(c.Request.Context(), payload); err != nil {
+		respondBackendError(c, "更新会话失败", err)
 		return
 	}
 	respond(c, gin.H{"updated": true})

@@ -166,59 +166,123 @@ type Peer struct {
 
 // Session 会话信息
 type Session struct {
-	Version                          string   `json:"version"`
-	RPCVersion                       int64    `json:"rpcVersion"`
-	DownloadDir                      string   `json:"downloadDir"`
-	SpeedLimitDown                   int64    `json:"speedLimitDown"`
-	SpeedLimitDownOn                 bool     `json:"speedLimitDownOn"`
-	SpeedLimitUp                     int64    `json:"speedLimitUp"`
-	SpeedLimitUpOn                   bool     `json:"speedLimitUpOn"`
-	AltSpeedDown                     int64    `json:"altSpeedDown"`
-	AltSpeedUp                       int64    `json:"altSpeedUp"`
-	AltSpeedEnabled                  bool     `json:"altSpeedEnabled"`
-	PeerLimitGlobal                  int64    `json:"peerLimitGlobal"`
-	PeerPort                         int64    `json:"peerPort"`
-	PeerPortRandomOnStart            bool     `json:"peerPortRandomOnStart"`
-	PEXEnabled                       bool     `json:"pexEnabled"`
-	DHTEnabled                       bool     `json:"dhtEnabled"`
-	LPDEnabled                       bool     `json:"lpdEnabled"`
-	UTPEnabled                       bool     `json:"utpEnabled"`
-	Encryption                       string   `json:"encryption"`
-	SeedRatioLimit                   float64  `json:"seedRatioLimit"`
-	StartAdded                       bool     `json:"startAdded"`
-	IncompleteDir                    string   `json:"incompleteDir"`
-	DownloadQueueSize                int64    `json:"downloadQueueSize"`
-	DownloadQueueEnabled             bool     `json:"downloadQueueEnabled"`
-	SeedQueueSize                    int64    `json:"seedQueueSize"`
-	SeedQueueEnabled                 bool     `json:"seedQueueEnabled"`
-	QueueStalledEnabled              bool     `json:"queueStalledEnabled"`
-	QueueStalledMinutes              int64    `json:"queueStalledMinutes"`
-	BlocklistEnabled                 bool     `json:"blocklistEnabled"`
-	BlocklistURL                     string   `json:"blocklistUrl"`
-	BlocklistSize                    int64    `json:"blocklistSize"`
-	PortForwardingEnabled            bool     `json:"portForwardingEnabled"`
-	IncompleteDirEnabled             bool     `json:"incompleteDirEnabled"`
-	CacheSizeMB                      int64    `json:"cacheSizeMB"`
-	AltSpeedTimeEnabled              bool     `json:"altSpeedTimeEnabled"`
-	AltSpeedTimeBegin                int64    `json:"altSpeedTimeBegin"`
-	AltSpeedTimeEnd                  int64    `json:"altSpeedTimeEnd"`
-	AltSpeedTimeDay                  int64    `json:"altSpeedTimeDay"`
-	ScriptTorrentAddedEnabled        bool     `json:"scriptTorrentAddedEnabled"`
-	ScriptTorrentAddedFilename       string   `json:"scriptTorrentAddedFilename"`
-	ScriptTorrentDoneEnabled         bool     `json:"scriptTorrentDoneEnabled"`
-	ScriptTorrentDoneFilename        string   `json:"scriptTorrentDoneFilename"`
-	ScriptTorrentDoneSeedingEnabled  bool     `json:"scriptTorrentDoneSeedingEnabled"`
-	ScriptTorrentDoneSeedingFilename string   `json:"scriptTorrentDoneSeedingFilename"`
-	DefaultTrackers                  []string `json:"defaultTrackers"`
-	RenamePartialFiles               bool     `json:"renamePartialFiles"`
-	TrashOriginalTorrentFiles        bool     `json:"trashOriginalTorrentFiles"`
-	IdleSeedingLimitEnabled          bool     `json:"idleSeedingLimitEnabled"`
-	IdleSeedingLimit                 int64    `json:"idleSeedingLimit"`
+	Version string `json:"version"`
+	// Type 当前下载器类型（transmission / qbittorrent），由 API 层填充
+	Type string `json:"type"`
+	// Caps 该下载器的能力自述，前端据此隐藏不支持的入口
+	Caps                             *Capabilities `json:"caps,omitempty"`
+	RPCVersion                       int64         `json:"rpcVersion"`
+	DownloadDir                      string        `json:"downloadDir"`
+	SpeedLimitDown                   int64         `json:"speedLimitDown"`
+	SpeedLimitDownOn                 bool          `json:"speedLimitDownOn"`
+	SpeedLimitUp                     int64         `json:"speedLimitUp"`
+	SpeedLimitUpOn                   bool          `json:"speedLimitUpOn"`
+	AltSpeedDown                     int64         `json:"altSpeedDown"`
+	AltSpeedUp                       int64         `json:"altSpeedUp"`
+	AltSpeedEnabled                  bool          `json:"altSpeedEnabled"`
+	PeerLimitGlobal                  int64         `json:"peerLimitGlobal"`
+	PeerPort                         int64         `json:"peerPort"`
+	PeerPortRandomOnStart            bool          `json:"peerPortRandomOnStart"`
+	PEXEnabled                       bool          `json:"pexEnabled"`
+	DHTEnabled                       bool          `json:"dhtEnabled"`
+	LPDEnabled                       bool          `json:"lpdEnabled"`
+	UTPEnabled                       bool          `json:"utpEnabled"`
+	Encryption                       string        `json:"encryption"`
+	SeedRatioLimit                   float64       `json:"seedRatioLimit"`
+	StartAdded                       bool          `json:"startAdded"`
+	IncompleteDir                    string        `json:"incompleteDir"`
+	DownloadQueueSize                int64         `json:"downloadQueueSize"`
+	DownloadQueueEnabled             bool          `json:"downloadQueueEnabled"`
+	SeedQueueSize                    int64         `json:"seedQueueSize"`
+	SeedQueueEnabled                 bool          `json:"seedQueueEnabled"`
+	QueueStalledEnabled              bool          `json:"queueStalledEnabled"`
+	QueueStalledMinutes              int64         `json:"queueStalledMinutes"`
+	BlocklistEnabled                 bool          `json:"blocklistEnabled"`
+	BlocklistURL                     string        `json:"blocklistUrl"`
+	BlocklistSize                    int64         `json:"blocklistSize"`
+	PortForwardingEnabled            bool          `json:"portForwardingEnabled"`
+	IncompleteDirEnabled             bool          `json:"incompleteDirEnabled"`
+	CacheSizeMB                      int64         `json:"cacheSizeMB"`
+	AltSpeedTimeEnabled              bool          `json:"altSpeedTimeEnabled"`
+	AltSpeedTimeBegin                int64         `json:"altSpeedTimeBegin"`
+	AltSpeedTimeEnd                  int64         `json:"altSpeedTimeEnd"`
+	AltSpeedTimeDay                  int64         `json:"altSpeedTimeDay"`
+	ScriptTorrentAddedEnabled        bool          `json:"scriptTorrentAddedEnabled"`
+	ScriptTorrentAddedFilename       string        `json:"scriptTorrentAddedFilename"`
+	ScriptTorrentDoneEnabled         bool          `json:"scriptTorrentDoneEnabled"`
+	ScriptTorrentDoneFilename        string        `json:"scriptTorrentDoneFilename"`
+	ScriptTorrentDoneSeedingEnabled  bool          `json:"scriptTorrentDoneSeedingEnabled"`
+	ScriptTorrentDoneSeedingFilename string        `json:"scriptTorrentDoneSeedingFilename"`
+	DefaultTrackers                  []string      `json:"defaultTrackers"`
+	RenamePartialFiles               bool          `json:"renamePartialFiles"`
+	TrashOriginalTorrentFiles        bool          `json:"trashOriginalTorrentFiles"`
+	IdleSeedingLimitEnabled          bool          `json:"idleSeedingLimitEnabled"`
+	IdleSeedingLimit                 int64         `json:"idleSeedingLimit"`
 }
 
 // SessionStatus 连接状态
 type SessionStatus struct {
 	Connected bool   `json:"connected"`
 	Version   string `json:"version"`
-	Error     string `json:"error,omitempty"`
+	// Type 当前下载器类型（transmission / qbittorrent）
+	Type  string        `json:"type"`
+	Caps  *Capabilities `json:"caps,omitempty"`
+	Error string        `json:"error,omitempty"`
+	// Aggregate 是否开启了多服务器聚合视图（同时管理多台 tr / qb）
+	Aggregate bool `json:"aggregate,omitempty"`
+	// AggregateErrors 聚合成员最近一次拉取失败的原因（界面提示用）
+	AggregateErrors []string `json:"aggregateErrors,omitempty"`
+}
+
+// Capabilities 下载器能力自述。界面按能力显示入口，
+// 未支持的能力自动隐藏，而不是等用户点了才报「不支持」。
+type Capabilities struct {
+	// 带宽组（Transmission 4.x）
+	BandwidthGroups bool `json:"bandwidthGroups"`
+	// 黑名单（IP 过滤规则）
+	Blocklist bool `json:"blocklist"`
+	// 目录剩余空间查询
+	FreeSpace bool `json:"freeSpace"`
+	// 监听端口外网可达性检测
+	PortTest bool `json:"portTest"`
+	// 顺序下载
+	SequentialDownload bool `json:"sequentialDownload"`
+	// 队列排序
+	QueueMove bool `json:"queueMove"`
+	// 重命名种子内文件 / 目录
+	RenameFile bool `json:"renameFile"`
+	// 系统命令（关闭下载器）
+	SystemCommand bool `json:"systemCommand"`
+	// 备用限速定时调度
+	AltSpeedSchedule bool `json:"altSpeedSchedule"`
+	// Tracker 批量替换
+	TrackerReplace bool `json:"trackerReplace"`
+	// 块位图
+	PieceBitmap bool `json:"pieceBitmap"`
+	// 未完成目录
+	IncompleteDir bool `json:"incompleteDir"`
+	// 种子事件脚本钩子
+	ScriptHooks bool `json:"scriptHooks"`
+	// 全局分享率上限
+	GlobalSeedRatio bool `json:"globalSeedRatio"`
+}
+
+// SessionStats 会话统计（累计 / 当前）
+type SessionStats struct {
+	ActiveTorrentCount int64               `json:"activeTorrentCount"`
+	DownloadSpeed      int64               `json:"downloadSpeed"`
+	PausedTorrentCount int64               `json:"pausedTorrentCount"`
+	TorrentCount       int64               `json:"torrentCount"`
+	UploadSpeed        int64               `json:"uploadSpeed"`
+	Cumulative         SessionStatsDetails `json:"cumulative"`
+	Current            SessionStatsDetails `json:"current"`
+}
+
+// SessionStatsDetails 会话统计明细
+type SessionStatsDetails struct {
+	DownloadedBytes int64 `json:"downloadedBytes"`
+	FilesAdded      int64 `json:"filesAdded"`
+	SecondsActive   int64 `json:"secondsActive"`
+	SessionCount    int64 `json:"sessionCount"`
+	UploadedBytes   int64 `json:"uploadedBytes"`
 }

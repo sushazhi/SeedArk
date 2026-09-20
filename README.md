@@ -33,6 +33,7 @@
 | 🖥️ | **桌面交互** | 鼠标虚拟滚动表格 + 右键菜单 + 拖拽排序 + 可伸缩侧栏（持久化） + 表头右键管理列 |
 | 📱 | **触屏交互** | 玻璃卡片列表，长按 / ⋮ 唤出菜单，左右滑切换分类，勾选进入批量，动作条"全选"补齐分组，底部悬浮胶囊承载添加 / 启停 / 清理 |
 | 🌐 | **会话与全局** | 多服务器切换、全局限速、带宽定时调度、下载 / 做种队列、轮询间隔、**带宽组管理**（Transmission 4.x） |
+| 🔀 | **多下载器聚合** | 支持 **Transmission 与 qBittorrent**（Web API v2，qBittorrent 4.x / 5.x，含 5.2+ API Key）；「设置 → 多服务器管理」启用 2 台及以上即进入聚合视图：种子列表合并展示、批量操作按种子自动路由到所属下载器、统计与站点维度跨服务器汇总 |
 | 🛠 | **工具集** | 浏览器端 `.torrent` 创建（bencode + 分片 SHA1）、**服务器路径建种**（后端多线程哈希，大文件秒级完成）、按分享率 / 做种时长批量清理已完成种子 |
 | 🤖 | **自动化** | 已完成种子按站点归档；**做种策略**按站点分享率 / 做种天数 / 上传量目标达标后暂停 / 删除 / 删除并清理文件 |
 | 🤝 | **MCP 服务** | 内置 MCP 端点（`/mcp`），Claude / Qoder 等 AI 客户端可直接查询种子 / 站点 / 会话配置与磁盘空间，执行添加、启停、校验、重宣告、限速、打标签、队列调整等操作；「设置 → 自动化 → MCP 服务」开启，独立接入令牌鉴权，删除与移动 / 重命名 / 立即执行做种策略等高危操作默认关闭 |
@@ -95,6 +96,7 @@
 ```bash
 docker run -d --name trpanel \
   -p 8200:8200 \
+  -e TR_TYPE=transmission \
   -e TR_URL=http://host.docker.internal:9091/transmission/rpc \
   -e API_TOKEN=change-me \
   -v trpanel-data:/data \
@@ -376,7 +378,8 @@ mcp_token: ""              # 接入令牌，留空 = 不启用鉴权
 
 | 变量 | 默认值 | 说明 |
 |:--|:--|:--|
-| `TR_URL` | `http://localhost:9091/transmission/rpc` | Transmission RPC 端点 |
+| `TR_TYPE` | `transmission` | 下载器类型：`transmission` / `qbittorrent`（qBittorrent 下 `TR_URL` 填 WebUI 根地址，密码可填 5.2+ API Key） |
+| `TR_URL` | `http://localhost:9091/transmission/rpc` | 下载器 RPC 端点 |
 | `TR_USER` | 空 | RPC 用户名 |
 | `TR_PASS` | 空 | RPC 密码 |
 | `SERVER_PORT` | `8200` | 本服务端口 |

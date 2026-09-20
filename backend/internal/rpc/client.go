@@ -14,9 +14,11 @@ import (
 	"time"
 
 	trpc "github.com/hekmon/transmissionrpc/v3"
+	"github.com/trpanel/backend/internal/driver"
+	"github.com/trpanel/backend/internal/models"
 )
 
-// Client Transmission RPC 客户端封装
+// Client Transmission RPC 客户端封装（实现 driver.Backend）
 type Client struct {
 	tr         *trpc.Client
 	url        string
@@ -74,6 +76,31 @@ func newHTTPClient() *http.Client {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},
+	}
+}
+
+// Kind 下载器类型
+func (c *Client) Kind() driver.Kind { return driver.KindTransmission }
+
+// Capabilities Transmission 能力自述。
+// 队列排序与带宽组取决于服务端版本与配置（group-get 需 4.x），
+// 这里按「Transmission 全支持」声明：真实缺失时由具体接口返回的错误兜底。
+func (c *Client) Capabilities() driver.Capabilities {
+	return driver.Capabilities{
+		BandwidthGroups:    true,
+		Blocklist:          true,
+		FreeSpace:          true,
+		PortTest:           true,
+		SequentialDownload: true,
+		QueueMove:          true,
+		RenameFile:         true,
+		SystemCommand:      true,
+		AltSpeedSchedule:   true,
+		TrackerReplace:     true,
+		PieceBitmap:        true,
+		IncompleteDir:      true,
+		ScriptHooks:        true,
+		GlobalSeedRatio:    true,
 	}
 }
 
@@ -280,27 +307,27 @@ func (c *Client) StartTorrentsNow(ctx context.Context, ids []int64) error {
 }
 
 // GetSessionStats 获取会话统计（累计/当前）
-func (c *Client) GetSessionStats(ctx context.Context) (*SessionStats, error) {
+func (c *Client) GetSessionStats(ctx context.Context) (*models.SessionStats, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	stats, err := c.tr.SessionStats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &SessionStats{
+	return &models.SessionStats{
 		ActiveTorrentCount: stats.ActiveTorrentCount,
 		DownloadSpeed:      stats.DownloadSpeed,
 		PausedTorrentCount: stats.PausedTorrentCount,
 		TorrentCount:       stats.TorrentCount,
 		UploadSpeed:        stats.UploadSpeed,
-		Cumulative: SessionStatsDetails{
+		Cumulative: models.SessionStatsDetails{
 			DownloadedBytes: stats.CumulativeStats.DownloadedBytes,
 			FilesAdded:      stats.CumulativeStats.FilesAdded,
 			SecondsActive:   stats.CumulativeStats.SecondsActive,
 			SessionCount:    stats.CumulativeStats.SessionCount,
 			UploadedBytes:   stats.CumulativeStats.UploadedBytes,
 		},
-		Current: SessionStatsDetails{
+		Current: models.SessionStatsDetails{
 			DownloadedBytes: stats.CurrentStats.DownloadedBytes,
 			FilesAdded:      stats.CurrentStats.FilesAdded,
 			SecondsActive:   stats.CurrentStats.SecondsActive,
@@ -308,26 +335,6 @@ func (c *Client) GetSessionStats(ctx context.Context) (*SessionStats, error) {
 			UploadedBytes:   stats.CurrentStats.UploadedBytes,
 		},
 	}, nil
-}
-
-// SessionStats 会话统计数据
-type SessionStats struct {
-	ActiveTorrentCount int64               `json:"activeTorrentCount"`
-	DownloadSpeed      int64               `json:"downloadSpeed"`
-	PausedTorrentCount int64               `json:"pausedTorrentCount"`
-	TorrentCount       int64               `json:"torrentCount"`
-	UploadSpeed        int64               `json:"uploadSpeed"`
-	Cumulative         SessionStatsDetails `json:"cumulative"`
-	Current            SessionStatsDetails `json:"current"`
-}
-
-// SessionStatsDetails 会话统计明细
-type SessionStatsDetails struct {
-	DownloadedBytes int64 `json:"downloadedBytes"`
-	FilesAdded      int64 `json:"filesAdded"`
-	SecondsActive   int64 `json:"secondsActive"`
-	SessionCount    int64 `json:"sessionCount"`
-	UploadedBytes   int64 `json:"uploadedBytes"`
 }
 
 // VerifyTorrents 校验种子
@@ -354,12 +361,56 @@ func (c *Client) RemoveTorrents(ctx context.Context, ids []int64, deleteData boo
 	})
 }
 
-// SetTorrent 修改种子属性
-func (c *Client) SetTorrent(ctx context.Context, ids []int64, fields trpc.TorrentSetPayload) error {
+// SetTorrent 修改种子属性（patch 为下载器无关的字段集，单位 KB/s）
+func (c *Client) SetTorrent(ctx context.Context, ids []int64, patch driver.TorrentPatch) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	fields.IDs = ids
-	return c.tr.TorrentSet(ctx, fields)
+	payload := trpc.TorrentSetPayload{
+		IDs:                 ids,
+		Labels:              patch.Labels,
+		TrackerList:         patch.TrackerList,
+		BandwidthPriority:   patch.BandwidthPriority,
+		DownloadLimited:     patch.DownloadLimited,
+		DownloadLimit:       patch.DownloadLimit,
+		UploadLimited:       patch.UploadLimited,
+		UploadLimit:         patch.UploadLimit,
+		HonorsSessionLimits: patch.HonorsSessionLimits,
+		PeerLimit:           patch.PeerLimit,
+		SeedRatioLimit:      patch.SeedRatioLimit,
+		QueuePosition:       patch.QueuePosition,
+		FilesWanted:         patch.FilesWanted,
+		FilesUnwanted:       patch.FilesUnwanted,
+		PriorityHigh:        patch.PriorityHigh,
+		PriorityLow:         patch.PriorityLow,
+		PriorityNormal:      patch.PriorityNormal,
+		SeedIdleMode:        patch.SeedIdleMode,
+	}
+	if patch.SeedIdleLimitMin != nil {
+		d := time.Duration(*patch.SeedIdleLimitMin) * time.Minute
+		payload.SeedIdleLimit = &d
+	}
+	if patch.SeedRatioMode != nil {
+		srm := trpc.SeedRatioMode(*patch.SeedRatioMode)
+		payload.SeedRatioMode = &srm
+	}
+	return c.tr.TorrentSet(ctx, payload)
+}
+
+// SetTorrentFlags 设置顺序下载 / 带宽组（Transmission RPC 库未封装，走 raw 通道）。
+// 两者都是 Transmission 4.x 才有的字段，旧版本返回 unrecognized，
+// 由调用方（API 层）按告警降级处理。
+func (c *Client) SetTorrentFlags(ctx context.Context, ids []int64, flags driver.TorrentFlagPatch) error {
+	if flags.Empty() {
+		return nil
+	}
+	raw := map[string]any{}
+	if flags.SequentialDownload != nil {
+		raw["sequentialDownload"] = *flags.SequentialDownload
+	}
+	if flags.Groups != nil {
+		raw["groups"] = flags.Groups
+	}
+	return c.SetTorrentRawFields(ctx, ids, raw)
 }
 
 // SetTorrentLocation 移动种子下载位置
@@ -538,10 +589,62 @@ func (c *Client) GetSession(ctx context.Context) (*Session, error) {
 	return mapSession(sess), nil
 }
 
-// SetSession 更新会话配置
-func (c *Client) SetSession(ctx context.Context, fields trpc.SessionArguments) error {
+// SetSession 更新会话配置（patch 为下载器无关的字段集，限速单位 KB/s）
+func (c *Client) SetSession(ctx context.Context, patch driver.SessionPatch) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	fields := trpc.SessionArguments{
+		DownloadDir:                      patch.DownloadDir,
+		SpeedLimitDown:                   patch.SpeedLimitDown,
+		SpeedLimitDownEnabled:            patch.SpeedLimitDownOn,
+		SpeedLimitUp:                     patch.SpeedLimitUp,
+		SpeedLimitUpEnabled:              patch.SpeedLimitUpOn,
+		AltSpeedDown:                     patch.AltSpeedDown,
+		AltSpeedUp:                       patch.AltSpeedUp,
+		AltSpeedEnabled:                  patch.AltSpeedEnabled,
+		StartAddedTorrents:               patch.StartAdded,
+		PeerLimitGlobal:                  patch.PeerLimitGlobal,
+		PeerLimitPerTorrent:              patch.PeerLimitPerTorrent,
+		PEXEnabled:                       patch.PEXEnabled,
+		DHTEnabled:                       patch.DHTEnabled,
+		LPDEnabled:                       patch.LPDEnabled,
+		UTPEnabled:                       patch.UTPEnabled,
+		SeedRatioLimit:                   patch.SeedRatioLimit,
+		SeedRatioLimited:                 patch.SeedRatioLimited,
+		DownloadQueueEnabled:             patch.DownloadQueueEnabled,
+		DownloadQueueSize:                patch.DownloadQueueSize,
+		SeedQueueEnabled:                 patch.SeedQueueEnabled,
+		SeedQueueSize:                    patch.SeedQueueSize,
+		QueueStalledEnabled:              patch.QueueStalledEnabled,
+		QueueStalledMinutes:              patch.QueueStalledMinutes,
+		BlocklistEnabled:                 patch.BlocklistEnabled,
+		BlocklistURL:                     patch.BlocklistURL,
+		PortForwardingEnabled:            patch.PortForwardingEnabled,
+		IncompleteDir:                    patch.IncompleteDir,
+		IncompleteDirEnabled:             patch.IncompleteDirEnabled,
+		CacheSizeMB:                      patch.CacheSizeMB,
+		AltSpeedTimeEnabled:              patch.AltSpeedTimeEnabled,
+		AltSpeedTimeBegin:                patch.AltSpeedTimeBegin,
+		AltSpeedTimeEnd:                  patch.AltSpeedTimeEnd,
+		AltSpeedTimeDay:                  patch.AltSpeedTimeDay,
+		ScriptTorrentAddedEnabled:        patch.ScriptTorrentAddedEnabled,
+		ScriptTorrentAddedFilename:       patch.ScriptTorrentAddedFilename,
+		ScriptTorrentDoneEnabled:         patch.ScriptTorrentDoneEnabled,
+		ScriptTorrentDoneFilename:        patch.ScriptTorrentDoneFilename,
+		ScriptTorrentDoneSeedingEnabled:  patch.ScriptTorrentDoneSeedingEnabled,
+		ScriptTorrentDoneSeedingFilename: patch.ScriptTorrentDoneSeedingFilename,
+		DefaultTrackers:                  patch.DefaultTrackers,
+		RenamePartialFiles:               patch.RenamePartialFiles,
+		TrashOriginalTorrentFiles:        patch.TrashOriginalTorrentFiles,
+		IdleSeedingLimitEnabled:          patch.IdleSeedingLimitEnabled,
+		IdleSeedingLimit:                 patch.IdleSeedingLimit,
+		PeerPort:                         patch.PeerPort,
+		PeerPortRandomOnStart:            patch.PeerPortRandomOnStart,
+	}
+	if patch.Encryption != nil {
+		enc := trpc.Encryption(*patch.Encryption)
+		fields.Encryption = &enc
+	}
 	return c.tr.SessionArgumentsSet(ctx, fields)
 }
 

@@ -8,9 +8,13 @@ import (
 	"time"
 )
 
-// Server Transmission 服务端配置
+// Server 一台下载器服务端的连接配置。
+// Type 为下载器类型（transmission / qbittorrent），空值按 Transmission 处理，
+// 这样既有部署的状态文件无需迁移即可继续工作。
+// Pass 在 qBittorrent 下既可以是密码，也可以是 5.2+ 的 API Key（qbt_ 前缀）。
 type Server struct {
 	Name    string `json:"name"`
+	Type    string `json:"type"`
 	URL     string `json:"url"`
 	User    string `json:"user"`
 	Pass    string `json:"pass"`

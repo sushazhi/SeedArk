@@ -3,16 +3,16 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	trpc "github.com/hekmon/transmissionrpc/v3"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/rpc"
 )
 
@@ -42,7 +42,7 @@ func parseCSV(s string) []string {
 
 // torrentSites 获取每个种子的 Tracker 站点（站点过滤维度）
 func (h *Handler) torrentSites(c *gin.Context) {
-	sites, err := h.rpc.Client().GetTorrentSites(c.Request.Context())
+	sites, err := h.rpc.GetTorrentSites(c.Request.Context())
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "获取站点列表失败: "+err.Error())
 		return
@@ -66,7 +66,7 @@ func (h *Handler) replaceTracker(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "查找地址与替换地址不能为空")
 		return
 	}
-	affected, names, err := h.rpc.Client().ReplaceTracker(c.Request.Context(), body.From, body.To, body.Append)
+	affected, names, err := h.rpc.ReplaceTracker(c.Request.Context(), body.From, body.To, body.Append)
 	if err != nil {
 		respondError(c, http.StatusBadGateway, "替换 Tracker 失败: "+err.Error())
 		return
@@ -76,7 +76,7 @@ func (h *Handler) replaceTracker(c *gin.Context) {
 
 // listTorrents 获取种子列表
 func (h *Handler) listTorrents(c *gin.Context) {
-	torrents, err := h.rpc.Client().GetTorrents(c.Request.Context())
+	torrents, err := h.rpc.GetTorrents(c.Request.Context())
 	if err != nil {
 		respondError(c, http.StatusBadGateway, "获取种子列表失败: "+err.Error())
 		return
@@ -90,7 +90,7 @@ func (h *Handler) getTorrent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	t, err := h.rpc.Client().GetTorrentDetail(c.Request.Context(), id)
+	t, err := h.rpc.GetTorrentDetail(c.Request.Context(), id)
 	if err != nil {
 		respondError(c, http.StatusNotFound, err.Error())
 		return
@@ -136,13 +136,13 @@ func (h *Handler) addTorrent(c *gin.Context) {
 		if raw := c.PostForm("filesUnwanted"); raw != "" {
 			_ = json.Unmarshal([]byte(raw), &filesUnwanted)
 		}
-		id, err := h.rpc.Client().AddTorrentByFile(ctx, data, downloadDir, paused, labels, priority, filesWanted, filesUnwanted)
+		id, err := h.rpc.AddTorrentByFile(ctx, data, downloadDir, paused, labels, priority, filesWanted, filesUnwanted)
 		if err != nil {
 			respondError(c, http.StatusBadGateway, "添加种子失败: "+err.Error())
 			return
 		}
 		if verify {
-			if err := h.rpc.Client().VerifyTorrents(ctx, []int64{id}); err != nil {
+			if err := h.rpc.VerifyTorrents(ctx, []int64{id}); err != nil {
 				respondError(c, http.StatusBadGateway, "校验种子失败: "+err.Error())
 				return
 			}
@@ -174,13 +174,13 @@ func (h *Handler) addTorrent(c *gin.Context) {
 			respondError(c, http.StatusForbidden, "种子路径不可用")
 			return
 		}
-		id, err := h.rpc.Client().AddTorrentByFile(ctx, data, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority, nil, nil)
+		id, err := h.rpc.AddTorrentByFile(ctx, data, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority, nil, nil)
 		if err != nil {
 			respondError(c, http.StatusBadGateway, "添加种子失败: "+err.Error())
 			return
 		}
 		if body.Verify {
-			if err := h.rpc.Client().VerifyTorrents(ctx, []int64{id}); err != nil {
+			if err := h.rpc.VerifyTorrents(ctx, []int64{id}); err != nil {
 				respondError(c, http.StatusBadGateway, "校验种子失败: "+err.Error())
 				return
 			}
@@ -200,13 +200,13 @@ func (h *Handler) addTorrent(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "URL 仅支持 http(s) 链接或磁力链接")
 		return
 	}
-	id, err := h.rpc.Client().AddTorrentByURL(ctx, link, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority)
+	id, err := h.rpc.AddTorrentByURL(ctx, link, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority)
 	if err != nil {
 		respondError(c, http.StatusBadGateway, "添加种子失败: "+err.Error())
 		return
 	}
 	if body.Verify {
-		if err := h.rpc.Client().VerifyTorrents(ctx, []int64{id}); err != nil {
+		if err := h.rpc.VerifyTorrents(ctx, []int64{id}); err != nil {
 			respondError(c, http.StatusBadGateway, "校验种子失败: "+err.Error())
 			return
 		}
@@ -272,7 +272,7 @@ func (h *Handler) addTorrentBatch(c *gin.Context) {
 			failed = append(failed, batchFailure{URL: url, Error: "仅支持 http(s) 链接或磁力链接"})
 			continue
 		}
-		id, err := h.rpc.Client().AddTorrentByURL(ctx, url, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority)
+		id, err := h.rpc.AddTorrentByURL(ctx, url, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority)
 		if err != nil {
 			failed = append(failed, batchFailure{URL: url, Error: rpc.SanitizeClientMsg(err.Error())})
 			continue
@@ -280,7 +280,7 @@ func (h *Handler) addTorrentBatch(c *gin.Context) {
 		ids = append(ids, id)
 	}
 	if body.Verify && len(ids) > 0 {
-		if err := h.rpc.Client().VerifyTorrents(ctx, ids); err != nil {
+		if err := h.rpc.VerifyTorrents(ctx, ids); err != nil {
 			respondError(c, http.StatusBadGateway, "校验种子失败: "+err.Error())
 			return
 		}
@@ -299,7 +299,7 @@ func (h *Handler) startTorrent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().StartTorrents(c.Request.Context(), []int64{id}); err != nil {
+	if err := h.rpc.StartTorrents(c.Request.Context(), []int64{id}); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -313,7 +313,7 @@ func (h *Handler) startNowTorrent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().StartTorrentsNow(c.Request.Context(), []int64{id}); err != nil {
+	if err := h.rpc.StartTorrentsNow(c.Request.Context(), []int64{id}); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -327,7 +327,7 @@ func (h *Handler) stopTorrent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().StopTorrents(c.Request.Context(), []int64{id}); err != nil {
+	if err := h.rpc.StopTorrents(c.Request.Context(), []int64{id}); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -341,7 +341,7 @@ func (h *Handler) verifyTorrent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().VerifyTorrents(c.Request.Context(), []int64{id}); err != nil {
+	if err := h.rpc.VerifyTorrents(c.Request.Context(), []int64{id}); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -355,7 +355,7 @@ func (h *Handler) reannounceTorrent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().ReannounceTorrents(c.Request.Context(), []int64{id}); err != nil {
+	if err := h.rpc.ReannounceTorrents(c.Request.Context(), []int64{id}); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -381,7 +381,7 @@ func (h *Handler) renameTorrent(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "缺少新的名称")
 		return
 	}
-	if err := h.rpc.Client().RenameFile(c.Request.Context(), id, body.Path, body.Name); err != nil {
+	if err := h.rpc.RenameFile(c.Request.Context(), id, body.Path, body.Name); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -411,7 +411,7 @@ func (h *Handler) moveTorrent(c *gin.Context) {
 	if body.Move != nil {
 		move = *body.Move
 	}
-	if err := h.rpc.Client().SetTorrentLocation(c.Request.Context(), id, body.Location, move); err != nil {
+	if err := h.rpc.SetTorrentLocation(c.Request.Context(), id, body.Location, move); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -432,7 +432,7 @@ func (h *Handler) queueMove(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "请求体无效")
 		return
 	}
-	if err := h.rpc.Client().QueueMove(c.Request.Context(), []int64{id}, body.Direction); err != nil {
+	if err := h.rpc.QueueMove(c.Request.Context(), []int64{id}, body.Direction); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -466,9 +466,9 @@ type torrentUpdateBody struct {
 	SeedIdleLimit       *int64    `json:"seedIdleLimit"`
 }
 
-// buildTorrentSetPayload 将请求体转换为 torrent-set 负载
-func buildTorrentSetPayload(body *torrentUpdateBody) trpc.TorrentSetPayload {
-	payload := trpc.TorrentSetPayload{
+// buildTorrentSetPayload 将请求体转换为下载器无关的修改请求
+func buildTorrentSetPayload(body *torrentUpdateBody) driver.TorrentPatch {
+	payload := driver.TorrentPatch{
 		Labels:              body.Labels,
 		BandwidthPriority:   body.BandwidthPriority,
 		TrackerList:         body.TrackerList,
@@ -488,34 +488,33 @@ func buildTorrentSetPayload(body *torrentUpdateBody) trpc.TorrentSetPayload {
 		SeedIdleMode:        body.SeedIdleMode,
 	}
 	if body.SeedIdleLimit != nil {
-		d := time.Duration(*body.SeedIdleLimit) * time.Minute
-		payload.SeedIdleLimit = &d
+		payload.SeedIdleLimitMin = body.SeedIdleLimit
 	}
 	if body.SeedRatioMode != nil {
-		srm := trpc.SeedRatioMode(*body.SeedRatioMode)
-		payload.SeedRatioMode = &srm
+		payload.SeedRatioMode = body.SeedRatioMode
 	}
 	return payload
 }
 
-// applyRawFields 应用库未实现的字段（sequentialDownload / tags）
+// applyRawFields 应用语义通用、但 Transmission RPC 库未封装的开关
+// （sequentialDownload / groups）。qBittorrent 驱动会把 groups 映射为分类。
 func (h *Handler) applyRawFields(ctx context.Context, ids []int64, body *torrentUpdateBody) error {
-	raw := map[string]any{}
-	if body.SequentialDownload != nil {
-		raw["sequentialDownload"] = *body.SequentialDownload
+	flags := driver.TorrentFlagPatch{
+		SequentialDownload: body.SequentialDownload,
 	}
 	if body.Groups != nil {
-		raw["groups"] = *body.Groups
+		groups := *body.Groups
+		flags.Groups = groups
 	}
-	if len(raw) == 0 {
+	if flags.Empty() {
 		return nil
 	}
-	err := h.rpc.Client().SetTorrentRawFields(ctx, ids, raw)
+	err := h.rpc.SetTorrentFlags(ctx, ids, flags)
 	if err != nil {
-		// 带宽组 / 顺序下载为 Transmission 4.x 字段，旧版本不识别：告警降级而非整体失败
+		// 顺序下载 / 带宽组为 Transmission 4.x 字段，旧版本不识别：告警降级而非整体失败
 		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "unrecognized") || strings.Contains(msg, "unknown key") {
-			slog.Warn("Transmission 不支持的种子字段已跳过", "err", err)
+		if strings.Contains(msg, "unrecognized") || strings.Contains(msg, "unknown key") || errors.Is(err, driver.ErrUnsupported) {
+			slog.Warn("当前下载器不支持的种子字段已跳过", "err", err)
 			return nil
 		}
 		return err
@@ -545,12 +544,12 @@ func (h *Handler) updateTorrent(c *gin.Context) {
 		if body.Move != nil {
 			move = *body.Move
 		}
-		if err := h.rpc.Client().SetTorrentLocation(c.Request.Context(), id, *body.Location, move); err != nil {
+		if err := h.rpc.SetTorrentLocation(c.Request.Context(), id, *body.Location, move); err != nil {
 			respondError(c, http.StatusBadGateway, err.Error())
 			return
 		}
 	}
-	if err := h.rpc.Client().SetTorrent(c.Request.Context(), []int64{id}, buildTorrentSetPayload(&body)); err != nil {
+	if err := h.rpc.SetTorrent(c.Request.Context(), []int64{id}, buildTorrentSetPayload(&body)); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -586,13 +585,13 @@ func (h *Handler) updateTorrents(c *gin.Context) {
 			move = *body.Move
 		}
 		for _, id := range body.IDs {
-			if err := h.rpc.Client().SetTorrentLocation(c.Request.Context(), id, *body.Location, move); err != nil {
+			if err := h.rpc.SetTorrentLocation(c.Request.Context(), id, *body.Location, move); err != nil {
 				respondError(c, http.StatusBadGateway, err.Error())
 				return
 			}
 		}
 	}
-	if err := h.rpc.Client().SetTorrent(c.Request.Context(), body.IDs, buildTorrentSetPayload(&body.torrentUpdateBody)); err != nil {
+	if err := h.rpc.SetTorrent(c.Request.Context(), body.IDs, buildTorrentSetPayload(&body.torrentUpdateBody)); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -628,7 +627,7 @@ func (h *Handler) moveTorrents(c *gin.Context) {
 		move = *body.Move
 	}
 	for _, id := range body.IDs {
-		if err := h.rpc.Client().SetTorrentLocation(c.Request.Context(), id, body.Location, move); err != nil {
+		if err := h.rpc.SetTorrentLocation(c.Request.Context(), id, body.Location, move); err != nil {
 			respondError(c, http.StatusBadGateway, err.Error())
 			return
 		}
@@ -644,7 +643,7 @@ func (h *Handler) deleteTorrent(c *gin.Context) {
 		return
 	}
 	deleteData := c.Query("deleteData") == "true"
-	if err := h.rpc.Client().RemoveTorrents(c.Request.Context(), []int64{id}, deleteData); err != nil {
+	if err := h.rpc.RemoveTorrents(c.Request.Context(), []int64{id}, deleteData); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -674,7 +673,7 @@ func (h *Handler) startTorrents(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().StartTorrents(c.Request.Context(), ids); err != nil {
+	if err := h.rpc.StartTorrents(c.Request.Context(), ids); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -688,7 +687,7 @@ func (h *Handler) startNowTorrents(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().StartTorrentsNow(c.Request.Context(), ids); err != nil {
+	if err := h.rpc.StartTorrentsNow(c.Request.Context(), ids); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -702,7 +701,7 @@ func (h *Handler) stopTorrents(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.rpc.Client().StopTorrents(c.Request.Context(), ids); err != nil {
+	if err := h.rpc.StopTorrents(c.Request.Context(), ids); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -724,7 +723,7 @@ func (h *Handler) deleteTorrents(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "缺少 ids")
 		return
 	}
-	if err := h.rpc.Client().RemoveTorrents(c.Request.Context(), body.IDs, body.DeleteData); err != nil {
+	if err := h.rpc.RemoveTorrents(c.Request.Context(), body.IDs, body.DeleteData); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -734,7 +733,7 @@ func (h *Handler) deleteTorrents(c *gin.Context) {
 // startAllTorrents 批量启动所有种子（传入空 ids 表示全部）
 func (h *Handler) startAllTorrents(c *gin.Context) {
 	defer h.hub.Bump()
-	if err := h.rpc.Client().StartTorrents(c.Request.Context(), []int64{}); err != nil {
+	if err := h.rpc.StartTorrents(c.Request.Context(), []int64{}); err != nil {
 		respondError(c, http.StatusBadGateway, "启动失败: "+err.Error())
 		return
 	}
@@ -744,7 +743,7 @@ func (h *Handler) startAllTorrents(c *gin.Context) {
 // pauseAllTorrents 批量暂停所有种子（传入空 ids 表示全部）
 func (h *Handler) pauseAllTorrents(c *gin.Context) {
 	defer h.hub.Bump()
-	if err := h.rpc.Client().StopTorrents(c.Request.Context(), []int64{}); err != nil {
+	if err := h.rpc.StopTorrents(c.Request.Context(), []int64{}); err != nil {
 		respondError(c, http.StatusBadGateway, "暂停失败: "+err.Error())
 		return
 	}
@@ -754,7 +753,7 @@ func (h *Handler) pauseAllTorrents(c *gin.Context) {
 // reannounceAllTorrents 对所有种子重新宣告 Tracker
 func (h *Handler) reannounceAllTorrents(c *gin.Context) {
 	defer h.hub.Bump()
-	if err := h.rpc.Client().ReannounceTorrents(c.Request.Context(), []int64{}); err != nil {
+	if err := h.rpc.ReannounceTorrents(c.Request.Context(), []int64{}); err != nil {
 		respondError(c, http.StatusBadGateway, "重新宣告失败: "+err.Error())
 		return
 	}

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import type { ServerInfo } from '@/types'
+import type { DownloaderKind, ServerInfo, SessionStatus } from '@/types'
 
 // 定时限速：周几位掩码（Transmission 语义：Mon=1 ... Sun=64，0=每天）
 const DAY_BITS = [
@@ -499,9 +499,11 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const [pass, setPass] = useState('')
   const [saving, setSaving] = useState(false)
   const [pollInterval, setPollInterval] = useState('2s')
+  // 下载器类型：决定地址占位符与提交的 TR_TYPE（qBittorrent 填 WebUI 根地址）
+  const [kind, setKind] = useState<DownloaderKind>('transmission')
   // 连接栏是本弹窗唯一的草稿区，存一份已保存快照用于判断是否"有未保存改动"
-  const [connSnapshot, setConnSnapshot] = useState({ url: '', user: '', pollInterval: '2s' })
-  const [status, setStatus] = useState<{ connected: boolean; version?: string; error?: string } | null>(null)
+  const [connSnapshot, setConnSnapshot] = useState({ url: '', user: '', pollInterval: '2s', type: 'transmission' as DownloaderKind })
+  const [status, setStatus] = useState<SessionStatus | null>(null)
   const [portOpen, setPortOpen] = useState<boolean | null>(null)
   const [testingPort, setTestingPort] = useState(false)
   const [blocklistUpdating, setBlocklistUpdating] = useState(false)
@@ -518,19 +520,23 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   // 避免 session 变化（如 patchSession 回写）导致整个表单被重置
   const sessionRef = useRef(session)
   sessionRef.current = session
+  // 当前下载器能力自述：连接状态与会话都会带；qBittorrent 下据此隐藏不支持的入口
+  const caps = status?.caps ?? session?.caps
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
     request(clientGetSettings()).then((d) => {
       if (cancelled) return
-      const data = d as { url: string; user: string; pollInterval?: string }
+      const data = d as { url: string; user: string; type?: DownloaderKind; pollInterval?: string }
       const pi = data.pollInterval || '2s'
+      const k: DownloaderKind = data.type === 'qbittorrent' ? 'qbittorrent' : 'transmission'
       setUrl(data.url)
       setUser(data.user)
       setPass('')
+      setKind(k)
       setPollInterval(pi)
-      setConnSnapshot({ url: data.url, user: data.user, pollInterval: pi })
+      setConnSnapshot({ url: data.url, user: data.user, pollInterval: pi, type: k })
     }).catch(() => {})
     sessionApi.status().then((s) => { if (!cancelled) setStatus(s) }).catch(() => { if (!cancelled) setStatus(null) })
     setPortOpen(null)
@@ -551,10 +557,10 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     if (!url.trim()) return
     setSaving(true)
     try {
-      await request(clientPutSettings({ url: url.trim(), user, pass, pollInterval }))
+      await request(clientPutSettings({ type: kind, url: url.trim(), user, pass, pollInterval }))
       toast.success(t('toast.updated'))
       setPass('')
-      setConnSnapshot({ url: url.trim(), user, pollInterval })
+      setConnSnapshot({ url: url.trim(), user, pollInterval, type: kind })
       // 兜底轮询间隔立即跟随新设置，无需刷新页面
       setStorePollInterval(pollInterval)
       sessionApi.get().then(setSession).catch(() => setSession(null))
@@ -571,6 +577,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     url.trim() !== connSnapshot.url ||
     user !== connSnapshot.user ||
     pass !== '' ||
+    kind !== connSnapshot.type ||
     pollInterval !== connSnapshot.pollInterval
 
   const patchSession = async (patch: Record<string, unknown>) => {
@@ -687,12 +694,22 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
   const connectionPane = (
     <div className="space-y-3">
+      <Row label={t('session.downloaderType')} hint={t('session.typeHint')}>
+        <SmallSelect
+          value={kind}
+          onValueChange={(v) => setKind(v as DownloaderKind)}
+          options={[
+            { value: 'transmission', label: 'Transmission' },
+            { value: 'qbittorrent', label: 'qBittorrent' },
+          ]}
+        />
+      </Row>
       <div className="space-y-1">
         <span className="text-body text-gray-600 dark:text-gray-300">{t('session.transmissionUrl')}</span>
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="http://localhost:9091/transmission/rpc"
+          placeholder={kind === 'qbittorrent' ? 'http://localhost:8080' : 'http://localhost:9091/transmission/rpc'}
           className="h-8 text-footnote"
         />
       </div>
@@ -723,6 +740,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           ]}
         />
       </Row>
+      {caps?.portTest !== false && (
       <Row label={t('session.portTest')} hint={t('session.portTestHint')}>
         <div className="flex items-center gap-2">
           {portOpen !== null && (
@@ -735,6 +753,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </Button>
         </div>
       </Row>
+      )}
       {/* 保存只作用于本栏：放在栏内而不是全局页脚，避免被当成「整个设置的提交/取消」 */}
       <div className="flex items-center justify-end gap-2 pt-2">
         {connDirty && <span className="text-caption1 text-amber-600 dark:text-amber-400">{t('session.unsavedHint')}</span>}
@@ -856,12 +875,16 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               <Row label={t('session.startAdded')} hint={t('session.startAddedHint')}>
                 <Switch checked={session.startAdded} onCheckedChange={(v) => patchSession({ startAdded: v })} />
               </Row>
-              <Row label={t('session.incompleteDirEnabled')} hint={t('session.incompleteDirEnabledHint')}>
-                <Switch checked={session.incompleteDirEnabled} onCheckedChange={(v) => patchSession({ incompleteDirEnabled: v })} />
-              </Row>
-              <Row label={t('session.incompleteDir')}>
-                <DirInput field="incompleteDir" />
-              </Row>
+              {caps?.incompleteDir !== false && (
+                <>
+                  <Row label={t('session.incompleteDirEnabled')} hint={t('session.incompleteDirEnabledHint')}>
+                    <Switch checked={session.incompleteDirEnabled} onCheckedChange={(v) => patchSession({ incompleteDirEnabled: v })} />
+                  </Row>
+                  <Row label={t('session.incompleteDir')}>
+                    <DirInput field="incompleteDir" />
+                  </Row>
+                </>
+              )}
               <Row label={t('session.renamePartialFiles')} hint={t('session.renamePartialFilesHint')}>
                 <Switch checked={session.renamePartialFiles} onCheckedChange={(v) => patchSession({ renamePartialFiles: v })} />
               </Row>
@@ -879,9 +902,11 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           title: t('session.seeding'),
           children: (
             <div className="space-y-1">
-              <Row label={t('session.seedRatioLimit')} hint={t('session.seedRatioLimitHint')}>
-                <NumInput value={session.seedRatioLimit} min={0} step={0.5} onChange={(v) => v != null && patchSession({ seedRatioLimit: v })} />
-              </Row>
+              {caps?.globalSeedRatio !== false && (
+                <Row label={t('session.seedRatioLimit')} hint={t('session.seedRatioLimitHint')}>
+                  <NumInput value={session.seedRatioLimit} min={0} step={0.5} onChange={(v) => v != null && patchSession({ seedRatioLimit: v })} />
+                </Row>
+              )}
               <Row label={t('session.idleSeedingLimit')} hint={t('session.idleSeedingLimitHint')}>
                 <div className="flex items-center gap-2">
                   <Switch checked={session.idleSeedingLimitEnabled} onCheckedChange={(v) => patchSession({ idleSeedingLimitEnabled: v })} />
@@ -1073,18 +1098,22 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           title: t('session.other'),
           children: (
             <div className="space-y-1">
-              <Row label={t('session.blocklistEnabled')} hint={t('session.blocklistEnabledHint')}>
-                <Switch checked={blocklistEnabled} onCheckedChange={(v) => { setBlocklistEnabled(v); void patchSession({ blocklistEnabled: v }) }} />
-              </Row>
-              <Row label={t('session.blocklistSize')}>
-                <span className="text-body text-gray-500">{session.blocklistSize.toLocaleString()}</span>
-              </Row>
-              <div className="flex items-center gap-2 py-1.5">
-                <Input value={blocklistUrl} onChange={(e) => setBlocklistUrl(e.target.value)} placeholder={t('session.blocklistUrl')} className="h-8 text-footnote flex-1" />
-                <Button size="sm" className="h-8 text-footnote shrink-0" disabled={blocklistUpdating} onClick={updateBlocklist}>
-                  {blocklistUpdating ? t('common.loading') : t('session.blocklistUpdate')}
-                </Button>
-              </div>
+              {caps?.blocklist !== false && (
+                <>
+                  <Row label={t('session.blocklistEnabled')} hint={t('session.blocklistEnabledHint')}>
+                    <Switch checked={blocklistEnabled} onCheckedChange={(v) => { setBlocklistEnabled(v); void patchSession({ blocklistEnabled: v }) }} />
+                  </Row>
+                  <Row label={t('session.blocklistSize')}>
+                    <span className="text-body text-gray-500">{session.blocklistSize.toLocaleString()}</span>
+                  </Row>
+                  <div className="flex items-center gap-2 py-1.5">
+                    <Input value={blocklistUrl} onChange={(e) => setBlocklistUrl(e.target.value)} placeholder={t('session.blocklistUrl')} className="h-8 text-footnote flex-1" />
+                    <Button size="sm" className="h-8 text-footnote shrink-0" disabled={blocklistUpdating} onClick={updateBlocklist}>
+                      {blocklistUpdating ? t('common.loading') : t('session.blocklistUpdate')}
+                    </Button>
+                  </div>
+                </>
+              )}
               <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-700 space-y-1">
                 <Row label={t('session.scriptAdded')} hint={t('session.scriptAddedHint')}>
                   <Switch checked={session.scriptTorrentAddedEnabled} onCheckedChange={(v) => patchSession({ scriptTorrentAddedEnabled: v })} />
@@ -1137,7 +1166,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               status.connected ? (
                 // nowrap：版本串较长时不允许在胶囊内折行，放不下就让整个徽章换到下一行
                 <Badge className="min-w-0 max-w-full whitespace-nowrap bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
-                  {t('common.connected')}{status.version ? ` · ${status.version}` : ''}
+                  {t('common.connected')}{status.version ? ` · ${status.version}` : ''}{status.type ? ` · ${status.type === 'qbittorrent' ? 'qBittorrent' : 'Transmission'}` : ''}
                 </Badge>
               ) : (
                 <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">{t('common.disconnected')}</Badge>
@@ -1170,12 +1199,23 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                     {t('common.delete')}
                   </Button>
                 </div>
-                <Input
-                  value={server.url}
-                  onChange={(e) => { const s = [...servers]; s[idx] = { ...s[idx], url: e.target.value }; void saveServers(s) }}
-                  className="w-full h-8 text-footnote"
-                  placeholder="http://host:9091/transmission/rpc"
-                />
+                <div className="flex items-center gap-2">
+                  <SmallSelect
+                    className="w-[130px] shrink-0"
+                    value={server.type ?? 'transmission'}
+                    onValueChange={(v) => { const s = [...servers]; s[idx] = { ...s[idx], type: v as DownloaderKind }; saveServers(s) }}
+                    options={[
+                      { value: 'transmission', label: 'Transmission' },
+                      { value: 'qbittorrent', label: 'qBittorrent' },
+                    ]}
+                  />
+                  <Input
+                    value={server.url}
+                    onChange={(e) => { const s = [...servers]; s[idx] = { ...s[idx], url: e.target.value }; saveServers(s) }}
+                    className="w-full h-8 text-footnote"
+                    placeholder={(server.type ?? 'transmission') === 'qbittorrent' ? 'http://host:8080' : 'http://host:9091/transmission/rpc'}
+                  />
+                </div>
                 <div className="flex items-center gap-2">
                   <Input
                     value={server.user}
@@ -1201,7 +1241,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                 </div>
               </div>
             ))}
-            <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => saveServers([...servers, { name: '', url: '', user: '', pass: '', hasPass: false, enabled: true }])}>
+            <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => saveServers([...servers, { name: '', type: 'transmission', url: '', user: '', pass: '', hasPass: false, enabled: true }])}>
               + {t('session.multiServer.addServer')}
             </Button>
             {servers.length > 1 && (
@@ -1256,6 +1296,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
 const clientGetSettings = () => client.get('/settings')
 const clientPutSettings = (body: {
+  type?: DownloaderKind
   url?: string
   user?: string
   pass?: string

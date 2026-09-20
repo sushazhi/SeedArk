@@ -122,7 +122,7 @@ func (s *Service) plan(ctx context.Context) ([]planItem, error) {
 		return nil, nil
 	}
 	// 动作按 ID 批量下发，必须用最新列表：缓存里已被用户删掉的种子会让整批 RPC 失败
-	torrents, err := s.manager.Client().GetTorrentsFresh(ctx)
+	torrents, err := s.manager.GetTorrentsFresh(ctx)
 	if err != nil {
 		slog.Warn("做种策略：获取种子列表失败", "err", err)
 		return nil, err
@@ -132,7 +132,7 @@ func (s *Service) plan(ctx context.Context) ([]planItem, error) {
 	// RPC 取全量，失败则退回仅按主机名匹配
 	siteNames := map[int64][]string{}
 	if needsSites(&st, rules) {
-		if m, err := s.manager.Client().GetTorrentSites(ctx); err == nil {
+		if m, err := s.manager.GetTorrentSites(ctx); err == nil {
 			siteNames = m
 		} else {
 			slog.Warn("做种策略：获取站点列表失败，本轮仅按 tracker 主机名匹配", "err", err)
@@ -270,9 +270,9 @@ func (s *Service) execute(ctx context.Context, plan []planItem, result *Result) 
 		pause := rule.Action == state.PolicyActionPause
 		var err error
 		if pause {
-			err = s.manager.Client().StopTorrents(ctx, ids)
+			err = s.manager.StopTorrents(ctx, ids)
 		} else {
-			err = s.manager.Client().RemoveTorrents(ctx, ids, rule.Action == state.PolicyActionDeleteData)
+			err = s.manager.RemoveTorrents(ctx, ids, rule.Action == state.PolicyActionDeleteData)
 		}
 		if err != nil {
 			result.Failed += len(items)

@@ -15,7 +15,9 @@ services:
       # 仅本机或经反代访问时，改成 "127.0.0.1:8200:8200"
       - "8200:8200"
     environment:
-      # Transmission RPC 地址（同机用 host.docker.internal，同 compose 网络用服务名）
+      # 下载器类型：transmission / qbittorrent（qBittorrent 时 TR_URL 填 WebUI 根地址）
+      TR_TYPE: transmission
+      # 下载器 RPC 地址（同机用 host.docker.internal，同 compose 网络用服务名）
       TR_URL: http://host.docker.internal:9091/transmission/rpc
       TR_USER: ""
       TR_PASS: ""

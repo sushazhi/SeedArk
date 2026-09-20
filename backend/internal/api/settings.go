@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trpanel/backend/internal/config"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/rpc"
 )
 
@@ -15,14 +16,15 @@ import (
 // MCP 接入令牌明文返回：它只用于外部 AI 客户端接入（能力面小于管理口令），
 // 且用户需要复制到 AI 客户端配置里，不回显就无法接入
 func (h *Handler) getSettings(c *gin.Context) {
-	url, user, _ := h.rpc.Credentials()
+	cred := h.rpc.Credentials()
 	var mcpToken string
 	if t := h.mcp.Token.Load(); t != nil {
 		mcpToken = *t
 	}
 	respond(c, gin.H{
-		"url":               url,
-		"user":              user,
+		"type":              cred.Type.String(),
+		"url":               cred.URL,
+		"user":              cred.User,
 		"pollInterval":      h.hub.getPollInterval().String(),
 		"mcpEnabled":        h.mcp.Enabled.Load(),
 		"mcpAllowDelete":    h.mcp.AllowDelete.Load(),
@@ -36,6 +38,7 @@ func (h *Handler) getSettings(c *gin.Context) {
 // 持久化统一合并当前生效值整文件写入 .env.local，两类设置互不覆盖
 func (h *Handler) updateSettings(c *gin.Context) {
 	var body struct {
+		Type              string  `json:"type"`
 		URL               string  `json:"url"`
 		User              string  `json:"user"`
 		Pass              string  `json:"pass"`
@@ -135,23 +138,34 @@ func (h *Handler) updateSettings(c *gin.Context) {
 	if body.URL != "" {
 		// 密码未提供时沿用现有凭据：前端出于安全不回显明文密码，
 		// 未修改密码直接保存时 body.Pass 为空，若用它重新探测会导致 502 认证失败
+		old := h.rpc.Credentials()
 		if body.Pass == "" {
-			_, _, body.Pass = h.rpc.Credentials()
+			body.Pass = old.Pass
+		}
+		// 未提交类型时沿用当前类型：设置界面只在切换下载器时才带该字段
+		cred := rpc.Credentials{
+			Type: driver.NormalizeKind(body.Type),
+			URL:  body.URL,
+			User: body.User,
+			Pass: body.Pass,
+		}
+		if body.Type == "" {
+			cred.Type = old.Type
 		}
 
-		// 先测试新配置连通性
-		probe, err := rpc.New(body.URL, body.User, body.Pass)
+		// 先测试新配置连通性（按类型探测对应下载器）
+		probe, err := rpc.NewProbe(cred)
 		if err != nil {
 			respondError(c, http.StatusBadRequest, "配置无效: "+err.Error())
 			return
 		}
 		if _, err := probe.Ping(c.Request.Context()); err != nil {
-			respondError(c, http.StatusBadGateway, "无法连接 Transmission: "+err.Error())
+			respondError(c, http.StatusBadGateway, "无法连接"+cred.Type.Label()+": "+err.Error())
 			return
 		}
 
 		// 先热更新运行中的客户端（内存切换成功后再持久化，避免 .env.local 与内存不一致）
-		if err := h.rpc.Reconfigure(body.URL, body.User, body.Pass); err != nil {
+		if err := h.rpc.Reconfigure(cred); err != nil {
 			respondError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -160,18 +174,16 @@ func (h *Handler) updateSettings(c *gin.Context) {
 	// 持久化到数据目录的 .env.local：未提交的类目沿用当前生效值。
 	// 直接写入本次算出的目标值（不读内存），落盘成功后再更新内存，
 	// 避免写盘失败时留下「内存已改、文件未改」的不一致状态
-	url, user, pass := body.URL, body.User, body.Pass
-	if url == "" {
-		url, user, pass = h.rpc.Credentials()
-	}
+	cred := h.rpc.Credentials()
 	pollStr := body.PollInterval
 	if pollStr == "" {
 		pollStr = h.hub.getPollInterval().String()
 	}
 	saved := config.LocalSettings{
-		TransmissionURL:   url,
-		User:              user,
-		Pass:              pass,
+		Type:              cred.Type.String(),
+		TransmissionURL:   cred.URL,
+		User:              cred.User,
+		Pass:              cred.Pass,
 		PollInterval:      pollStr,
 		MCPEnabled:        targetEnabled,
 		MCPAllowDelete:    targetAllowDelete,
@@ -188,6 +200,8 @@ func (h *Handler) updateSettings(c *gin.Context) {
 	if pollInterval > 0 {
 		h.hub.SetPollInterval(pollInterval)
 	}
+	// 下载器类型可能已变，重新计算聚合成员
+	h.SyncAggregateTargets()
 
 	// MCP 开关：落盘成功后统一应用，切换即时生效
 	h.mcp.Enabled.Store(targetEnabled)

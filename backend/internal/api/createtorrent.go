@@ -149,7 +149,7 @@ func (h *Handler) createTorrent(c *gin.Context) {
 			// 建种完成后自动添加到 Transmission（暂停态可选）
 			ctx, cancelAdd := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancelAdd()
-			if _, err := h.rpc.Client().AddTorrentByFile(ctx, data, body.DownloadDir, body.Paused, body.Labels, nil, nil, nil); err != nil {
+			if _, err := h.rpc.AddTorrentByFile(ctx, data, body.DownloadDir, body.Paused, body.Labels, nil, nil, nil); err != nil {
 				slog.Error("后端建种后自动添加失败", "err", err)
 				job.markAutoAdded("种子已生成，但自动添加失败: " + rpc.SanitizeClientMsg(err.Error()))
 			} else {

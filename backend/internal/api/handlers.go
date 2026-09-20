@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trpanel/backend/internal/automove"
 	"github.com/trpanel/backend/internal/config"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/middleware"
 	"github.com/trpanel/backend/internal/models"
 	"github.com/trpanel/backend/internal/platform"
@@ -92,18 +94,59 @@ func (h *Handler) setMCPPort(port string) {
 	h.mcpPortMu.Unlock()
 }
 
+// credentialsOf 把持久化的一台服务器条目转成连接凭据
+func credentialsOf(s state.Server) rpc.Credentials {
+	return rpc.Credentials{
+		Type: driver.NormalizeKind(s.Type),
+		URL:  s.URL,
+		User: s.User,
+		Pass: s.Pass,
+	}
+}
+
+// syncAggregateTargets 按持久化的服务器列表刷新聚合成员。
+// 只要有 2 台以上启用的服务器，面板就进入「聚合视图」：种子列表与统计为
+// 所有服务器合并结果，写操作按种子 ID 路由回各自的服务器。
+func (h *Handler) SyncAggregateTargets() {
+	st := h.state.Get()
+	targets := make([]rpc.Target, 0, len(st.Servers))
+	for i, s := range st.Servers {
+		if !s.Enabled || s.URL == "" {
+			continue
+		}
+		targets = append(targets, rpc.Target{
+			Index:   i,
+			Kind:    driver.NormalizeKind(s.Type),
+			URL:     s.URL,
+			User:    s.User,
+			Pass:    s.Pass,
+			Enabled: true,
+		})
+	}
+	// 只配了一台时关闭聚合：此时没有跨服务器冲突可言，
+	// 沿用「单服务器」路径可以省掉一次并发拉取并保持原有 ID 语义
+	if len(targets) < 2 {
+		targets = nil
+	}
+	h.rpc.SetTargets(targets)
+	if h.rpc.AggregateEnabled() {
+		slog.Info("已启用多下载器聚合视图", "servers", len(h.rpc.AggregateIndexes()))
+	}
+}
+
 // currentLocalSettings 汇总当前生效的连接与 MCP 配置。
 // .env.local 是整文件重写，任何保存入口都必须携带全部受管键；集中在此构造可
 // 避免某个入口漏传（切换服务器曾漏传 MCP_TOKEN，导致令牌被静默清空）。
-func (h *Handler) currentLocalSettings(url, user, pass, poll string) config.LocalSettings {
+func (h *Handler) currentLocalSettings(cred rpc.Credentials, poll string) config.LocalSettings {
 	var token string
 	if t := h.mcp.Token.Load(); t != nil {
 		token = *t
 	}
 	return config.LocalSettings{
-		TransmissionURL:   url,
-		User:              user,
-		Pass:              pass,
+		Type:              cred.Type.String(),
+		TransmissionURL:   cred.URL,
+		User:              cred.User,
+		Pass:              cred.Pass,
 		PollInterval:      poll,
 		MCPEnabled:        h.mcp.Enabled.Load(),
 		MCPAllowDelete:    h.mcp.AllowDelete.Load(),
@@ -240,6 +283,17 @@ func respond(c *gin.Context, data interface{}) {
 // 统一经 rpc.SanitizeClientMsg 处理：上游 RPC 错误可能内嵌带凭据的地址，不做脱敏即等于泄露密码。
 func respondError(c *gin.Context, status int, msg string) {
 	c.JSON(status, models.Error(rpc.SanitizeClientMsg(msg)))
+}
+
+// respondBackendError 下载器调用失败的统一响应。
+// 「该下载器不支持此能力」是能力差异，不是上游故障：用 501 并给出说明，
+// 让界面能据此隐藏入口，而不是弹一个看起来像连接断开的红色错误。
+func respondBackendError(c *gin.Context, action string, err error) {
+	if errors.Is(err, driver.ErrUnsupported) {
+		c.JSON(http.StatusNotImplemented, models.Error(rpc.SanitizeClientMsg(action+"："+err.Error())))
+		return
+	}
+	respondError(c, http.StatusBadGateway, action+": "+err.Error())
 }
 
 // persistState 执行状态修改并持久化。

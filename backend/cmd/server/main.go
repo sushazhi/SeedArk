@@ -23,6 +23,7 @@ import (
 	"github.com/trpanel/backend/internal/api"
 	"github.com/trpanel/backend/internal/automove"
 	"github.com/trpanel/backend/internal/config"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/mcpserver"
 	"github.com/trpanel/backend/internal/middleware"
 	"github.com/trpanel/backend/internal/platform"
@@ -43,10 +44,16 @@ func main() {
 	}
 	setupLogLevel(cfg.LogLevel)
 
-	// 创建 RPC 管理器（支持运行期热更新连接）
-	manager, err := rpc.NewManager(cfg.TransmissionURL, cfg.User, cfg.Password)
+	// 创建下载器管理器（支持运行期热更新连接与多服务器聚合）
+	kind := driver.NormalizeKind(cfg.TransmissionType)
+	manager, err := rpc.NewManager(rpc.Credentials{
+		Type: kind,
+		URL:  cfg.TransmissionURL,
+		User: cfg.User,
+		Pass: cfg.Password,
+	})
 	if err != nil {
-		slog.Error("初始化 Transmission 客户端失败", "err", err)
+		slog.Error("初始化下载器客户端失败", "kind", kind, "err", err)
 		os.Exit(1)
 	}
 
@@ -54,10 +61,10 @@ func main() {
 	defer cancelCtx()
 
 	// 启动时检测连接
-	if version, err := manager.Client().Ping(ctx); err != nil {
-		slog.Warn("Transmission 连接失败，请检查 TR_URL/TR_USER/TR_PASS", "err", err)
+	if version, err := manager.Ping(ctx); err != nil {
+		slog.Warn("下载器连接失败，请检查 TR_TYPE/TR_URL/TR_USER/TR_PASS", "kind", kind, "err", err)
 	} else {
-		slog.Info("已连接 Transmission", "version", version)
+		slog.Info("已连接下载器", "kind", kind, "version", version)
 	}
 
 	// 宿主平台：把网关前缀、安全策略、文件访问白名单等环境差异收敛到一处。
@@ -113,6 +120,9 @@ func main() {
 	}
 	handler := api.NewHandler(manager, hub, geo, store, moveSvc, policySvc, speedSvc, cfg, plat, mcpCtl)
 	handler.Register(r, gatewayPrefix)
+	// 按持久化的服务器列表建立聚合成员：配置了 2 台以上启用服务器时，
+	// 面板进入聚合视图，Transmission 与 qBittorrent 可同时被管理
+	handler.SyncAggregateTargets()
 	hub.Start(ctx)
 	go moveSvc.Run(ctx)
 	go policySvc.Run(ctx)

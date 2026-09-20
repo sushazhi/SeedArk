@@ -635,7 +635,9 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
         if (d.groups) setTorrentGroups(d.groups)
       }).catch(() => {})
       // 带宽组列表（Transmission 4.x；旧版本返回失败时静默隐藏该区块）
-      sessionApi.groups().then((gs) => { if (!cancelled) setAllGroups(gs.map((g) => g.name)) }).catch(() => {})
+      if (useAppStore.getState().session?.caps?.bandwidthGroups !== false) {
+        sessionApi.groups().then((gs) => { if (!cancelled) setAllGroups(gs.map((g) => g.name)) }).catch(() => {})
+      }
     }
     return () => { cancelled = true }
   }, [target, t])

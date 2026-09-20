@@ -364,6 +364,8 @@ export default {
   session: {
     title: '设置',
     connection: '连接配置',
+    downloaderType: '下载器类型',
+    typeHint: 'Transmission 走 RPC，qBittorrent 填 WebUI 地址（支持 5.2+ API Key）',
     transmissionUrl: 'Transmission 地址',
     username: '用户名',
     password: '密码',
@@ -487,7 +489,8 @@ export default {
     daySun: '周日',
     multiServer: {
       title: '多服务器管理',
-      hint: '管理多个 Transmission 服务器，可快速切换',
+      hint: '启用 2 台及以上即开启聚合视图：Transmission 与 qBittorrent 混合部署也可同时管理（列表合并、写操作自动路由到各自服务器）',
+      serverType: '类型',
       serverName: '服务器名称',
       server: '服务器',
       addServer: '添加服务器',

@@ -194,7 +194,7 @@ func (h *Hub) Bump() { h.Signal() }
 func (h *Hub) pollLocked() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	torrents, err := h.rpc.Client().GetTorrentsFresh(ctx)
+	torrents, err := h.rpc.GetTorrentsFresh(ctx)
 	if err != nil {
 		slog.Error("轮询种子失败", "err", err)
 		return

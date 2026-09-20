@@ -54,7 +54,7 @@ func (s *Service) Tick(ctx context.Context) error {
 	if !hasEnabled {
 		return nil
 	}
-	torrents, err := s.manager.Client().GetTorrents(ctx)
+	torrents, err := s.manager.GetTorrents(ctx)
 	if err != nil {
 		slog.Warn("自动文件管理：获取种子列表失败", "err", err)
 		return err
@@ -71,7 +71,7 @@ func (s *Service) Tick(ctx context.Context) error {
 		tt := *t
 		// 站点规则需要 Trackers 信息（列表接口不返回，按需拉取详情）
 		if hasSites && len(tt.Trackers) == 0 {
-			if detail, err := s.manager.Client().GetTorrentDetail(ctx, tt.ID); err == nil && detail != nil {
+			if detail, err := s.manager.GetTorrentDetail(ctx, tt.ID); err == nil && detail != nil {
 				tt.Trackers = detail.Trackers
 			}
 		}
@@ -84,7 +84,7 @@ func (s *Service) Tick(ctx context.Context) error {
 			_ = s.store.Update(func(st2 *state.State) { st2.ProcessedMoves[tt.HashString] = strconv.FormatInt(state.NowUnix(), 10) })
 			continue
 		}
-		if err := s.manager.Client().SetTorrentLocation(ctx, tt.ID, rule.TargetDir, true); err != nil {
+		if err := s.manager.SetTorrentLocation(ctx, tt.ID, rule.TargetDir, true); err != nil {
 			slog.Warn("自动文件管理：移动失败", "torrent", tt.Name, "to", rule.TargetDir, "err", err)
 			continue
 		}

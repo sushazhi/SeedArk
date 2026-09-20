@@ -123,9 +123,32 @@ export interface Torrent {
   pieceSize?: number
 }
 
+// 下载器类型
+export type DownloaderKind = 'transmission' | 'qbittorrent'
+
+// 下载器能力自述：界面据此隐藏当前下载器不支持的入口
+export interface DownloaderCaps {
+  bandwidthGroups: boolean
+  blocklist: boolean
+  freeSpace: boolean
+  portTest: boolean
+  sequentialDownload: boolean
+  queueMove: boolean
+  renameFile: boolean
+  systemCommand: boolean
+  altSpeedSchedule: boolean
+  trackerReplace: boolean
+  pieceBitmap: boolean
+  incompleteDir: boolean
+  scriptHooks: boolean
+  globalSeedRatio: boolean
+}
+
 // 会话信息
 export interface Session {
   version: string
+  type?: DownloaderKind
+  caps?: DownloaderCaps
   rpcVersion: number
   downloadDir: string
   speedLimitDown: number
@@ -179,7 +202,12 @@ export interface Session {
 export interface SessionStatus {
   connected: boolean
   version?: string
+  type?: DownloaderKind
+  caps?: DownloaderCaps
   error?: string
+  // 聚合视图：同时管理多台下载器（tr + qb 混合）
+  aggregate?: boolean
+  aggregateErrors?: string[]
 }
 
 // 会话统计
@@ -291,6 +319,8 @@ export interface FilterOptions {
 export interface ServerInfo {
   index?: number
   name: string
+  // 下载器类型：transmission（默认）| qbittorrent
+  type: DownloaderKind
   url: string
   user: string
   pass?: string

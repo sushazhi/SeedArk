@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
-	trpc "github.com/hekmon/transmissionrpc/v3"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/models"
 	"github.com/trpanel/backend/internal/rpc"
 )
@@ -152,7 +152,7 @@ func (s *Server) listTorrents(ctx context.Context, _ *mcp.CallToolRequest, in li
 	if status != "" && status != "finished" && status != "error" && statusGroups[status] == nil {
 		return nil, nil, fmt.Errorf("status 无效: %q，可选 downloading/seeding/paused/checking/finished/error", in.Status)
 	}
-	torrents, err := s.manager.Client().GetTorrents(ctx)
+	torrents, err := s.manager.GetTorrents(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -266,7 +266,7 @@ type idIn struct {
 }
 
 func (s *Server) getTorrent(ctx context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, any, error) {
-	t, err := s.manager.Client().GetTorrentDetail(ctx, in.ID)
+	t, err := s.manager.GetTorrentDetail(ctx, in.ID)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -278,11 +278,11 @@ func (s *Server) getTorrent(ctx context.Context, _ *mcp.CallToolRequest, in idIn
 // ---- get_stats ----
 
 func (s *Server) getStats(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
-	stats, err := s.manager.Client().GetSessionStats(ctx)
+	stats, err := s.manager.GetSessionStats(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
-	sess, err := s.manager.Client().GetSession(ctx)
+	sess, err := s.manager.GetSession(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -354,7 +354,7 @@ func (s *Server) addTorrent(ctx context.Context, _ *mcp.CallToolRequest, in addT
 			slog.Warn("MCP 按路径添加种子被拒", "path", in.Path, "err", readErr)
 			return nil, nil, errors.New("种子路径不可用")
 		}
-		id, err = s.manager.Client().AddTorrentByFile(ctx, data, in.DownloadDir, paused, in.Labels, nil, nil, nil)
+		id, err = s.manager.AddTorrentByFile(ctx, data, in.DownloadDir, paused, in.Labels, nil, nil, nil)
 	case in.Link != "":
 		link := strings.TrimSpace(in.Link)
 		// 与 REST 的按链接添加一致：Transmission 的 filename 支持本地路径，
@@ -362,7 +362,7 @@ func (s *Server) addTorrent(ctx context.Context, _ *mcp.CallToolRequest, in addT
 		if !rpc.ValidTorrentLink(link) {
 			return nil, nil, errors.New("link 仅支持 http(s) 链接或磁力链接")
 		}
-		id, err = s.manager.Client().AddTorrentByURL(ctx, link, in.DownloadDir, paused, in.Labels, nil)
+		id, err = s.manager.AddTorrentByURL(ctx, link, in.DownloadDir, paused, in.Labels, nil)
 	default:
 		return nil, nil, errors.New("缺少 link 或 path")
 	}
@@ -396,7 +396,7 @@ func (s *Server) startTorrents(ctx context.Context, _ *mcp.CallToolRequest, in i
 	if len(in.IDs) == 0 {
 		return nil, nil, errors.New("缺少 ids")
 	}
-	if err := s.manager.Client().StartTorrents(ctx, in.IDs); err != nil {
+	if err := s.manager.StartTorrents(ctx, in.IDs); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -407,7 +407,7 @@ func (s *Server) stopTorrents(ctx context.Context, _ *mcp.CallToolRequest, in id
 	if len(in.IDs) == 0 {
 		return nil, nil, errors.New("缺少 ids")
 	}
-	if err := s.manager.Client().StopTorrents(ctx, in.IDs); err != nil {
+	if err := s.manager.StopTorrents(ctx, in.IDs); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -426,7 +426,7 @@ func (s *Server) removeTorrents(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if len(in.IDs) == 0 {
 		return nil, nil, errors.New("缺少 ids")
 	}
-	if err := s.manager.Client().RemoveTorrents(ctx, in.IDs, in.DeleteData); err != nil {
+	if err := s.manager.RemoveTorrents(ctx, in.IDs, in.DeleteData); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -443,7 +443,7 @@ type getFreeSpaceIn struct {
 func (s *Server) getFreeSpace(ctx context.Context, _ *mcp.CallToolRequest, in getFreeSpaceIn) (*mcp.CallToolResult, any, error) {
 	path := strings.TrimSpace(in.Path)
 	if path == "" {
-		sess, err := s.manager.Client().GetSession(ctx)
+		sess, err := s.manager.GetSession(ctx)
 		if err != nil {
 			return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 		}
@@ -452,7 +452,7 @@ func (s *Server) getFreeSpace(ctx context.Context, _ *mcp.CallToolRequest, in ge
 		}
 		path = sess.DownloadDir
 	}
-	free, total, err := s.manager.Client().GetFreeSpace(ctx, path)
+	free, total, err := s.manager.GetFreeSpace(ctx, path)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -462,7 +462,7 @@ func (s *Server) getFreeSpace(ctx context.Context, _ *mcp.CallToolRequest, in ge
 // ---- get_session_config ----
 
 func (s *Server) getSessionConfig(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
-	sess, err := s.manager.Client().GetSession(ctx)
+	sess, err := s.manager.GetSession(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -496,7 +496,7 @@ func (s *Server) getSessionConfig(ctx context.Context, _ *mcp.CallToolRequest, _
 // ---- test_port ----
 
 func (s *Server) testPort(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
-	open, err := s.manager.Client().TestPort(ctx)
+	open, err := s.manager.TestPort(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -506,7 +506,7 @@ func (s *Server) testPort(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn
 // ---- get_torrent_sites ----
 
 func (s *Server) getTorrentSites(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
-	m, err := s.manager.Client().GetTorrentSites(ctx)
+	m, err := s.manager.GetTorrentSites(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -527,7 +527,7 @@ func (s *Server) verifyTorrents(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if len(in.IDs) == 0 {
 		return nil, nil, errors.New("缺少 ids")
 	}
-	if err := s.manager.Client().VerifyTorrents(ctx, in.IDs); err != nil {
+	if err := s.manager.VerifyTorrents(ctx, in.IDs); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -538,7 +538,7 @@ func (s *Server) reannounceTorrents(ctx context.Context, _ *mcp.CallToolRequest,
 	if len(in.IDs) == 0 {
 		return nil, nil, errors.New("缺少 ids")
 	}
-	if err := s.manager.Client().ReannounceTorrents(ctx, in.IDs); err != nil {
+	if err := s.manager.ReannounceTorrents(ctx, in.IDs); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -556,7 +556,7 @@ func (s *Server) setTorrentLabels(ctx context.Context, _ *mcp.CallToolRequest, i
 	if len(in.IDs) == 0 {
 		return nil, nil, errors.New("缺少 ids")
 	}
-	if err := s.manager.Client().SetTorrent(ctx, in.IDs, trpc.TorrentSetPayload{Labels: in.Labels}); err != nil {
+	if err := s.manager.SetTorrent(ctx, in.IDs, driver.TorrentPatch{Labels: in.Labels}); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -582,14 +582,14 @@ func (s *Server) setTorrentLimits(ctx context.Context, _ *mcp.CallToolRequest, i
 		in.DownloadLimited == nil && in.HonorsSessionLimits == nil {
 		return nil, nil, errors.New("至少提供一项要修改的限速字段")
 	}
-	payload := trpc.TorrentSetPayload{
+	payload := driver.TorrentPatch{
 		UploadLimit:         in.UploadLimit,
 		DownloadLimit:       in.DownloadLimit,
 		UploadLimited:       in.UploadLimited,
 		DownloadLimited:     in.DownloadLimited,
 		HonorsSessionLimits: in.HonorsSessionLimits,
 	}
-	if err := s.manager.Client().SetTorrent(ctx, in.IDs, payload); err != nil {
+	if err := s.manager.SetTorrent(ctx, in.IDs, payload); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -613,7 +613,7 @@ func (s *Server) queueMove(ctx context.Context, _ *mcp.CallToolRequest, in queue
 	default:
 		return nil, nil, fmt.Errorf("direction 无效: %q，可选 top/up/down/bottom", in.Direction)
 	}
-	if err := s.manager.Client().QueueMove(ctx, in.IDs, dir); err != nil {
+	if err := s.manager.QueueMove(ctx, in.IDs, dir); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -623,7 +623,7 @@ func (s *Server) queueMove(ctx context.Context, _ *mcp.CallToolRequest, in queue
 // ---- update_blocklist ----
 
 func (s *Server) updateBlocklist(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
-	n, err := s.manager.Client().UpdateBlocklist(ctx)
+	n, err := s.manager.UpdateBlocklist(ctx)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
@@ -684,17 +684,17 @@ type setSessionIn struct {
 }
 
 func (s *Server) setSessionConfig(ctx context.Context, _ *mcp.CallToolRequest, in setSessionIn) (*mcp.CallToolResult, any, error) {
-	payload := trpc.SessionArguments{
+	payload := driver.SessionPatch{
 		DownloadDir:               optStr(in.DownloadDir),
 		IncompleteDir:             optStr(in.IncompleteDir),
 		IncompleteDirEnabled:      in.IncompleteDirEnabled,
 		RenamePartialFiles:        in.RenamePartialFiles,
-		StartAddedTorrents:        in.StartAdded,
+		StartAdded:                in.StartAdded,
 		TrashOriginalTorrentFiles: in.TrashOriginalTorrent,
 		SpeedLimitUp:              in.SpeedLimitUp,
-		SpeedLimitUpEnabled:       in.SpeedLimitUpOn,
+		SpeedLimitUpOn:            in.SpeedLimitUpOn,
 		SpeedLimitDown:            in.SpeedLimitDown,
-		SpeedLimitDownEnabled:     in.SpeedLimitDownOn,
+		SpeedLimitDownOn:          in.SpeedLimitDownOn,
 		AltSpeedUp:                in.AltSpeedUp,
 		AltSpeedDown:              in.AltSpeedDown,
 		AltSpeedEnabled:           in.AltSpeedEnabled,
@@ -710,24 +710,26 @@ func (s *Server) setSessionConfig(ctx context.Context, _ *mcp.CallToolRequest, i
 		QueueStalledMinutes:       in.QueueStalledMinutes,
 		PeerLimitGlobal:           in.PeerLimitGlobal,
 		PeerLimitPerTorrent:       in.PeerLimitPerTorrent,
-		PeerPort:                  in.PeerPort,
-		PeerPortRandomOnStart:     in.PeerPortRandomOnStart,
-		PortForwardingEnabled:     in.PortForwardingEnabled,
-		PEXEnabled:                in.PEXEnabled,
-		DHTEnabled:                in.DHTEnabled,
-		LPDEnabled:                in.LPDEnabled,
-		UTPEnabled:                in.UTPEnabled,
-		SeedRatioLimit:            in.SeedRatioLimit,
-		SeedRatioLimited:          in.SeedRatioLimited,
-		IdleSeedingLimit:          in.IdleSeedingLimit,
-		IdleSeedingLimitEnabled:   in.IdleSeedingLimitEnabled,
-		BlocklistEnabled:          in.BlocklistEnabled,
-		BlocklistURL:              optStr(in.BlocklistURL),
-		CacheSizeMB:               in.CacheSizeMB,
+
+		PeerPort:                in.PeerPort,
+		PeerPortRandomOnStart:   in.PeerPortRandomOnStart,
+		PortForwardingEnabled:   in.PortForwardingEnabled,
+		PEXEnabled:              in.PEXEnabled,
+		DHTEnabled:              in.DHTEnabled,
+		LPDEnabled:              in.LPDEnabled,
+		UTPEnabled:              in.UTPEnabled,
+		SeedRatioLimit:          in.SeedRatioLimit,
+		SeedRatioLimited:        in.SeedRatioLimited,
+		IdleSeedingLimit:        in.IdleSeedingLimit,
+		IdleSeedingLimitEnabled: in.IdleSeedingLimitEnabled,
+		BlocklistEnabled:        in.BlocklistEnabled,
+		BlocklistURL:            optStr(in.BlocklistURL),
+		CacheSizeMB:             in.CacheSizeMB,
 	}
 	if in.Encryption != "" {
-		switch enc := trpc.Encryption(strings.ToLower(strings.TrimSpace(in.Encryption))); enc {
-		case trpc.EncryptionRequired, trpc.EncryptionPreferred, trpc.EncryptionTolerated:
+		enc := strings.ToLower(strings.TrimSpace(in.Encryption))
+		switch enc {
+		case "required", "preferred", "tolerated":
 			payload.Encryption = &enc
 		default:
 			return nil, nil, fmt.Errorf("encryption 无效: %q，可选 required/preferred/tolerated", in.Encryption)
@@ -739,7 +741,7 @@ func (s *Server) setSessionConfig(ctx context.Context, _ *mcp.CallToolRequest, i
 	if !anyFieldSet(in) {
 		return nil, nil, errors.New("至少提供一项要修改的配置")
 	}
-	if err := s.manager.Client().SetSession(ctx, payload); err != nil {
+	if err := s.manager.SetSession(ctx, payload); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -755,7 +757,7 @@ func optStr(v string) *string {
 }
 
 // anyFieldSet 入参里是否有任一字段提供了非零值（指针非 nil / 字符串非空）。
-// SessionArguments 含切片字段不可用 == 比较，故用反射实现
+// 入参结构体含切片字段不可用 == 比较，故用反射实现
 func anyFieldSet(v any) bool {
 	rv := reflect.ValueOf(v)
 	for i := 0; i < rv.NumField(); i++ {
@@ -806,7 +808,7 @@ func (s *Server) moveTorrents(ctx context.Context, _ *mcp.CallToolRequest, in mo
 	}
 	failed := make([]int64, 0)
 	for _, id := range in.IDs {
-		if err := s.manager.Client().SetTorrentLocation(ctx, id, in.Location, move); err != nil {
+		if err := s.manager.SetTorrentLocation(ctx, id, in.Location, move); err != nil {
 			slog.Warn("MCP 移动种子失败", "id", id, "err", err)
 			failed = append(failed, id)
 		}
@@ -833,7 +835,7 @@ func (s *Server) renameFile(ctx context.Context, _ *mcp.CallToolRequest, in rena
 	if strings.TrimSpace(in.Name) == "" || strings.ContainsAny(in.Name, "/\\") {
 		return nil, nil, errors.New("name 不能为空且不能包含路径分隔符")
 	}
-	if err := s.manager.Client().RenameFile(ctx, in.ID, in.Path, in.Name); err != nil {
+	if err := s.manager.RenameFile(ctx, in.ID, in.Path, in.Name); err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
 	s.bump()
@@ -906,6 +908,9 @@ type apiRequestIn struct {
 }
 
 func (s *Server) transmissionAPIRequest(ctx context.Context, _ *mcp.CallToolRequest, in apiRequestIn) (*mcp.CallToolResult, any, error) {
+	if s.manager.Kind() != driver.KindTransmission {
+		return nil, nil, fmt.Errorf("原始 RPC 透传仅支持 Transmission，当前连接的是 %s", s.manager.Kind().Label())
+	}
 	method := strings.ToLower(strings.TrimSpace(in.Method))
 	switch {
 	case method == "":
@@ -932,7 +937,7 @@ func (s *Server) transmissionAPIRequest(ctx context.Context, _ *mcp.CallToolRequ
 	if args == nil {
 		args = map[string]any{}
 	}
-	out, err := s.manager.Client().RawCall(ctx, method, args)
+	out, err := s.manager.RawCall(ctx, method, args)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}

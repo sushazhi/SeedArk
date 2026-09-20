@@ -4,14 +4,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trpanel/backend/internal/rpc"
 )
 
 // listGroups 获取带宽组列表（Transmission 4.x group-get）
 func (h *Handler) listGroups(c *gin.Context) {
-	groups, err := h.rpc.Client().GetSessionGroups(c.Request.Context())
+	groups, err := h.rpc.GetSessionGroups(c.Request.Context())
 	if err != nil {
-		respondError(c, http.StatusBadGateway, "获取带宽组失败: "+rpc.SanitizeClientMsg(err.Error()))
+		respondBackendError(c, "获取带宽组失败", err)
 		return
 	}
 	respond(c, groups)
@@ -51,8 +50,8 @@ func (h *Handler) saveGroup(c *gin.Context) {
 	if body.HonorsSessionLimits != nil {
 		fields["honor-session-limits"] = *body.HonorsSessionLimits
 	}
-	if err := h.rpc.Client().SetSessionGroup(c.Request.Context(), body.Name, fields); err != nil {
-		respondError(c, http.StatusBadGateway, "保存带宽组失败: "+rpc.SanitizeClientMsg(err.Error()))
+	if err := h.rpc.SetSessionGroup(c.Request.Context(), body.Name, fields); err != nil {
+		respondBackendError(c, "保存带宽组失败", err)
 		return
 	}
 	respond(c, gin.H{"saved": true})

@@ -25,6 +25,7 @@ func ValidateEnvValue(name, value string) error {
 // LocalSettings 界面保存的全部受管配置。
 // .env.local 采用整文件重写：新增受管键必须纳入此处，否则会在下一次保存时被抹掉
 type LocalSettings struct {
+	Type            string // 下载器类型：transmission | qbittorrent；空 = 不写入
 	TransmissionURL string
 	User            string
 	Pass            string
@@ -44,6 +45,7 @@ func SaveLocalSettings(dataDir string, s LocalSettings) error {
 		key, value string
 		always     bool // always：空值也要写入显式覆盖行，防止低优先级来源的旧值在重启后复活
 	}{
+		{"TR_TYPE", s.Type, true},
 		{"TR_URL", s.TransmissionURL, true},
 		{"TR_USER", s.User, true},
 		{"TR_PASS", s.Pass, true},

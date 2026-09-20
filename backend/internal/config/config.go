@@ -12,7 +12,8 @@ import (
 
 // Config 服务配置
 type Config struct {
-	TransmissionURL   string        // Transmission RPC 端点
+	TransmissionType  string        // 下载器类型：transmission（默认）| qbittorrent
+	TransmissionURL   string        // 下载器 RPC 端点（qBittorrent 填 WebUI 根地址）
 	User              string        // RPC 用户名
 	Password          string        // RPC 密码
 	Host              string        // 本服务监听地址（默认仅回环，避免局域网裸奔）
@@ -41,6 +42,7 @@ func Load() (*Config, error) {
 	v.AddConfigPath("$HOME/.trpanel")
 
 	// 默认值
+	v.SetDefault("tr_type", "transmission")
 	v.SetDefault("tr_url", "http://localhost:9091/transmission/rpc")
 	v.SetDefault("tr_user", "")
 	v.SetDefault("tr_pass", "")
@@ -94,6 +96,7 @@ func Load() (*Config, error) {
 
 	// 环境变量覆盖（最高优先级）
 	envKeys := map[string]string{
+		"tr_type":             "TR_TYPE",
 		"tr_url":              "TR_URL",
 		"tr_user":             "TR_USER",
 		"tr_pass":             "TR_PASS",
@@ -134,6 +137,7 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
+		TransmissionType:  strings.TrimSpace(v.GetString("tr_type")),
 		TransmissionURL:   v.GetString("tr_url"),
 		User:              v.GetString("tr_user"),
 		Password:          v.GetString("tr_pass"),

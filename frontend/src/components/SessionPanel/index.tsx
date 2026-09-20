@@ -93,7 +93,8 @@ export function SessionPanel() {
         </div>
       </div>
 
-      <BandwidthGroupsPanel />
+      {/* qBittorrent 没有带宽组，按能力自述隐藏整个面板 */}
+      {session?.caps?.bandwidthGroups !== false && <BandwidthGroupsPanel />}
 
       {/* 会话统计 */}
       {stats && (

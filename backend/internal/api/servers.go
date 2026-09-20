@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trpanel/backend/internal/config"
+	"github.com/trpanel/backend/internal/driver"
+	"github.com/trpanel/backend/internal/rpc"
 	"github.com/trpanel/backend/internal/state"
 )
 
@@ -20,6 +22,7 @@ func (h *Handler) listServers(c *gin.Context) {
 		out = append(out, map[string]any{
 			"index":   i,
 			"name":    s.Name,
+			"type":    driver.NormalizeKind(s.Type).String(),
 			"url":     s.URL,
 			"user":    s.User,
 			"hasPass": s.Pass != "",
@@ -36,6 +39,7 @@ func (h *Handler) listServers(c *gin.Context) {
 // 若无此区分，界面仅编辑地址或名称时（前端全量回传、密码字段留空）就会静默清空凭据。
 type serverInput struct {
 	Name    string  `json:"name"`
+	Type    string  `json:"type"`
 	URL     string  `json:"url"`
 	User    string  `json:"user"`
 	Pass    *string `json:"pass"`
@@ -82,7 +86,7 @@ func (h *Handler) saveServers(c *gin.Context) {
 		next := make([]state.Server, 0, len(body.Servers))
 		for i := range body.Servers {
 			in := &body.Servers[i]
-			s := state.Server{Name: in.Name, URL: in.URL, User: in.User, Enabled: in.Enabled}
+			s := state.Server{Name: in.Name, Type: driver.NormalizeKind(in.Type).String(), URL: in.URL, User: in.User, Enabled: in.Enabled}
 			switch {
 			case in.Pass != nil:
 				s.Pass = *in.Pass
@@ -108,6 +112,7 @@ func (h *Handler) saveServers(c *gin.Context) {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.SyncAggregateTargets()
 	respond(c, gin.H{"updated": true})
 }
 
@@ -123,9 +128,7 @@ func (h *Handler) deleteServer(c *gin.Context) {
 	var (
 		deleted   bool
 		wasActive bool
-		nextURL   string
-		nextUser  string
-		nextPass  string
+		next      rpc.Credentials
 		hasNext   bool
 	)
 	err = h.state.Update(func(st *state.State) {
@@ -145,7 +148,8 @@ func (h *Handler) deleteServer(c *gin.Context) {
 		}
 		if st.ActiveServer >= 0 && st.ActiveServer < len(st.Servers) {
 			if srv := st.Servers[st.ActiveServer]; srv.URL != "" {
-				nextURL, nextUser, nextPass, hasNext = srv.URL, srv.User, srv.Pass, true
+				next = credentialsOf(srv)
+				hasNext = true
 			}
 		}
 		deleted = true
@@ -162,14 +166,14 @@ func (h *Handler) deleteServer(c *gin.Context) {
 		switch {
 		case !hasNext:
 			warnings = append(warnings, "已删除当前服务器且没有可用的备用服务器，连接保持不变")
-		case h.rpc.Reconfigure(nextURL, nextUser, nextPass) != nil:
+		case h.rpc.Reconfigure(next) != nil:
 			warnings = append(warnings, "切换到备用服务器失败，连接仍指向已删除的服务器")
 		default:
-			if _, perr := h.rpc.Client().Ping(c.Request.Context()); perr != nil {
+			if _, perr := h.rpc.Ping(c.Request.Context()); perr != nil {
 				warnings = append(warnings, "已切换到备用服务器，但连接测试失败: "+perr.Error())
 			}
 			if werr := config.SaveLocalSettings(h.dataDir,
-				h.currentLocalSettings(nextURL, nextUser, nextPass, h.hub.getPollInterval().String())); werr != nil {
+				h.currentLocalSettings(next, h.hub.getPollInterval().String())); werr != nil {
 				warnings = append(warnings, "连接配置未能写入 .env.local，重启后仍会使用原地址")
 			}
 			h.hub.Bump()
@@ -206,17 +210,18 @@ func (h *Handler) switchServer(c *gin.Context) {
 		return
 	}
 	// 记录当前配置以便失败回滚
-	oldURL, oldUser, oldPass := h.rpc.Credentials()
+	old := h.rpc.Credentials()
 
-	// 热更新客户端
-	if err := h.rpc.Reconfigure(srv.URL, srv.User, srv.Pass); err != nil {
+	// 热更新客户端（按服务器类型切换到对应驱动）
+	cred := credentialsOf(srv)
+	if err := h.rpc.Reconfigure(cred); err != nil {
 		respondError(c, http.StatusBadGateway, "切换失败: "+err.Error())
 		return
 	}
 	// 测试连通性
-	version, err := h.rpc.Client().Ping(c.Request.Context())
+	version, err := h.rpc.Ping(c.Request.Context())
 	if err != nil {
-		_ = h.rpc.Reconfigure(oldURL, oldUser, oldPass)
+		_ = h.rpc.Reconfigure(old)
 		respondError(c, http.StatusBadGateway, "无法连接该服务器，已回滚: "+err.Error())
 		return
 	}
@@ -229,10 +234,12 @@ func (h *Handler) switchServer(c *gin.Context) {
 	// 必须携带全部受管键：.env.local 是整文件重写，漏传的键会被写成空值
 	// （曾漏传 MCP_TOKEN，导致切换服务器后 MCP 变成无鉴权端点）
 	if err := config.SaveLocalSettings(h.dataDir,
-		h.currentLocalSettings(srv.URL, srv.User, srv.Pass, h.hub.getPollInterval().String())); err != nil {
+		h.currentLocalSettings(cred, h.hub.getPollInterval().String())); err != nil {
 		slog.Warn("持久化连接配置失败", "err", err)
 		warnings = append(warnings, "连接配置未能写入 .env.local，重启后仍会使用原地址")
 	}
+	// 服务器列表/类型可能已变，重新计算聚合成员
+	h.SyncAggregateTargets()
 	// 切换后立即触发一次拉取
 	h.hub.Bump()
 	out := gin.H{"index": body.Index, "version": version}

@@ -366,6 +366,8 @@ export default {
   session: {
     title: 'Settings',
     connection: 'Connection',
+    downloaderType: 'Downloader type',
+    typeHint: 'Transmission uses RPC; for qBittorrent enter the WebUI URL (5.2+ API Key supported)',
     transmissionUrl: 'Transmission URL',
     username: 'Username',
     password: 'Password',
@@ -489,7 +491,8 @@ export default {
     daySun: 'Sun',
     multiServer: {
       title: 'Multi-Server Management',
-      hint: 'Manage multiple Transmission servers and switch between them',
+      hint: 'Enable 2+ servers for the aggregated view: manage Transmission and qBittorrent side by side (merged lists, writes routed per server)',
+      serverType: 'Type',
       serverName: 'Server name',
       server: 'Server',
       addServer: 'Add Server',

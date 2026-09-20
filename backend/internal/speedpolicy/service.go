@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	trpc "github.com/hekmon/transmissionrpc/v3"
+	"github.com/trpanel/backend/internal/driver"
 	"github.com/trpanel/backend/internal/rpc"
 	"github.com/trpanel/backend/internal/state"
 )
@@ -89,7 +89,7 @@ func (s *Service) Tick(ctx context.Context) (*Result, error) {
 		s.releaseAll(ctx, &st)
 		return res, nil
 	}
-	torrents, err := s.manager.Client().GetTorrents(ctx)
+	torrents, err := s.manager.GetTorrents(ctx)
 	if err != nil {
 		slog.Warn("组内限速：获取种子列表失败", "err", err)
 		return res, err
@@ -302,7 +302,7 @@ func (s *Service) sync(ctx context.Context, torrents []*rpc.Torrent, desired map
 	for key, ids := range setBucket {
 		dir, cap := parseCapKey(key)
 		payload := limitPayload(dir, cap)
-		if err := s.manager.Client().SetTorrent(ctx, ids, payload); err != nil {
+		if err := s.manager.SetTorrent(ctx, ids, payload); err != nil {
 			res.Failed += len(ids)
 			slog.Warn("组内限速：下发限速失败", "dir", dir, "cap", cap, "ids", len(ids), "err", err)
 			continue
@@ -313,7 +313,7 @@ func (s *Service) sync(ctx context.Context, torrents []*rpc.Torrent, desired map
 	for key, ids := range relBucket {
 		dir, honors := parseRelKey(key)
 		payload := releasePayload(dir, honors)
-		if err := s.manager.Client().SetTorrent(ctx, ids, payload); err != nil {
+		if err := s.manager.SetTorrent(ctx, ids, payload); err != nil {
 			res.Failed += len(ids)
 			slog.Warn("组内限速：还原限速失败", "dir", dir, "ids", len(ids), "err", err)
 			continue
@@ -361,7 +361,7 @@ func (s *Service) releaseAll(ctx context.Context, st *state.State) {
 	if len(st.SpeedPolicyApplied) == 0 {
 		return
 	}
-	torrents, err := s.manager.Client().GetTorrents(ctx)
+	torrents, err := s.manager.GetTorrents(ctx)
 	if err != nil {
 		slog.Warn("组内限速：关闭还原时获取种子列表失败，下轮重试", "err", err)
 		return
@@ -396,7 +396,7 @@ func (s *Service) releaseAll(ctx context.Context, st *state.State) {
 	kept := map[int64]state.SpeedApplied{}
 	for key, ids := range relBucket {
 		dir, honors := parseRelKey(key)
-		if err := s.manager.Client().SetTorrent(ctx, ids, releasePayload(dir, honors)); err != nil {
+		if err := s.manager.SetTorrent(ctx, ids, releasePayload(dir, honors)); err != nil {
 			slog.Warn("组内限速：关闭还原失败，下轮重试", "dir", dir, "err", err)
 			for _, id := range ids {
 				kept[id] = st.SpeedPolicyApplied[id]
@@ -427,7 +427,7 @@ func (s *Service) sites(ctx context.Context, rules []*state.SpeedPolicyRule) map
 	if s.siteNames != nil && time.Since(s.siteAt) < sitesCacheTTL {
 		return s.siteNames
 	}
-	m, err := s.manager.Client().GetTorrentSites(ctx)
+	m, err := s.manager.GetTorrentSites(ctx)
 	if err != nil {
 		slog.Warn("组内限速：获取站点名失败，本轮仅按 tracker 主机名匹配", "err", err)
 		return nil
@@ -471,8 +471,8 @@ func otherDir(dir string) string {
 
 // limitPayload 下发单种限速。必须同时关掉 honorsSessionLimits：
 // 该标记为 true 时 Transmission 直接用全局限速，本种子的限速字段不生效。
-func limitPayload(dir string, cap int64) trpc.TorrentSetPayload {
-	p := trpc.TorrentSetPayload{HonorsSessionLimits: &falseVal}
+func limitPayload(dir string, cap int64) driver.TorrentPatch {
+	p := driver.TorrentPatch{HonorsSessionLimits: &falseVal}
 	if dir == state.SpeedDirectionDown {
 		p.DownloadLimited = &trueVal
 		p.DownloadLimit = &cap
@@ -486,8 +486,8 @@ func limitPayload(dir string, cap int64) trpc.TorrentSetPayload {
 // releasePayload 还原限速：取消该方向的单种限速。
 // honors 为 nil 表示另一方向仍在被引擎接管，不能把「跟随全局」还原回去；
 // 非 nil 时按接管前记录的原值还原。
-func releasePayload(dir string, honors *bool) trpc.TorrentSetPayload {
-	p := trpc.TorrentSetPayload{HonorsSessionLimits: honors}
+func releasePayload(dir string, honors *bool) driver.TorrentPatch {
+	p := driver.TorrentPatch{HonorsSessionLimits: honors}
 	if dir == state.SpeedDirectionDown {
 		p.DownloadLimited = &falseVal
 	} else {
