@@ -38,6 +38,7 @@ type Credentials struct {
 type Target struct {
 	Index   int
 	Kind    driver.Kind
+	Name    string
 	URL     string
 	User    string
 	Pass    string
@@ -142,7 +143,10 @@ func (m *Manager) SetTargets(targets []Target) {
 		}
 		idx := t.Index
 		index = append(index, idx)
-		if old, ok := m.members[idx]; ok && old.target == t {
+		if old, ok := m.members[idx]; ok && sameTarget(old.target, t) {
+			// 只有显示名变了：沿用已登录的后端实例，仅刷新名字（qBittorrent 重建
+			// 要重新登录，频繁重建会打爆它的失败登录计数进而封 IP）
+			old.target = t
 			next[idx] = old
 			continue
 		}
@@ -162,6 +166,12 @@ func (m *Manager) SetTargets(targets []Target) {
 	m.aggMu.Lock()
 	m.aggIndex = index
 	m.aggMu.Unlock()
+}
+
+// sameTarget 两个目标是否复用同一个后端实例（忽略纯展示用的 Name）
+func sameTarget(a, b Target) bool {
+	return a.Index == b.Index && a.Kind == b.Kind && a.URL == b.URL &&
+		a.User == b.User && a.Pass == b.Pass && a.Enabled == b.Enabled
 }
 
 // AggregateEnabled 是否开启了聚合视图
@@ -191,6 +201,19 @@ func (m *Manager) AggregateErrors() map[int]string {
 	return out
 }
 
+// BackendAt 取指定服务器索引的聚合成员后端（未聚合或不含该成员时返回 false）。
+// 供「按服务器读写会话配置」使用：聚合视图下每台服务器的设置面板各自读写，
+// 不经过活动后端，避免一次保存改掉所有下载器的配置。
+func (m *Manager) BackendAt(idx int) (driver.Backend, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	mb, ok := m.members[idx]
+	if !ok {
+		return nil, false
+	}
+	return mb.backend, true
+}
+
 // EncodeID 把某台服务器上的本地 ID 编码为面板全局 ID。
 // idx 为服务器索引（与 SetTargets 传入的一致）。
 func EncodeID(idx int, localID int64) int64 {
@@ -207,11 +230,11 @@ func DecodeID(id int64) (idx int, localID int64) {
 }
 
 // BackendFor 按种子 ID 路由到对应后端，并返回该后端视角的本地 ID。
-// 聚合关闭时永远是活动后端。
+// 未编码的 ID（idx=-1）属于当前活动服务器，交给 ActiveBackend 解析到正确实例。
 func (m *Manager) BackendFor(id int64) (driver.Backend, int64) {
 	idx, localID := DecodeID(id)
 	if idx < 0 {
-		return m.Client(), localID
+		return m.ActiveBackend(), localID
 	}
 	m.mu.RLock()
 	mb, ok := m.members[idx]
@@ -251,13 +274,15 @@ type IDGroup struct {
 }
 
 // AggregateTorrents 并发拉取所有聚合成员的种子并合并为一张列表。
-// 非活动服务器的种子 ID 会被编码（EncodeID），保证跨服务器唯一。
+// 非活动服务器的种子 ID 会被编码（EncodeID），保证跨服务器唯一；
+// 每颗种子同时带上归属字段（服务器索引 / 名称 / 下载器类型）。
 // 单台失败只记日志并跳过，不让一台挂掉拖垮整个列表。
 func (m *Manager) AggregateTorrents(ctx context.Context) ([]*models.Torrent, error) {
 	indexes := m.AggregateIndexes()
 	if len(indexes) == 0 {
-		return m.Client().GetTorrentsFresh(ctx)
+		return m.ActiveBackend().GetTorrentsFresh(ctx)
 	}
+	activeIdx := m.activeIndex()
 	type result struct {
 		idx      int
 		torrents []*models.Torrent
@@ -277,8 +302,8 @@ func (m *Manager) AggregateTorrents(ctx context.Context) ([]*models.Torrent, err
 		go func(i, idx int, b driver.Backend) {
 			defer wg.Done()
 			list, err := b.GetTorrentsFresh(ctx)
-			// 就地改写 ID：列表仅本协程持有，无需加锁
-			tagTorrentIDs(list, idx)
+			// 就地改写 ID 与归属：列表仅本协程持有，无需加锁
+			m.tagTorrents(list, idx, idx == activeIdx)
 			results[i] = result{idx: idx, torrents: list, err: err}
 		}(i, idx, mb.backend)
 	}
@@ -300,9 +325,64 @@ func (m *Manager) AggregateTorrents(ctx context.Context) ([]*models.Torrent, err
 	return out, nil
 }
 
-// tagTorrentIDs 给非活动服务器的种子 ID 打上服务器编号前缀
-func tagTorrentIDs(list []*models.Torrent, idx int) {
-	for _, t := range list {
-		t.ID = EncodeID(idx, t.ID)
+// activeIndex 当前活动连接对应的服务器索引。
+// 以「连接凭据」与聚合成员逐一比对得出，不依赖 state 里的 ActiveServer：
+// 状态文件与运行配置可能不同步（切换时写盘失败），按状态猜会把归属标到另一台上。
+// 匹配不到（仅 .env 配置、或该台已被删除/停用）时返回 -1，调用方按「无归属」处理。
+func (m *Manager) activeIndex() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for idx, mb := range m.members {
+		if sameBackend(mb.target, m.cred) {
+			return idx
+		}
 	}
+	return -1
+}
+
+// sameBackend 目标与当前凭据是否指向同一台下载器
+func sameBackend(t Target, c Credentials) bool {
+	return t.URL == c.URL && t.Kind == driver.NormalizeKind(c.Type.String())
+}
+
+// tagTorrents 给一台服务器的种子打上「归属 + 全局 ID」。
+//
+// 活动服务器的种子 ID 不编码（保持原始值），其余成员编码；无论哪种情况都必须
+// 写上归属字段，否则合并列表里无法区分哪个是 TR、哪个是 QB（活动服务器恰恰是
+// 唯一「ID 看起来正常」的那台，光看 ID 反而更容易认错）。
+func (m *Manager) tagTorrents(list []*models.Torrent, idx int, active bool) {
+	t := m.targetAt(idx)
+	name := t.Name
+	if name == "" {
+		name = fmt.Sprintf("服务器 %d", idx+1)
+	}
+	for _, item := range list {
+		if !active {
+			item.ID = EncodeID(idx, item.ID)
+		}
+		// 每次取一份新地址：直接写 &idx 会让所有种子共享同一个指针，
+		// 之后改一台的归属（如重命名后刷新名字）会串改整批种子
+		owner := idx
+		item.ServerIndex = &owner
+		item.ServerName = name
+		item.Kind = t.Kind.String()
+	}
+}
+
+// targetAt 取某台服务器的聚合目标（不存在时返回零值，调用方按需兜底）
+func (m *Manager) targetAt(idx int) Target {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if mb, ok := m.members[idx]; ok {
+		return mb.target
+	}
+	return Target{Index: idx}
+}
+
+// Label 该成员的展示名（未命名时回落到「服务器 N」）
+func (t Target) Label() string {
+	if t.Name != "" {
+		return t.Name
+	}
+	return fmt.Sprintf("服务器 %d", t.Index+1)
 }

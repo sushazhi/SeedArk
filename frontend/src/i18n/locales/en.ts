@@ -74,6 +74,7 @@ export default {
     errors: 'Errors',
     dirs: 'Folders',
     sites: 'Sites',
+    servers: 'Downloaders',
     filter: 'Filters',
     selectByDoubleClick: 'Double-click to select all in this category',
   },
@@ -180,6 +181,7 @@ export default {
     fileCount: 'Files',
     downloadDir: 'Folder',
     hashString: 'Hash',
+    server: 'Downloader',
     reset: 'Reset Columns',
   },
   labels: {
@@ -420,7 +422,10 @@ export default {
     fontSize: 'Font Size',
     singleLine: 'Single Line',
     showCheckboxes: 'Show Checkboxes',
-    a11yTitle: 'Liquid Glass Accessibility',
+    // Wallpaper / glass opacity + the three accessibility downgrades live here.
+    // Named for the outcome rather than the implementation ("Liquid Glass" is
+    // our internal material name; users think in terms of how it looks)
+    a11yTitle: 'Appearance & Accessibility',
     a11yHint: 'Follows the system by default; takes over once you adjust it',
     reduceGlass: 'Reduce Transparent Effects',
     reduceMotion: 'Reduce Motion',
@@ -498,7 +503,23 @@ export default {
       addServer: 'Add Server',
       activeServer: 'Switch Server',
     },
+    // Settings target tabs + driver-described panel (qBittorrent settings)
+    targetTitle: 'Settings target',
+    targetCurrent: 'Current connection',
+    targetNotActive: 'You are editing a server that is not the active one: changes apply to this server only',
+    targetConnHint: 'Address, credentials and poll interval belong to the active connection; edit this server in "Multi-server" below',
+    qbUnavailable: 'Cannot read settings from this server: make sure it is enabled and reachable',
+    qbSave: 'Save changes',
+    qbDiscard: 'Discard',
+    qbPending: '{{count}} unsaved change(s)',
+    qbKeepUnchanged: 'Leave blank to keep unchanged',
+    qbDangerHint: 'Changing this may disconnect the panel from the downloader',
     automation: 'Automation',
+    // Nav entry for the downloader settings pane while it is loading / unavailable
+    downloaderSettings: 'Downloader settings',
+    qbGroupDanger: 'Read-only & risky ({{count}})',
+    // Recovery action shown when the live connection does not match this server
+    reconnectServer: 'Reconnect to this server',
     mcp: {
       title: 'MCP Server',
       enabled: 'Enable MCP server',

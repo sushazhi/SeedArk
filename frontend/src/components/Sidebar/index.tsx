@@ -40,6 +40,8 @@ import { cn, cssVars } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { KindBadge } from '@/components/TorrentList/ServerCell'
+import type { DownloaderKind, SidebarMenuVisible } from '@/types'
 
 // 主状态过滤：全部 / 活跃 / 正在下载 / 正在做种 / 已完成 / 暂停 / 校验 / 错误
 // 图标统一由中性色承载、激活时染品牌色；仅 error 在存在异常时保留红色语义
@@ -271,6 +273,29 @@ export const DesktopSidebar: React.FC = () => {
       }
     }
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).map(([k, c]) => [k, c, s.get(k) ?? 0] as const)
+  }, [torrents])
+
+  // 下载器分布：多服务器聚合时每颗种子带 serverName，按它分组。
+  // 至少出现 2 台才显示这一组——只有一台时它是个恒等比筛选，点了等于没点，
+  // 白占侧栏空间（与「聚合才显示」的产品预期一致）。
+  // 按名字而非索引聚合：索引会随服务器增删重排，而筛选条件要持久化。
+  const serverCounts = useMemo(() => {
+    const m = new Map<string, { count: number; size: number; kind?: DownloaderKind }>()
+    for (const tr of torrents) {
+      const name = tr.serverName
+      if (!name) continue
+      const cur = m.get(name)
+      if (cur) {
+        cur.count++
+        cur.size += tr.totalSize || 0
+      } else {
+        m.set(name, { count: 1, size: tr.totalSize || 0, kind: tr.kind })
+      }
+    }
+    if (m.size < 2) return []
+    return Array.from(m.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([name, v]) => [name, v.count, v.size, v.kind] as const)
   }, [torrents])
 
   // 双击分组项：全选该分组种子（开关开启时；已完整选中该分组则清空）
@@ -609,6 +634,70 @@ export const DesktopSidebar: React.FC = () => {
                       >
                         <ShieldAlert className="w-3.5 h-3.5 shrink-0 opacity-70 text-red-500" />
                         <span className="truncate flex-1 text-left">{translateError(err, t)}</span>
+                        {groupShowSize && size > 0 && (
+                          <span className="text-caption2 tm-mono text-gray-400">{formatBytes(size)}</span>
+                        )}
+                        <span className="text-caption2 tm-mono text-gray-400">{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 下载器分布（多服务器聚合）：回答「这些种子分别在哪个下载器上」 */}
+          {sidebarMenuVisible.servers && serverCounts.length > 0 && (
+            <div className="shrink-0">
+              <SectionHeader
+                icon={<Server className="w-3.5 h-3.5" />}
+                title={t('nav.servers')}
+                count={serverCounts.length}
+                collapsed={sidebarCollapsed.servers}
+                onToggle={() => setSidebarCollapsed({ servers: !sidebarCollapsed.servers })}
+              />
+              {!sidebarCollapsed.servers && (
+                <div className="max-h-36 overflow-y-auto space-y-0.5 mt-1 pr-1">
+                  <button
+                    onClick={() => setFilters({ servers: [] })}
+                    onDoubleClick={() => dblSelect(torrents.map((t) => t.id))}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-body transition-colors tm-nav-item',
+                      filters.servers.length === 0
+                        ? 'tm-nav-active text-primary font-medium'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/8',
+                    )}
+                  >
+                    <Layers className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                    <span className="truncate flex-1 text-left">{t('nav.all')}</span>
+                    <span className="text-caption2 tm-mono text-gray-400">{torrents.length}</span>
+                  </button>
+                  {serverCounts.map(([name, count, size, kind]) => {
+                    const isActive = filters.servers.includes(name)
+                    return (
+                      <button
+                        key={name}
+                        onClick={() =>
+                          setFilters({
+                            servers: isActive
+                              ? filters.servers.filter((s) => s !== name)
+                              : [...filters.servers, name],
+                          })
+                        }
+                        onDoubleClick={() =>
+                          dblSelect(torrents.filter((t) => t.serverName === name).map((t) => t.id))
+                        }
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-body transition-colors tm-nav-item',
+                          isActive
+                            ? 'tm-nav-active text-primary font-medium'
+                            : 'text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/8',
+                        )}
+                        title={name}
+                      >
+                        {/* TR / QB 徽标：同名下载器并列时靠它一眼分辨类型 */}
+                        <KindBadge kind={kind} />
+                        <span className="truncate flex-1 text-left">{name}</span>
                         {groupShowSize && size > 0 && (
                           <span className="text-caption2 tm-mono text-gray-400">{formatBytes(size)}</span>
                         )}
@@ -993,6 +1082,22 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
   }, [torrents])
 
+  // 下载器分布（多服务器聚合）：至少 2 台才显示，与桌面端同口径
+  const serverCounts = useMemo(() => {
+    const m = new Map<string, { count: number; kind?: DownloaderKind }>()
+    for (const tr of torrents) {
+      const name = tr.serverName
+      if (!name) continue
+      const cur = m.get(name)
+      if (cur) cur.count++
+      else m.set(name, { count: 1, kind: tr.kind })
+    }
+    if (m.size < 2) return []
+    return Array.from(m.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([name, v]) => [name, v.count, v.kind] as const)
+  }, [torrents])
+
   const siteStats = useMemo(() => {
     const counts = new Map<string, number>()
     let other = 0
@@ -1115,7 +1220,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
         <SheetHeader className="border-b border-white/60 dark:border-white/10 pb-2">
           <SheetTitle className="flex items-center gap-2">
             <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--brand-grad-from)] to-[var(--brand-grad-to)] flex items-center justify-center">
-              <span className="text-white font-bold text-footnote">TR</span>
+              <span className="text-white font-bold text-footnote">SA</span>
             </span>
             <span className="text-primary">trpanel</span>
             {can('app.update') && <span className="text-gray-400 dark:text-gray-500 font-medium text-footnote"> for fnOS</span>}
@@ -1312,6 +1417,65 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
                       >
                         <AlertCircle className="w-3.5 h-3.5 shrink-0 opacity-70" />
                         <span className="truncate flex-1 text-left">{translateError(msg, t)}</span>
+                        <span className="text-caption2 tm-mono text-gray-400">{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 下载器分布（多服务器聚合） */}
+          {sidebarMenuVisible.servers && serverCounts.length > 0 && (
+            <div>
+              <SectionHeader
+                icon={<Server className="w-3.5 h-3.5" />}
+                title={t('nav.servers')}
+                count={serverCounts.length}
+                collapsed={sidebarCollapsed.servers}
+                onToggle={() => setSidebarCollapsed({ servers: !sidebarCollapsed.servers })}
+              />
+              {!sidebarCollapsed.servers && (
+                <div className="space-y-0.5 mt-1">
+                  <button
+                    {...longPressProps((x, y) => openGroupMenu({ x, y }, torrents.map((tr) => tr.id), null))}
+                    onClick={() => { setFilters({ servers: [] }); onClose() }}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-body transition-colors tm-nav-item',
+                      filters.servers.length === 0
+                        ? 'tm-nav-active text-primary font-medium'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/8',
+                    )}
+                  >
+                    <Layers className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                    <span className="truncate flex-1 text-left">{t('nav.all')}</span>
+                    <span className="text-caption2 tm-mono text-gray-400">{torrents.length}</span>
+                  </button>
+                  {serverCounts.map(([name, count, kind]) => {
+                    const isActive = filters.servers.includes(name)
+                    return (
+                      <button
+                        key={name}
+                        {...longPressProps((x, y) =>
+                          openGroupMenu({ x, y }, torrents.filter((tr) => tr.serverName === name).map((tr) => tr.id), null),
+                        )}
+                        onClick={() => {
+                          setFilters({
+                            servers: isActive ? filters.servers.filter((s) => s !== name) : [...filters.servers, name],
+                          })
+                          onClose()
+                        }}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-body transition-colors tm-nav-item',
+                          isActive
+                            ? 'tm-nav-active text-primary font-medium'
+                            : 'text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-white/8',
+                        )}
+                        title={name}
+                      >
+                        <KindBadge kind={kind} />
+                        <span className="truncate flex-1 text-left">{name}</span>
                         <span className="text-caption2 tm-mono text-gray-400">{count}</span>
                       </button>
                     )
@@ -1540,8 +1704,8 @@ interface SidebarCtxMenuProps {
   onSubmenuLeave: () => void
   statusFilterVisible: Record<string, boolean>
   setStatusFilterVisible: (key: string, visible: boolean) => void
-  sidebarMenuVisible: { status: boolean; labels: boolean; dirs: boolean; sites: boolean; error: boolean }
-  setSidebarMenuVisible: (patch: Partial<{ status: boolean; labels: boolean; dirs: boolean; sites: boolean; error: boolean }>) => void
+  sidebarMenuVisible: SidebarMenuVisible
+  setSidebarMenuVisible: (patch: Partial<SidebarMenuVisible>) => void
   enableDoubleClickSelect: boolean
   setEnableDoubleClickSelect: (v: boolean) => void
   groupShowSize: boolean
@@ -1632,6 +1796,13 @@ function SidebarCtxMenu(props: SidebarCtxMenuProps) {
         label={t('sidebar.error')}
         checked={props.sidebarMenuVisible.error}
         onClick={() => { props.setSidebarMenuVisible({ error: !props.sidebarMenuVisible.error }); props.onClose() }}
+      />
+      {/* 下载器分布：只有聚合视图才有内容，非聚合时开关留着但分组不渲染
+          （与其它分组一致，免得用户以为菜单缺了条目） */}
+      <CtxCheck
+        label={t('nav.servers')}
+        checked={props.sidebarMenuVisible.servers}
+        onClick={() => { props.setSidebarMenuVisible({ servers: !props.sidebarMenuVisible.servers }); props.onClose() }}
       />
 
       <div className="my-1 h-px bg-gray-200/60 dark:bg-white/10" />

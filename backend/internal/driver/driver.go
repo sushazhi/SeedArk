@@ -69,6 +69,10 @@ func (k Kind) Label() string {
 // 调用方（API 层）应据此返回 400/501 并附说明，而不是当成上游故障。
 var ErrUnsupported = errors.New("当前下载器不支持该能力")
 
+// ErrInvalid 提交的参数不合法（按键值校验失败）。
+// 与上游故障区分开：这是用户的输入问题，API 层应回 400 并原样带上原因。
+var ErrInvalid = errors.New("参数不合法")
+
 // Capabilities 下载器能力自述（定义见 models，前端直接消费同一份 JSON 标签）
 type Capabilities = models.Capabilities
 
@@ -103,6 +107,56 @@ type TorrentFlagPatch struct {
 	SequentialDownload *bool
 	Groups             []string
 }
+
+// ---- 设置界面字段自述（目前仅 qBittorrent 使用） ----
+//
+// 两个下载器的设置项差异极大（Transmission 是 RPC 的 session-* 键，
+// qBittorrent 是上百个 Web API 偏好键），把 qB 的偏好硬编码进前端表单
+// 既容易漏项又会随上游版本漂移。改由驱动自述：驱动返回分节 + 字段清单，
+// 前端按类型通用渲染、按原生键读写，驱动侧负责键名、枚举与单位。
+
+// 字段控件类型（取值与 models.Setting* 一致）
+const (
+	FieldBool   = models.SettingBool   // 开关
+	FieldInt    = models.SettingInt    // 整数
+	FieldFloat  = models.SettingFloat  // 小数
+	FieldString = models.SettingString // 单行文本
+	FieldSelect = models.SettingSelect // 枚举下拉
+	FieldText   = models.SettingText   // 多行文本（换行分隔的列表）
+	FieldTime   = models.SettingTime   // 时刻（HH:MM）
+)
+
+// 分节语义图标名（取值与 models.SettingIcon* 一致）。
+// 这是一份跨驱动的通用词汇表：驱动按语义挑名字，前端只为这些名字准备图形。
+// 有它前端才不必维护「qBittorrent 的 behavior 节配什么图标」这类对照表——
+// 否则每接入一个下载器都要回前端改一次。
+const (
+	SettingIconBehavior   = models.SettingIconBehavior
+	SettingIconDownload   = models.SettingIconDownload
+	SettingIconConnect    = models.SettingIconConnect
+	SettingIconSpeed      = models.SettingIconSpeed
+	SettingIconBitTorrent = models.SettingIconBitTorrent
+	SettingIconRSS        = models.SettingIconRSS
+	SettingIconWebUI      = models.SettingIconWebUI
+	SettingIconAdvanced   = models.SettingIconAdvanced
+	SettingIconNetwork    = models.SettingIconNetwork
+	SettingIconQueue      = models.SettingIconQueue
+	SettingIconPeers      = models.SettingIconPeers
+	SettingIconScripts    = models.SettingIconScripts
+	SettingIconStorage    = models.SettingIconStorage
+)
+
+// 自述的载体类型定义在 models：会话响应（models.Session.Schema）要原样带上
+// 这份清单，而 models 不能反向依赖 driver。此处保留别名，驱动侧写法不变。
+type (
+	// SettingsOption 枚举项
+	SettingsOption = models.SettingsOption
+	// SettingsField 一个设置项。Key 为下载器的原生键名（qBittorrent 即
+	// app/preferences 的 snake_case 键），前端原样读写，不做二次命名
+	SettingsField = models.SettingsField
+	// SettingsSection 设置分节（对齐 qBittorrent 官方 Options 的分节）
+	SettingsSection = models.SettingsSection
+)
 
 // Empty 是否没有任何改动（避免无意义的上游请求）
 func (p TorrentFlagPatch) Empty() bool {
@@ -158,6 +212,10 @@ type SessionPatch struct {
 	IdleSeedingLimit                 *int64
 	PeerPort                         *int64
 	PeerPortRandomOnStart            *bool
+	// QB 下载器专属偏好补丁（键名与取值对齐 qBittorrent app/preferences）。
+	// 与上面的字段是两条互不干扰的通道：Transmission 驱动忽略 QB，
+	// qBittorrent 驱动忽略上面 Transmission 专属的项（脚本钩子 / 停滞等）
+	QB map[string]any
 }
 
 // Backend 下载器后端。所有方法以种子 ID（int64）寻址，
@@ -207,6 +265,9 @@ type Backend interface {
 
 	GetSession(ctx context.Context) (*models.Session, error)
 	SetSession(ctx context.Context, patch SessionPatch) error
+	// SettingsSchema 设置界面字段自述（见文件上方的说明）；
+	// 未提供自述的驱动返回 nil，界面回退到通用会话表单
+	SettingsSchema() []SettingsSection
 	GetSessionStats(ctx context.Context) (*models.SessionStats, error)
 	TestPort(ctx context.Context) (bool, error)
 	UpdateBlocklist(ctx context.Context) (int64, error)

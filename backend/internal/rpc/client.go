@@ -106,8 +106,18 @@ func (c *Client) Capabilities() driver.Capabilities {
 		IncompleteDir:      true,
 		ScriptHooks:        true,
 		GlobalSeedRatio:    true,
+		QueueStalled:       true,
+		PeerLimit:          true,
+		PerTorrentLimits:   true,
+		FileHandling:       true,
+		UtpToggle:          true,
 	}
 }
+
+// SettingsSchema Transmission 的设置界面沿用既有通用会话表单
+// （session-* 字段与界面一一对应且数量不多），不提供字段自述；
+// 返回 nil 即表示前端回退到通用表单。
+func (c *Client) SettingsSchema() []driver.SettingsSection { return nil }
 
 // Ping 检测连接是否可用并返回版本信息
 func (c *Client) Ping(ctx context.Context) (version string, err error) {

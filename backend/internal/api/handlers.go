@@ -117,6 +117,7 @@ func (h *Handler) SyncAggregateTargets() {
 		targets = append(targets, rpc.Target{
 			Index:   i,
 			Kind:    driver.NormalizeKind(s.Type),
+			Name:    s.Name,
 			URL:     s.URL,
 			User:    s.User,
 			Pass:    s.Pass,
@@ -237,6 +238,9 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		api.POST("/servers", h.saveServers)
 		api.DELETE("/servers/:index", h.deleteServer)
 		api.POST("/servers/switch", h.switchServer)
+		// 指定服务器的会话配置（聚合视图下设置面板按服务器标签各读各的）
+		api.GET("/servers/:index/session", h.getServerSession)
+		api.PUT("/servers/:index/session", h.setServerSession)
 		// 自动文件管理
 		api.GET("/automove", h.listAutoMoveRules)
 		api.POST("/automove", h.saveAutoMoveRule)
@@ -288,9 +292,14 @@ func respondError(c *gin.Context, status int, msg string) {
 // respondBackendError 下载器调用失败的统一响应。
 // 「该下载器不支持此能力」是能力差异，不是上游故障：用 501 并给出说明，
 // 让界面能据此隐藏入口，而不是弹一个看起来像连接断开的红色错误。
+// 「提交的参数不合法」（如偏好键名拼错、取值越界）同理，用 400 直说。
 func respondBackendError(c *gin.Context, action string, err error) {
 	if errors.Is(err, driver.ErrUnsupported) {
 		c.JSON(http.StatusNotImplemented, models.Error(rpc.SanitizeClientMsg(action+"："+err.Error())))
+		return
+	}
+	if errors.Is(err, driver.ErrInvalid) {
+		respondError(c, http.StatusBadRequest, action+"："+err.Error())
 		return
 	}
 	respondError(c, http.StatusBadGateway, action+": "+err.Error())

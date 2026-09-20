@@ -200,6 +200,14 @@ func (c *Client) Capabilities() driver.Capabilities {
 		IncompleteDir:      true,
 		ScriptHooks:        false,
 		GlobalSeedRatio:    true,
+		// qB 无队列停滞判定（只有统一的 max_active 与轮转），
+		// 会话设置不映射 uTP / 全局连接数，单种设置不映射带宽优先级与
+		// 遵循全局限速，也不支持重命名未完成文件、回收源种子文件
+		QueueStalled:     false,
+		PeerLimit:        false,
+		PerTorrentLimits: false,
+		FileHandling:     false,
+		UtpToggle:        false,
 	}
 }
 

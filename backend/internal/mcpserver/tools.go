@@ -15,12 +15,15 @@ import (
 	"github.com/trpanel/backend/internal/rpc"
 )
 
-// registerTools 注册全部 MCP 工具。
+// registerTools 按当前下载器注册工具。
 // 分级原则：只读工具全量提供；添加/启停默认开放；删除必须显式配置 mcp_allow_delete。
-func registerTools(srv *mcp.Server, s *Server) {
+// 当前下载器没有的能力（见 driver.Capabilities）不注册：AI 客户端看不到用不上的工具，
+// 而不是调用后才收到「不支持」。描述中的「下载器」指当前连接的 Transmission / qBittorrent，
+// 行为有差异的工具按驱动追加说明（见 qbNote）
+func registerTools(srv *mcp.Server, s *Server, sig driverSig) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_torrents",
-		Description: "列出 Transmission 种子，支持按关键词 / 状态 / 站点过滤；返回摘要字段，尺寸单位为字节",
+		Description: "列出下载器中的种子，支持按关键词 / 状态 / 站点过滤；返回摘要字段，尺寸单位为字节",
 	}, s.listTorrents)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_torrent",
@@ -28,7 +31,7 @@ func registerTools(srv *mcp.Server, s *Server) {
 	}, s.getTorrent)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_stats",
-		Description: "获取 Transmission 会话统计：版本、种子数量、当前与累计上传 / 下载量",
+		Description: "获取下载器会话统计：版本、种子数量、当前与累计上传 / 下载量",
 	}, s.getStats)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_seed_policy_report",
@@ -36,7 +39,7 @@ func registerTools(srv *mcp.Server, s *Server) {
 	}, s.getSeedPolicyReport)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "add_torrent",
-		Description: "添加种子：磁力链接 / .torrent 的 http(s) URL / Transmission 所在主机上的 .torrent 路径（受文件白名单限制）。默认以暂停状态添加",
+		Description: "添加种子：磁力链接 / .torrent 的 http(s) URL / 下载器所在主机上的 .torrent 路径（受文件白名单限制）。默认以暂停状态添加",
 	}, s.addTorrent)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "start_torrents",
@@ -52,15 +55,17 @@ func registerTools(srv *mcp.Server, s *Server) {
 	}, s.removeTorrents)
 
 	// 只读：会话与诊断
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_free_space",
-		Description: "查询 Transmission 主机某目录的剩余空间与总容量；不传 path 时查询全局下载目录（添加种子前预判磁盘是否够用）",
+	addToolIf(srv, sig.caps.FreeSpace, &mcp.Tool{
+		Name: "get_free_space",
+		Description: "查询下载器主机某目录的剩余空间与总容量；不传 path 时查询全局下载目录（添加种子前预判磁盘是否够用）" +
+			qbNote(sig, "qBittorrent 只提供全局下载目录的剩余空间：path 参数被忽略且拿不到总容量"),
 	}, s.getFreeSpace)
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_session_config",
-		Description: "获取 Transmission 会话配置摘要：版本、下载目录、速度限制、队列、加密、端口与黑名单等",
+		Name: "get_session_config",
+		Description: "获取下载器会话配置摘要：版本、下载目录、速度限制、队列、加密、端口与黑名单等" +
+			qbNote(sig, "qBittorrent 没有黑名单 / 脚本钩子 / 全局连接数等概念，对应字段返回空值或近似值（如备用限速开关由定时调度近似）"),
 	}, s.getSessionConfig)
-	mcp.AddTool(srv, &mcp.Tool{
+	addToolIf(srv, sig.caps.PortTest, &mcp.Tool{
 		Name:        "test_port",
 		Description: "测试 Transmission 监听端口能否从外网访问（排查下载无连接）",
 	}, s.testPort)
@@ -79,32 +84,36 @@ func registerTools(srv *mcp.Server, s *Server) {
 		Description: "按 ID 批量向 Tracker 重新宣告（排查 Tracker 连接失败）",
 	}, s.reannounceTorrents)
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "set_torrent_labels",
-		Description: "按 ID 批量设置种子标签（整体覆盖现有标签）",
+		Name: "set_torrent_labels",
+		Description: "按 ID 批量设置种子标签（整体覆盖现有标签）" +
+			qbNote(sig, "qBittorrent 下标签即其「标签」概念，分类不受影响"),
 	}, s.setTorrentLabels)
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "set_torrent_limits",
-		Description: "按 ID 批量设置种子限速：上传 / 下载上限（KB/s）及是否启用、是否遵循全局限速",
+		Name: "set_torrent_limits",
+		Description: "按 ID 批量设置种子限速：上传 / 下载上限（KB/s）及是否启用、是否遵循全局限速" +
+			qbNote(sig, "qBittorrent 无带宽优先级，且忽略 honorsSessionLimits（跟随全局限速）"),
 	}, s.setTorrentLimits)
-	mcp.AddTool(srv, &mcp.Tool{
+	addToolIf(srv, sig.caps.QueueMove, &mcp.Tool{
 		Name:        "queue_move",
 		Description: "按 ID 批量调整队列顺序：top / up / down / bottom",
 	}, s.queueMove)
-	mcp.AddTool(srv, &mcp.Tool{
+	addToolIf(srv, sig.caps.Blocklist, &mcp.Tool{
 		Name:        "update_blocklist",
 		Description: "更新黑名单规则（需 Transmission 已启用黑名单），返回规则数",
 	}, s.updateBlocklist)
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "set_session_config",
-		Description: "修改 Transmission 会话设置：下载目录（仅影响之后新添加的种子）、限速（全局 / 备用含定时）、队列、网络（端口 / 加密 / DHT / PEX 等）、做种策略默认值、黑名单、磁盘缓存等；未提供的字段保持不变",
+		Name: "set_session_config",
+		Description: "修改下载器会话设置：下载目录（仅影响之后新添加的种子）、限速（全局 / 备用含定时）、队列、网络（端口 / 加密 / DHT / PEX 等）、做种策略默认值、黑名单、磁盘缓存等；未提供的字段保持不变" +
+			qbNote(sig, "qBittorrent 下黑名单、脚本钩子、未完成文件重命名、回收源文件、队列停滞、全局连接数、uTP 开关等 Transmission 专属项会被忽略"),
 	}, s.setSessionConfig)
 
 	// 高危操作（需服务端显式开启「允许通过 MCP 执行高危操作」）
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "move_torrents",
-		Description: "按 ID 批量移动种子数据到新目录（可实际搬移本地文件，影响较大）。需服务端显式开启",
+		Name: "move_torrents",
+		Description: "按 ID 批量移动种子数据到新目录（可实际搬移本地文件，影响较大）。需服务端显式开启" +
+			qbNote(sig, "qBittorrent 只能连同文件一起搬移，不支持 move=false 仅更新指向"),
 	}, s.moveTorrents)
-	mcp.AddTool(srv, &mcp.Tool{
+	addToolIf(srv, sig.caps.RenameFile, &mcp.Tool{
 		Name:        "rename_file",
 		Description: "重命名种子内的文件或目录（影响做种完整性，慎用）。需服务端显式开启",
 	}, s.renameFile)
@@ -113,12 +122,29 @@ func registerTools(srv *mcp.Server, s *Server) {
 		Description: "立即执行一轮做种策略：对已达标种子按规则暂停或删除（含删数据）。需服务端显式开启",
 	}, s.executeSeedPolicy)
 
-	// 通用透传：Transmission 官方 RPC 方法白名单。
+	// 通用透传：Transmission 官方 RPC 方法白名单（qBittorrent 走 REST，语义无法一一对应，不注册）。
 	// 只读方法直接可用；写方法受「允许通过 MCP 执行高危操作」管控；敏感方法（关停会话 / 宿主机脚本）一律屏蔽
-	mcp.AddTool(srv, &mcp.Tool{
+	addToolIf(srv, sig.kind == driver.KindTransmission, &mcp.Tool{
 		Name:        "transmission_api_request",
 		Description: "Transmission RPC 通用透传：直接调用官方 RPC 白名单方法（含客户端库未封装的能力），返回原始 arguments。只读方法（torrent-get / session-get 等）直接可用；写方法（torrent-set / torrent-add / session-set 等）需服务端开启「允许通过 MCP 执行高危操作」；关停会话与脚本类配置永久屏蔽",
 	}, s.transmissionAPIRequest)
+}
+
+// addToolIf 按当前下载器是否具备该能力决定是否注册。
+// 不注册的工具不会出现在工具清单里，AI 客户端也就不会去调用一个注定返回「不支持」的工具
+func addToolIf[In any](srv *mcp.Server, supported bool, tool *mcp.Tool, fn func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, any, error)) {
+	if !supported {
+		return
+	}
+	mcp.AddTool(srv, tool, fn)
+}
+
+// qbNote 追加 qBittorrent 下的行为差异说明；Transmission 下返回空串（其描述本身即完整语义）
+func qbNote(sig driverSig, text string) string {
+	if sig.kind != driver.KindQBittorrent {
+		return ""
+	}
+	return "。" + text
 }
 
 // emptyIn 无入参工具的占位
@@ -456,7 +482,12 @@ func (s *Server) getFreeSpace(ctx context.Context, _ *mcp.CallToolRequest, in ge
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
 	}
-	return nil, map[string]any{"path": path, "freeSpace": free, "totalSize": total}, nil
+	out := map[string]any{"path": path, "freeSpace": free, "totalSize": total}
+	// qBittorrent 忽略 path（只有全局下载目录的剩余空间），如实说明而不是让它看起来像按目录查的
+	if in.Path != "" && s.manager.Kind() == driver.KindQBittorrent {
+		out["note"] = "qBittorrent 只提供全局下载目录的剩余空间，该结果与传入 path 无关"
+	}
+	return nil, out, nil
 }
 
 // ---- get_session_config ----

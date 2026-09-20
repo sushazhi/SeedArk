@@ -14,6 +14,7 @@ import { RemoveTorrentDialog, ReplaceTrackerDialog } from '@/components/ToolsDia
 import { Checkbox } from '@/components/ui/checkbox'
 import { ProgressBar } from '@/components/TorrentList/ProgressBar'
 import { EmptyList } from '@/components/TorrentList/EmptyList'
+import { ServerInline } from '@/components/TorrentList/ServerCell'
 import { cn, cssVars } from '@/lib/utils'
 import { MoreVertical } from 'lucide-react'
 import type { Torrent } from '@/types'
@@ -251,6 +252,13 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
                     <span className="inline-flex items-center gap-x-1.5 md:gap-x-2.5 min-w-0 flex-wrap">
                       <Sep />
                       <span className="tm-mono shrink-0">{t('columns.ratio')} {formatRatio(torrent.uploadRatio)}</span>
+                      {/* 归属下载器（仅聚合视图有值）：TR/QB 徽标 + 服务器名 */}
+                      {(torrent.kind || torrent.serverName) && (
+                        <>
+                          <Sep />
+                          <ServerInline torrent={torrent} />
+                        </>
+                      )}
                       {seedingFor && (
                         <>
                           <Sep className="hidden md:inline" />

@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { EditModals } from '@/components/TorrentMenu'
 import type { EditTarget } from '@/components/TorrentMenu'
 import { SpeedHistory } from '@/components/StatusBar/SpeedHistory'
+import { KindBadge } from '@/components/TorrentList/ServerCell'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -401,6 +402,8 @@ export function TorrentDetail({ torrent, onClose, onOpenChange, isMobile }: { to
   const revealPath = useRevealPath()
   const sem = useSemanticPath()
   const actions = useTorrentActions()
+  // 当前下载器能力自述：qBittorrent 不映射带宽优先级，详情里不显示该项
+  const caps = useAppStore((s) => s.session?.caps)
   const [detail, setDetail] = useState<Torrent | null>(null)
   const [loading, setLoading] = useState(false)
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
@@ -505,7 +508,9 @@ export function TorrentDetail({ torrent, onClose, onOpenChange, isMobile }: { to
       detail.bandwidthPriority === 1 ? t('action.priorityHigh') : detail.bandwidthPriority === -1 ? t('action.priorityLow') : t('action.priorityNormal')
     return [
       { key: 'status', label: t('detail.status'), children: t(`nav.${statusKey[detail.status] ?? 'paused'}`) },
-      { key: 'priority', label: t('detail.priority'), children: priorityLabel },
+      ...(caps?.perTorrentLimits !== false
+        ? [{ key: 'priority', label: t('detail.priority'), children: priorityLabel }]
+        : []),
       { key: 'queuePosition', label: t('detail.queuePosition'), children: detail.queuePosition + 1 },
       { key: 'size', label: t('columns.size'), children: formatBytes(detail.totalSize) },
       { key: 'fileCount', label: t('detail.fileCount'), children: detail.fileCount || detail.files?.length || 0 },
@@ -529,8 +534,21 @@ export function TorrentDetail({ torrent, onClose, onOpenChange, isMobile }: { to
       { key: 'done', label: t('detail.doneDate'), children: detail.doneDate ? formatDate(detail.doneDate) : '-' },
       { key: 'activity', label: t('detail.activityDate'), children: formatDate(detail.activityDate) },
       { key: 'hash', label: t('detail.hash'), children: detail.hashString || '-' },
+      // 归属下载器：仅聚合视图有值（单服务器 / .env 直连时为缺省，整行不渲染）
+      ...(detail.serverName || detail.kind
+        ? [{
+            key: 'server',
+            label: t('columns.server'),
+            children: (
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <KindBadge kind={detail.kind} />
+                <span className="truncate">{detail.serverName || '-'}</span>
+              </span>
+            ),
+          }]
+        : []),
     ]
-  }, [detail, t, sem])
+  }, [detail, t, sem, caps])
 
   // 文件树（目录聚合）
   const fileTree = useMemo<FileNode[]>(() => {

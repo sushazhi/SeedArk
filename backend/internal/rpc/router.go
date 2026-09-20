@@ -20,9 +20,11 @@ import (
 // 统一按 ID 分组后分发到各自后端；聚合关闭时行为与改造前完全一致
 // （DecodeID 返回 idx=-1，全部走活动后端）。
 //
-// 会话级操作（限速、全局设置……）只对「当前活动服务器」生效，不做分发：
+// 会话级操作（限速、全局设置……）默认只对「当前活动服务器」生效，不做分发：
 // 聚合视图是只读的合并列表，写全局配置必须显式切换活动服务器，
 // 否则一次保存会静默改掉所有下载器的配置。
+// 例外：带服务器索引的会话读写（见 Manager.BackendAt）——界面已在设置面板
+// 里用顶部标签指明了目标服务器，此时按索引精确落到那一台。
 
 // aggListTTL 聚合列表缓存时长。策略引擎与 WebSocket 都会反复拉列表，
 // 不加缓存会把每台服务器都打成轮询热点。
@@ -35,6 +37,9 @@ func (m *Manager) Kind() driver.Kind { return m.Client().Kind() }
 
 // Capabilities 当前活动下载器的能力自述
 func (m *Manager) Capabilities() driver.Capabilities { return m.Client().Capabilities() }
+
+// SettingsSchema 当前活动下载器的设置字段自述（未提供自述的驱动返回 nil）
+func (m *Manager) SettingsSchema() []driver.SettingsSection { return m.Client().SettingsSchema() }
 
 // Ping 检测活动下载器连通性
 func (m *Manager) Ping(ctx context.Context) (string, error) { return m.Client().Ping(ctx) }
@@ -174,10 +179,32 @@ func (m *Manager) dropAggCache() {
 	m.mu.Unlock()
 }
 
+// ActiveBackend 活动服务器对应的后端实例。
+//
+// 聚合开启时返回 members 里那一台的实例，而不是 m.client：两者是各自构造的实例，
+// 而 qBittorrent 驱动的面板 ID 是与实例绑定的内存映射（qbittorrent.Client.HashFor），
+// 用 A 实例分配出来的 ID 去 B 实例查必然落空。凡是要拿种子 ID 去寻址的路径，都必须
+// 走 members 实例，才能和「聚合列表是哪个实例拉出来的」对上。
+//
+// 聚合关闭（只有一台）时 members 为空，自然回落到 m.client，行为与改造前一致。
+func (m *Manager) ActiveBackend() driver.Backend {
+	if ai := m.activeIndex(); ai >= 0 {
+		m.mu.RLock()
+		mb, ok := m.members[ai]
+		m.mu.RUnlock()
+		if ok {
+			return mb.backend
+		}
+	}
+	return m.Client()
+}
+
 // GetTorrents 种子列表（读缓存）。聚合模式下返回合并列表。
 func (m *Manager) GetTorrents(ctx context.Context) ([]*models.Torrent, error) {
 	if !m.AggregateEnabled() {
-		return m.Client().GetTorrents(ctx)
+		list, err := m.ActiveBackend().GetTorrents(ctx)
+		m.tagSingle(list)
+		return list, err
 	}
 	m.mu.RLock()
 	list, at := m.aggList, m.aggAt
@@ -198,7 +225,9 @@ func (m *Manager) GetTorrents(ctx context.Context) ([]*models.Torrent, error) {
 // GetTorrentsFresh 强制刷新种子列表（写操作后的刷新必须走这里）
 func (m *Manager) GetTorrentsFresh(ctx context.Context) ([]*models.Torrent, error) {
 	if !m.AggregateEnabled() {
-		return m.Client().GetTorrentsFresh(ctx)
+		list, err := m.ActiveBackend().GetTorrentsFresh(ctx)
+		m.tagSingle(list)
+		return list, err
 	}
 	fresh, err := m.AggregateTorrents(ctx)
 	if err != nil {
@@ -210,20 +239,62 @@ func (m *Manager) GetTorrentsFresh(ctx context.Context) ([]*models.Torrent, erro
 	return fresh, nil
 }
 
-// GetTorrentDetail 种子详情（按 ID 路由到所属服务器）
+// tagSingle 给「非聚合（单服务器）」列表补上归属字段。
+//
+// 单台时 ID 不编码、也没有跨服务器歧义，但界面上的归属列不应因为「只启用了一台」
+// 就整列空白：用户停用另一台排障时，列表会突然失去服务器标识。若这台在服务器
+// 列表里有条目就照实填，纯粹靠 .env 连接的部署（列表为空）则保持零值、列显示占位。
+func (m *Manager) tagSingle(list []*models.Torrent) {
+	idx := m.activeIndex()
+	if idx < 0 {
+		return
+	}
+	t := m.targetAt(idx)
+	for _, item := range list {
+		// 与 tagTorrents 同理：每颗各种自己的一份地址，不共用指针
+		owner := idx
+		item.ServerIndex = &owner
+		item.ServerName = t.Label()
+		item.Kind = t.Kind.String()
+	}
+}
+
+// GetTorrentDetail 种子详情（按 ID 路由到所属服务器）。
+// 详情同样带上归属：聚合视图下从列表点进详情时，用户仍然需要知道这一颗属于哪台。
 func (m *Manager) GetTorrentDetail(ctx context.Context, id int64) (*models.Torrent, error) {
 	b, local := m.BackendFor(id)
 	t, err := b.GetTorrentDetail(ctx, local)
 	if err == nil && t != nil {
 		t.ID = id
+		m.tagOne(t, id)
 	}
 	return t, err
+}
+
+// tagOne 按全局 ID 给单颗种子补归属（聚合关闭时即当前连接的那台）
+func (m *Manager) tagOne(t *models.Torrent, id int64) {
+	idx := -1
+	if m.AggregateEnabled() {
+		if i, _ := DecodeID(id); i >= 0 {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		idx = m.activeIndex()
+	}
+	if idx < 0 {
+		return
+	}
+	target := m.targetAt(idx)
+	t.ServerIndex = &idx
+	t.ServerName = target.Label()
+	t.Kind = target.Kind.String()
 }
 
 // GetTorrentSites 种子 → Tracker 站点映射。聚合模式下合并各成员结果并编码 ID。
 func (m *Manager) GetTorrentSites(ctx context.Context) (map[int64][]string, error) {
 	if !m.AggregateEnabled() {
-		return m.Client().GetTorrentSites(ctx)
+		return m.ActiveBackend().GetTorrentSites(ctx)
 	}
 	indexes := m.AggregateIndexes()
 	out := make(map[int64][]string, 256)
@@ -315,7 +386,7 @@ func (m *Manager) RenameFile(ctx context.Context, id int64, path, name string) e
 // 因为 Tracker 是跨服务器统一维护的（站点过滤 / 换域都是全局动作）。
 func (m *Manager) ReplaceTracker(ctx context.Context, from, to string, appendMode bool) (int64, []string, error) {
 	if !m.AggregateEnabled() {
-		return m.Client().ReplaceTracker(ctx, from, to, appendMode)
+		return m.ActiveBackend().ReplaceTracker(ctx, from, to, appendMode)
 	}
 	var total int64
 	var names []string
@@ -340,13 +411,13 @@ func (m *Manager) ReplaceTracker(ctx context.Context, from, to string, appendMod
 // 否则只对活动服务器下发（与改造前一致）。
 func (m *Manager) eachIDs(ctx context.Context, ids []int64, fn func(driver.Backend, []int64) error) error {
 	if len(ids) == 0 && !m.AggregateEnabled() {
-		return fn(m.Client(), nil)
+		return fn(m.ActiveBackend(), nil)
 	}
 	var backends []driver.Backend
 	if len(ids) == 0 {
 		backends = m.memberBackends()
 		if len(backends) == 0 {
-			backends = []driver.Backend{m.Client()}
+			backends = []driver.Backend{m.ActiveBackend()}
 		}
 		var errs []string
 		for _, b := range backends {

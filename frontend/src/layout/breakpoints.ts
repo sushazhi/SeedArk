@@ -46,7 +46,7 @@ export const ROW_HEIGHT: Record<Tier, { single: number; double: number }> = {
 export const COLUMN_PRIORITY: string[] = [
   'name', 'progress', 'status', 'size', 'download', 'ratio', 'label',
   'upload', 'eta', 'secondsSeeding', 'priority', 'tracker',
-  'peers', 'error', 'limits', 'fileCount', 'downloadDir',
+  'peers', 'error', 'limits', 'fileCount', 'downloadDir', 'server',
   'uploaded', 'downloaded', 'added', 'doneDate', 'queuePosition', 'hashString',
 ]
 /** 各档允许的列数上限（超出预算只会让位更靠后的列） */

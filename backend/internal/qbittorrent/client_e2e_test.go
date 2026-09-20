@@ -89,16 +89,16 @@ func TestE2ECookieLoginAndPing(t *testing.T) {
 		t.Fatalf("种子数 = %d, 期望 3", len(list))
 	}
 	for _, tr := range list {
-		if !strings.HasPrefix(tr.Name, "qbmock-") {
-			t.Errorf("种子名 = %q, 期望 qbmock-XX.iso", tr.Name)
+		// mock 按 sampleNames 布置真实感种子名，这里只要求非空
+		if tr.Name == "" {
+			t.Error("种子名为空")
 		}
 		if tr.ID <= 0 {
 			t.Errorf("本地 ID 未分配: %d", tr.ID)
 		}
-		// mock 刻意混合状态（i%3==0 为 stoppedUP），验证映射结果落在合法枚举内
-		if tr.Status != trStatusDownload && tr.Status != trStatusStopped {
-			t.Errorf("初始状态 = %d, 期望 downloading(%d) 或 stopped(%d)",
-				tr.Status, trStatusDownload, trStatusStopped)
+		// mock 按 stateCycle 轮转覆盖全部状态，验证映射结果落在合法枚举内
+		if tr.Status < 0 || tr.Status > trStatusSeeding {
+			t.Errorf("初始状态 = %d, 超出 0..%d 的状态枚举", tr.Status, trStatusSeeding)
 		}
 	}
 }

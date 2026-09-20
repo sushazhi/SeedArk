@@ -121,6 +121,10 @@ export interface Torrent {
   pieces?: string
   pieceCount?: number
   pieceSize?: number
+  // 归属服务器（多下载器聚合视图）：单服务器 / .env 直连时全部缺省
+  serverIndex?: number
+  serverName?: string
+  kind?: DownloaderKind
 }
 
 // 下载器类型
@@ -142,6 +146,58 @@ export interface DownloaderCaps {
   incompleteDir: boolean
   scriptHooks: boolean
   globalSeedRatio: boolean
+  queueStalled: boolean
+  peerLimit: boolean
+  perTorrentLimits: boolean
+  fileHandling: boolean
+  utpToggle: boolean
+}
+
+// 设置项控件类型（与后端 models.Setting* 一致）
+export type SettingFieldType = 'bool' | 'int' | 'float' | 'string' | 'select' | 'text' | 'time'
+
+// 枚举项
+export interface SettingsOption {
+  value: string
+  label: string
+  labelEn: string
+}
+
+// 一个设置项。key 为下载器的原生键名（qBittorrent 即 app/preferences 的
+// snake_case 键），前端原样读写，驱动侧负责键名、枚举与单位
+export interface SettingsField {
+  key: string
+  type: SettingFieldType
+  label: string
+  labelEn: string
+  hint?: string
+  hintEn?: string
+  // 数值单位（MiB / KiB / 秒 / 分钟 / 个 …）
+  unit?: string
+  min?: number
+  max?: number
+  // 界面值与原生值的换算系数：界面值 = 原生值 ÷ scale
+  scale?: number
+  options?: SettingsOption[]
+  // 枚举值的传输类型："int" 表示该枚举在上游 JSON 里是整数
+  valueType?: 'int' | 'string'
+  readOnly?: boolean
+  // 只写字段（密码等）：读取时不返回，界面显示为「留空即不改」
+  writeOnly?: boolean
+  secret?: boolean
+  // 修改后可能断开当前面板连接（如 WebUI 端口 / 账号密码）
+  danger?: boolean
+}
+
+// 设置分节（驱动自述，界面按类型通用渲染）
+export interface SettingsSection {
+  key: string
+  label: string
+  labelEn: string
+  // 语义图标名（behavior / speed / webui …），由驱动声明、界面映射成图形。
+  // 留空回落通用图标。用它替掉前端硬编码的「qB 节名 → 图标」对照表
+  icon?: string
+  fields: SettingsField[]
 }
 
 // 会话信息
@@ -149,6 +205,8 @@ export interface Session {
   version: string
   type?: DownloaderKind
   caps?: DownloaderCaps
+  // 当前下载器的设置字段自述；为空表示该驱动未提供（回退到通用会话字段）
+  schema?: SettingsSection[]
   rpcVersion: number
   downloadDir: string
   speedLimitDown: number
@@ -196,6 +254,18 @@ export interface Session {
   trashOriginalTorrentFiles: boolean
   idleSeedingLimitEnabled: boolean
   idleSeedingLimit: number
+  // 该驱动的原生偏好键值对（Schema 里字段的取值来源）：键名对齐各下载器自己的
+  // 配置接口，qBittorrent 即 app/preferences 的 snake_case 键
+  prefs?: Record<string, unknown>
+}
+
+// 指定服务器的会话响应（设置面板按服务器标签各读各的）
+export interface ServerSessionResponse {
+  index: number
+  name: string
+  // 该服务器是否就是当前连接的那台（状态索引与实际连接可能不同步，故由服务端判定）
+  active: boolean
+  session: Session
 }
 
 // 连接状态
@@ -303,6 +373,25 @@ export interface ColumnConfig {
   width?: number
 }
 
+// 侧边栏分组显隐（右键菜单控制）。servers 只在多服务器聚合时才有对应分组
+export interface SidebarMenuVisible {
+  status: boolean
+  labels: boolean
+  dirs: boolean
+  sites: boolean
+  error: boolean
+  servers: boolean
+}
+
+// 侧边栏分组折叠状态（labels / dirs / sites / error / servers）
+export interface SidebarCollapsed {
+  labels: boolean
+  dirs: boolean
+  sites: boolean
+  error: boolean
+  servers: boolean
+}
+
 // 过滤选项
 export interface FilterOptions {
   status: string[]
@@ -310,6 +399,10 @@ export interface FilterOptions {
   sites: string[]
   downloadDirs: string[]
   error: string[]
+  // 归属下载器筛选（多服务器聚合时才有意义）：存服务器名字。
+  // 用名字而不是索引：索引会随服务器列表增删重排，而筛选条件是被持久化的，
+  // 重排后旧索引会指到另一台，静默筛错。
+  servers: string[]
   search: string
   sortBy: string
   sortOrder: 'asc' | 'desc'

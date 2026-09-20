@@ -74,6 +74,7 @@ export default {
     errors: '错误分布',
     dirs: '数据目录',
     sites: '站点',
+    servers: '下载器',
     filter: '过滤器',
     selectByDoubleClick: '双击选中该分类全部种子',
   },
@@ -180,6 +181,7 @@ export default {
     fileCount: '文件数',
     downloadDir: '下载目录',
     hashString: '哈希',
+    server: '下载器',
     reset: '重置列',
   },
   labels: {
@@ -418,7 +420,10 @@ export default {
     fontSize: '字体大小',
     singleLine: '单行显示',
     showCheckboxes: '显示选择框',
-    a11yTitle: '液态玻璃无障碍',
+    // 这一节放壁纸/玻璃浓度 + 三档无障碍降级。
+    // 原标题「液态玻璃无障碍」是拿实现命名（Liquid Glass 是内部材质叫法），
+    // 而用户在这一节里管的是"界面看起来怎么样"，改用面向结果的说法
+    a11yTitle: '外观与无障碍',
     a11yHint: '默认跟随系统设置，手动调整后将由你接管',
     reduceGlass: '减弱透明效果',
     reduceMotion: '减弱动效',
@@ -496,7 +501,23 @@ export default {
       addServer: '添加服务器',
       activeServer: '切换服务器',
     },
+    // 设置面板的目标标签与驱动自述面板（qBittorrent 设置）
+    targetTitle: '设置目标',
+    targetCurrent: '当前连接',
+    targetNotActive: '正在编辑的不是当前活动服务器：改动只写到这台，仪表盘的数据源不变',
+    targetConnHint: '连接地址、账号与轮询间隔属于「当前连接」，要改动请到下方「多服务器管理」里编辑该服务器',
+    qbUnavailable: '未能读取该服务器的设置：请确认它已启用且可连接',
+    qbSave: '保存更改',
+    qbDiscard: '放弃',
+    qbPending: '有 {{count}} 项未保存',
+    qbKeepUnchanged: '留空表示不修改',
+    qbDangerHint: '此项改动可能导致面板与下载器断连',
     automation: '自动化',
+    // 设置弹窗左侧导航里「下载器设置」的汇总项（未连上 / 加载中时显示）
+    downloaderSettings: '下载器设置',
+    qbGroupDanger: '只读与危险项（{{count}}）',
+    // 「当前连接与这台服务器不一致」时给出的恢复动作
+    reconnectServer: '重新切换到该服务器',
     mcp: {
       title: 'MCP 服务',
       enabled: '启用 MCP 服务',

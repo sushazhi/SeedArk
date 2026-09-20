@@ -566,6 +566,8 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
   const { can, pickFolder } = usePlatform()
   // 全库已有标签（供编辑标签时下拉选择，对齐 .ref-transmission-web 的 labelsOptions）
   const allTorrents = useAppStore((s) => s.torrents)
+  // 当前下载器能力自述：不支持的项在限速弹窗里整项隐藏
+  const caps = useAppStore((s) => s.session?.caps)
   const allLabels = useMemo(
     () => Array.from(new Set(allTorrents.flatMap((x) => x.labels ?? []))).sort((a, b) => a.localeCompare(b, 'zh')),
     [allTorrents],
@@ -762,22 +764,26 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
           )}
           {mode === 'other' && (
             <div className="space-y-2">
-              <div className={row}>
-                <span className={label}>{t('action.priority')}</span>
-                <Segmented
-                  value={priority}
-                  options={[
-                    { value: 1, label: t('action.priorityHigh') },
-                    { value: 0, label: t('action.priorityNormal') },
-                    { value: -1, label: t('action.priorityLow') },
-                  ]}
-                  onChange={setPriority}
-                />
-              </div>
-              <div className={row}>
-                <span className={label}>{t('limits.honorSession')}</span>
-                <Switch checked={honor} onCheckedChange={setHonor} />
-              </div>
+              {caps?.perTorrentLimits !== false && (
+                <>
+                  <div className={row}>
+                    <span className={label}>{t('action.priority')}</span>
+                    <Segmented
+                      value={priority}
+                      options={[
+                        { value: 1, label: t('action.priorityHigh') },
+                        { value: 0, label: t('action.priorityNormal') },
+                        { value: -1, label: t('action.priorityLow') },
+                      ]}
+                      onChange={setPriority}
+                    />
+                  </div>
+                  <div className={row}>
+                    <span className={label}>{t('limits.honorSession')}</span>
+                    <Switch checked={honor} onCheckedChange={setHonor} />
+                  </div>
+                </>
+              )}
               <div className={row}>
                 <span className={label}>{t('limits.sequential')}</span>
                 <Switch checked={sequential} onCheckedChange={setSequential} />
@@ -839,11 +845,13 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
                   <Switch checked={ulEnabled} onCheckedChange={setUlEnabled} />
                 </div>
               </div>
-              <div className={row}>
-                <span className={label}>{t('limits.peers')}</span>
-                {/* 连接数 0 = 不连接任何 Peer（并非不限），因此最小值为 1；留空表示不修改 */}
-                <NumInput value={peerLimit} min={1} placeholder={t('limits.unlimitedHint')} onChange={(v) => setPeerLimit(v ?? null)} />
-              </div>
+              {caps?.peerLimit !== false && (
+                <div className={row}>
+                  <span className={label}>{t('limits.peers')}</span>
+                  {/* 连接数 0 = 不连接任何 Peer（并非不限），因此最小值为 1；留空表示不修改 */}
+                  <NumInput value={peerLimit} min={1} placeholder={t('limits.unlimitedHint')} onChange={(v) => setPeerLimit(v ?? null)} />
+                </div>
+              )}
               <div className={row}>
                 <span className={label}>{t('limits.seedIdle')}</span>
                 <div className="flex items-center gap-2">

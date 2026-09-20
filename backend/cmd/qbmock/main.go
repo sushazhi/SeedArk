@@ -16,12 +16,14 @@ import (
 
 func main() {
 	var (
-		addr   = flag.String("addr", "127.0.0.1:18080", "监听地址")
+		addr   = flag.String("addr", "127.0.0.1:8080", "监听地址")
 		user   = flag.String("user", "", "登录用户名（空 = 不校验）")
 		pass   = flag.String("pass", "", "登录密码（空 = 不校验）")
 		apiKey = flag.String("api-key", "", "API Key（qbt_ 开头共 32 位；空 = 自动生成）")
 		compat = flag.String("compat", "5.x", "兼容模式：5.x（qBittorrent 5.2.3）或 4.x（隐藏 start/stop/setTags 验证回退）")
-		seed   = flag.Int("seed", 6, "初始种子数量")
+		seed   = flag.Int("seed", 14, "初始种子数量")
+		tick   = flag.Duration("tick", 1*time.Second, "模拟推进间隔")
+		static = flag.Bool("static", false, "关闭实时模拟（静态快照）")
 	)
 	flag.Parse()
 
@@ -33,6 +35,16 @@ func main() {
 		Seed:   *seed,
 	}
 	srv := qbmock.New(opts)
+
+	if !*static {
+		go func() {
+			t := time.NewTicker(*tick)
+			defer t.Stop()
+			for range t.C {
+				srv.Step(*tick)
+			}
+		}()
+	}
 
 	httpSrv := &http.Server{
 		Addr:              *addr,

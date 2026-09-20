@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ColumnConfig, FilterOptions, Session, Torrent } from '@/types'
+import type { ColumnConfig, FilterOptions, Session, SidebarCollapsed, SidebarMenuVisible, Torrent } from '@/types'
 
 // 默认列配置（label 为 i18n key）
 export const defaultColumns: ColumnConfig[] = [
@@ -28,6 +28,9 @@ export const defaultColumns: ColumnConfig[] = [
   { key: 'fileCount', label: 'columns.fileCount', visible: false, width: 70 },
   { key: 'downloadDir', label: 'columns.downloadDir', visible: false, width: 180 },
   { key: 'hashString', label: 'columns.hashString', visible: false, width: 210 },
+  // 归属服务器：默认隐藏（单服务器部署下这一列没有信息量），
+  // 聚合视图里由 useFilter 自动开启一次，见 appStore 的 ensureServerColumn
+  { key: 'server', label: 'columns.server', visible: false, width: 140 },
 ]
 
 export const defaultFilters: FilterOptions = {
@@ -36,12 +39,13 @@ export const defaultFilters: FilterOptions = {
   sites: [],
   downloadDirs: [],
   error: [],
+  servers: [],
   search: '',
   sortBy: 'name',
   sortOrder: 'asc',
 }
 
-// 列表是否处于某一分组内：状态（非 all）/ 标签 / 站点 / 目录 / 错误任一命中即算。
+// 列表是否处于某一分组内：状态（非 all）/ 标签 / 站点 / 目录 / 错误 / 下载器任一命中即算。
 // 搜索不算分组——它是叠加在任何分组之上的临时条件，清空分组时列表未必回到全部。
 // 与 useFilter 的判定保持一致：status 为空数组同样视为不过滤。
 function inGroup(f: FilterOptions): boolean {
@@ -50,7 +54,8 @@ function inGroup(f: FilterOptions): boolean {
     f.labels.length > 0 ||
     f.sites.length > 0 ||
     f.downloadDirs.length > 0 ||
-    f.error.length > 0
+    f.error.length > 0 ||
+    f.servers.length > 0
   )
 }
 
@@ -98,7 +103,7 @@ export interface AppState {
   // 种子行首的选择框是否显示（关闭后列表更紧凑，仍可用 Ctrl/Shift 点选）
   showCheckboxes: boolean
   // 侧边栏分组显隐（右键菜单控制）
-  sidebarMenuVisible: { status: boolean; labels: boolean; dirs: boolean; sites: boolean; error: boolean }
+  sidebarMenuVisible: SidebarMenuVisible
   // 状态过滤器子菜单：状态项是否在侧边栏显示（缺省视为显示）
   statusFilterVisible: Record<string, boolean>
   // 双击侧边栏分组项 → 全选该分组种子
@@ -108,7 +113,7 @@ export interface AppState {
   // 列表视图模式（表格/网格）
   viewMode: 'table' | 'grid'
   // 侧边栏折叠状态
-  sidebarCollapsed: { labels: boolean; dirs: boolean; sites: boolean; error: boolean }
+  sidebarCollapsed: SidebarCollapsed
 
   // 液态玻璃无障碍降级：默认镜像系统 prefers-*，a11yTouched 后由用户接管
   reduceGlass: boolean
@@ -158,6 +163,8 @@ export interface AppState {
   setColumnWidth: (key: string, width: number) => void
   setColumns: (cols: ColumnConfig[]) => void
   resetColumns: () => void
+  // 聚合视图首次出现时自动打开「归属服务器」列（每个会话只做一次）
+  ensureServerColumn: () => void
   setSession: (s: Session | null) => void
   setSidebarCollapsed: (patch: Partial<AppState['sidebarCollapsed']>) => void
   setSidebarMenuVisible: (patch: Partial<AppState['sidebarMenuVisible']>) => void
@@ -170,9 +177,13 @@ export interface AppState {
   setWallpaper: (v: string) => void
 }
 
+// 聚合视图首次出现时是否已自动开启「归属服务器」列（仅本会话，不持久化）。
+// 只自动开一次：用户之后手动关掉它，不能被下一次轮询再顶回来。
+let serverColumnAutoOpened = false
+
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       torrents: [],
       selectedIds: [],
       selectAnchorId: null,
@@ -193,13 +204,13 @@ export const useAppStore = create<AppState>()(
       fontSize: 16,
       singleLine: true,
       showCheckboxes: true,
-      sidebarMenuVisible: { status: true, labels: true, dirs: true, sites: true, error: true },
+      sidebarMenuVisible: { status: true, labels: true, dirs: true, sites: true, error: true, servers: true },
       statusFilterVisible: {},
       enableDoubleClickSelect: false,
       groupShowSize: true,
       showStats: true,
       viewMode: 'grid',
-      sidebarCollapsed: { labels: false, dirs: false, sites: false, error: false },
+      sidebarCollapsed: { labels: false, dirs: false, sites: false, error: false, servers: false },
       reduceGlass: false,
       reduceMotion: false,
       moreContrast: false,
@@ -222,15 +233,18 @@ export const useAppStore = create<AppState>()(
       resetSemantic: () => set({ semanticDirs: {} }),
       setWsStatus: (s) => set({ wsStatus: s }),
       setPollInterval: (v) => set({ pollInterval: v }),
-      setTorrents: (list) =>
+      setTorrents: (list) => {
         set((state) => {
           // 整表替换（切服务器 / REST 兜底 / 断线重连补发）后，选区里已不存在的 id
           // 必须剔除：否则批量操作会把无效 id 发给后端，跨服务器时还会误伤同号种子
           const selectedIds = pruneSelection(state.selectedIds, list)
           return selectedIds === state.selectedIds ? { torrents: list } : { torrents: list, selectedIds }
-        }),
+        })
+        // 列表里出现带归属的种子 ⇒ 后端处于聚合视图，把归属列自动打开一次
+        if (list.some((t) => t.serverIndex != null)) get().ensureServerColumn()
+      },
       // 增量推送合并：仅更新变化的种子，未变化的保持引用不变（利于 memo 跳过重渲染）
-      applyTorrentDiff: ({ added, updated, removed }) =>
+      applyTorrentDiff: ({ added, updated, removed }) => {
         set((state) => {
           const map = new Map(state.torrents.map((t) => [t.id, t]))
           for (const id of removed) map.delete(id)
@@ -240,7 +254,11 @@ export const useAppStore = create<AppState>()(
           // 被删除的种子同时从选区移除（removed 的 id 已不在表中）
           const selectedIds = pruneSelection(state.selectedIds, torrents)
           return selectedIds === state.selectedIds ? { torrents } : { torrents, selectedIds }
-        }),
+        })
+        // 聚合视图主要走增量推送，这里同样要能触发列自动开启
+        const changed = [...added, ...updated]
+        if (changed.some((t) => t.serverIndex != null)) get().ensureServerColumn()
+      },
       toggleSelect: (id) =>
         set((state) => ({
           selectedIds: state.selectedIds.includes(id)
@@ -274,7 +292,7 @@ export const useAppStore = create<AppState>()(
       // 一旦失效，列表会长期空白且没有任何可见的筛选标记，必须留一条明确的出路。
       clearAllFilters: () =>
         set((state) => ({
-          filters: { ...state.filters, status: ['all'], labels: [], sites: [], downloadDirs: [], error: [], search: '' },
+          filters: { ...state.filters, status: ['all'], labels: [], sites: [], downloadDirs: [], error: [], servers: [], search: '' },
         })),
       toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
       setTheme: (t) => set({ theme: t }),
@@ -297,6 +315,15 @@ export const useAppStore = create<AppState>()(
         })),
       setColumns: (cols) => set({ columns: cols }),
       resetColumns: () => set({ columns: defaultColumns }),
+      ensureServerColumn: () => {
+        if (serverColumnAutoOpened) return
+        serverColumnAutoOpened = true
+        const cols = get().columns
+        const col = cols.find((c) => c.key === 'server')
+        // 已经开着（或用户自己删过这一列）就不动，避免把用户的布局改回去
+        if (!col || col.visible) return
+        set({ columns: cols.map((c) => (c.key === 'server' ? { ...c, visible: true } : c)) })
+      },
       setSession: (s) => set({ session: s }),
       setSidebarCollapsed: (patch) =>
         set((state) => ({ sidebarCollapsed: { ...state.sidebarCollapsed, ...patch } })),
@@ -351,7 +378,9 @@ export const useAppStore = create<AppState>()(
           ...p,
           columns,
           filters: { ...defaultFilters, ...(p.filters ?? {}) },
-          sidebarMenuVisible: p.sidebarMenuVisible ?? { status: true, labels: true, dirs: true, sites: true, error: true },
+          // 旧版本持久化里没有 servers 键：默认值在前、持久化值覆盖在后，
+          // 这样既补上缺失的键，又不会丢掉用户已有的显隐设置
+          sidebarMenuVisible: { servers: true, ...(p.sidebarMenuVisible ?? { status: true, labels: true, dirs: true, sites: true, error: true }) },
           statusFilterVisible: p.statusFilterVisible ?? {},
           showCheckboxes: p.showCheckboxes ?? true,
           enableDoubleClickSelect: p.enableDoubleClickSelect ?? false,
@@ -360,7 +389,7 @@ export const useAppStore = create<AppState>()(
           viewMode: p.viewMode ?? 'table',
           themePreset: p.themePreset ?? 'blue',
           wallpaper: p.wallpaper ?? '',
-          sidebarCollapsed: p.sidebarCollapsed ?? { labels: false, dirs: false, sites: false, error: false },
+          sidebarCollapsed: { servers: false, ...(p.sidebarCollapsed ?? { labels: false, dirs: false, sites: false, error: false }) },
         }
       },
     },

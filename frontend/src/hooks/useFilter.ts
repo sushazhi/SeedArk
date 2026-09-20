@@ -144,6 +144,12 @@ export function useFilter(
       list = list.filter((t) => filters.error.includes(t.errorString))
     }
 
+    // 归属下载器过滤（多服务器聚合）。按服务器名匹配：
+    // 非聚合部署下不给归属字段，此时 servers 恒为空、这段不生效。
+    if (filters.servers.length > 0) {
+      list = list.filter((t) => t.serverName != null && filters.servers.includes(t.serverName))
+    }
+
     // 搜索（名称/哈希，模糊匹配：忽略空格与标点、不区分大小写）
     const q = normalizeSearch(filters.search)
     if (q) {
@@ -154,7 +160,7 @@ export function useFilter(
 
     // 多级排序：第一级状态优先级（下载中 > 做种中 > 暂停等），第二级所选字段
     const dir = sortOrder === 'asc' ? 1 : -1
-    const strSortFields = ['name', 'tracker', 'label', 'downloadDir', 'hashString']
+    const strSortFields = ['name', 'tracker', 'label', 'downloadDir', 'hashString', 'server']
     list = [...list].sort((a, b) => {
       let r = statusRank(a) - statusRank(b)
       if (r === 0) {
@@ -165,6 +171,8 @@ export function useFilter(
               case 'tracker': return t.trackerStats?.find((x) => !x.isBackup)?.host ?? t.trackerStats?.[0]?.host ?? ''
               case 'label': return t.labels?.[0] || ''
               case 'downloadDir': return t.downloadDir
+              // 归属列按显示名排序；无数值的排在最前，与「-」占位一致
+              case 'server': return t.serverName || ''
               default: return t.hashString
             }
           }

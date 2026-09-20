@@ -202,7 +202,7 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
         {/* Logo + 标题 */}
         <div className="flex items-center gap-2.5 shrink-0">
           <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--brand-grad-from)] to-[var(--brand-grad-to)] flex items-center justify-center shadow-[0_4px_14px_color-mix(in_srgb,var(--color-primary)_34%,transparent)]">
-            <span className="text-white font-bold text-body tracking-tight">TR</span>
+            <span className="text-white font-bold text-body tracking-tight">SA</span>
           </span>
           <div className="leading-tight hidden sm:flex items-center gap-2">
             <span className="font-semibold text-subhead text-gray-800 dark:text-gray-100">

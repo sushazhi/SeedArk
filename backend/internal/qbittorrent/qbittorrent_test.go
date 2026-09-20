@@ -166,9 +166,15 @@ func TestCapabilities(t *testing.T) {
 	c := &Client{}
 	caps := c.Capabilities()
 	for name, ok := range map[string]bool{
-		"BandwidthGroups": caps.BandwidthGroups,
-		"Blocklist":       caps.Blocklist,
-		"PortTest":        caps.PortTest,
+		"BandwidthGroups":  caps.BandwidthGroups,
+		"Blocklist":        caps.Blocklist,
+		"PortTest":         caps.PortTest,
+		"ScriptHooks":      caps.ScriptHooks,
+		"QueueStalled":     caps.QueueStalled,
+		"PeerLimit":        caps.PeerLimit,
+		"PerTorrentLimits": caps.PerTorrentLimits,
+		"FileHandling":     caps.FileHandling,
+		"UtpToggle":        caps.UtpToggle,
 	} {
 		if ok {
 			t.Errorf("%s 在 qBittorrent 下应为 false", name)

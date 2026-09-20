@@ -1,5 +1,5 @@
 import { client, request } from './client'
-import type { AutoMoveRule, BandwidthGroup, CreateTorrentJobStatus, CreateTorrentServerOptions, PathMapping, SeedPolicyGuard, SeedPolicyLog, SeedPolicyResult, SeedPolicyRule, ServerInfo, Session, SessionStats, SessionStatus, SpeedPolicyGuard, SpeedPolicyResult, SpeedPolicyRule, Torrent } from '@/types'
+import type { AutoMoveRule, BandwidthGroup, CreateTorrentJobStatus, CreateTorrentServerOptions, PathMapping, SeedPolicyGuard, SeedPolicyLog, SeedPolicyResult, SeedPolicyRule, ServerInfo, ServerSessionResponse, Session, SessionStats, SessionStatus, SpeedPolicyGuard, SpeedPolicyResult, SpeedPolicyRule, Torrent } from '@/types'
 
 // 种子相关接口
 export const torrentApi = {
@@ -115,6 +115,11 @@ export const systemApi = {
 export const sessionApi = {
   get: () => request<Session>(client.get('/session')),
   update: (body: Record<string, unknown>) => request(client.put('/session', body)),
+  // 指定服务器的会话读写：设置面板在服务器标签之间切换时，各自读各自的那台，
+  // 避免「改了一台却把值写进另一台」
+  getAt: (index: number) => request<ServerSessionResponse>(client.get(`/servers/${index}/session`)),
+  updateAt: (index: number, body: Record<string, unknown>) =>
+    request(client.put(`/servers/${index}/session`, body)),
   status: () => request<SessionStatus>(client.get('/session/status')),
   stats: () => request<SessionStats>(client.get('/session/stats')),
   portTest: () => request<{ open: boolean }>(client.get('/session/port-test')),

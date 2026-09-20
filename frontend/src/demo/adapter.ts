@@ -26,6 +26,7 @@ import {
   serverList,
   serverRemove,
   serverSave,
+  serverSession,
   serverSwitch,
   sessionStats,
   speedPolicyAll,
@@ -172,6 +173,17 @@ export const demoAdapter: AxiosAdapter = async (config) => {
   if (url === '/servers' && method === 'get') return respond(config, serverList())
   if (url === '/servers' && method === 'post') { serverSave((body.servers ?? []) as never[]); return respond(config) }
   if (url === '/servers/switch' && method === 'post') return respond(config, serverSwitch(num(body.index) ?? 0))
+  // 指定服务器的会话：桌面端设置面板按服务器标签各读各的，缺这条会让
+  // 「下载器设置」进去就报错（adapter 兜底返回「未提供该接口」）
+  const srvSession = /^\/servers\/(\d+)\/session$/.exec(url)
+  if (srvSession) {
+    const idx = Number(srvSession[1])
+    const res = serverSession(idx)
+    if (!res) return fail(config, '服务器不存在')
+    if (method === 'get') return respond(config, res)
+    // 写：演示模式只把改动记进内存（不区分具体键，行为上等价于"已保存"）
+    return respond(config, { updated: true })
+  }
   const serverDel = /^\/servers\/(\d+)$/.exec(url)
   if (serverDel && method === 'delete') { serverRemove(Number(serverDel[1])); return respond(config) }
 

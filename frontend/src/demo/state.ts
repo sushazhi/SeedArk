@@ -10,6 +10,7 @@ import type {
   Session,
   SessionStats,
   SessionStatsDetails,
+  SettingsSection,
   SpeedPolicyGuard,
   SpeedPolicyResult,
   SpeedPolicyRule,
@@ -653,9 +654,224 @@ export function updateDemoSettings(patch: Record<string, unknown>): void {
 
 // —— 多服务器 ——
 
+// qBittorrent 偏好与自述分节：演示模式下的精简版。
+// 键名与结构刻意与真实驱动（backend/internal/qbittorrent/qbprefs.go）保持一致，
+// 这样界面那条「按 schema 通用渲染」的代码路径在演示里也是真的被走到的；
+// 只取每节有代表性的几项，不必把上百个偏好全搬过来。
+const qbPreferences: Record<string, unknown> = {
+  confirm_torrent_deletion: false,
+  confirm_torrent_recheck: false,
+  recheck_completed_torrents: true,
+  performance_warning: true,
+  file_log_enabled: false,
+  save_path: '/downloads',
+  temp_path_enabled: true,
+  temp_path: '/downloads/incomplete',
+  start_paused_enabled: false,
+  preallocate_all: false,
+  queueing_enabled: true,
+  max_active_downloads: 5,
+  max_active_uploads: 3,
+  max_active_torrents: 8,
+  dont_count_slow_torrents: true,
+  listen_port: 6881,
+  random_port: false,
+  upnp: true,
+  dl_limit: 0,
+  up_limit: 0,
+  alt_dl_limit: 1024,
+  alt_up_limit: 512,
+  scheduler_enabled: false,
+  scheduler_from: '08:00',
+  scheduler_to: '23:00',
+  dht: true,
+  pex: true,
+  lsd: true,
+  encryption: 0,
+  max_connec: 500,
+  max_connec_per_torrent: 100,
+  max_uploads: 4,
+  max_uploads_per_torrent: 4,
+  web_ui_port: 8080,
+  web_ui_username: 'admin',
+  web_ui_password: '',
+  web_ui_csrf_protection_enabled: true,
+  web_ui_clickjacking_protection_enabled: true,
+  web_ui_secure_cookie_enabled: false,
+  web_ui_max_auth_fail_count: 5,
+  web_ui_ban_duration: 3600,
+  web_ui_session_timeout: 3600,
+  web_ui_host_header_validation_enabled: true,
+  web_ui_alt_dl_limit: 10240,
+  web_ui_alt_up_limit: 10240,
+  web_ui_domain_list: '*',
+  web_ui_address: '*',
+  web_ui_use_https: false,
+  web_ui_https_cert_path: '',
+  web_ui_https_key_path: '',
+  announce_to_all_trackers: false,
+  announce_to_all_tiers: false,
+  add_trackers_enabled: false,
+  add_trackers: '',
+  async_io_threads: 4,
+  checking_memory_use: 32,
+  current_interface_address: '',
+  current_network_interface: '',
+  disk_cache: -1,
+  disk_cache_ttl: 60,
+  disk_io_read_mode: 0,
+  disk_io_type: 0,
+  disk_queue_size: 1024,
+  embedded_tracker_port: 9000,
+  enable_embedded_tracker: false,
+  enable_multi_connections_from_same_ip: false,
+  max_connec_per_torrent_alt: 100,
+  send_buffer_watermark: 512,
+  send_buffer_low_watermark: 128,
+  send_buffer_watermark_factor: 150,
+  socket_backlog_size: 511,
+  torrent_queueing_enabled: true,
+  torrent_queueing_ignore_slow_torrents: false,
+  torrent_queueing_max_active_downloads: 5,
+  torrent_queueing_max_active_uploads: 3,
+  torrent_queueing_max_active_torrents: 8,
+  torrent_stop_condition: 0,
+  torrent_content_layout: 'Original',
+  torrent_changed_torrent_alert: false,
+  torrent_added_alert: false,
+  torrent_finished_alert: false,
+  rss_processing_enabled: true,
+  rss_auto_downloading_enabled: false,
+  rss_max_articles_per_feed: 50,
+  rss_refresh_interval: 30,
+}
+
+const qbSchema: SettingsSection[] = [
+  {
+    key: 'behavior', label: '行为', labelEn: 'Behavior', icon: 'behavior',
+    fields: [
+      { key: 'confirm_torrent_deletion', type: 'bool', label: '删除种子前需要确认', labelEn: 'Confirm torrent deletion' },
+      { key: 'confirm_torrent_recheck', type: 'bool', label: '重新校验前需要确认', labelEn: 'Confirm torrent recheck' },
+      { key: 'recheck_completed_torrents', type: 'bool', label: '下载完成后自动重新校验', labelEn: 'Recheck torrents on completion' },
+      { key: 'performance_warning', type: 'bool', label: '显示性能告警', labelEn: 'Show performance warning' },
+      { key: 'file_log_enabled', type: 'bool', label: '启用日志文件', labelEn: 'Enable log file' },
+    ],
+  },
+  {
+    key: 'downloads', label: '下载', labelEn: 'Downloads', icon: 'download',
+    fields: [
+      { key: 'save_path', type: 'string', label: '默认保存路径', labelEn: 'Default save path' },
+      { key: 'temp_path_enabled', type: 'bool', label: '使用临时路径', labelEn: 'Use temp path' },
+      { key: 'temp_path', type: 'string', label: '临时路径', labelEn: 'Temp path' },
+      { key: 'start_paused_enabled', type: 'bool', label: '新种子以暂停状态添加', labelEn: 'Add new torrents paused' },
+      { key: 'preallocate_all', type: 'bool', label: '预先分配磁盘空间', labelEn: 'Preallocate disk space' },
+      { key: 'queueing_enabled', type: 'bool', label: '启用队列', labelEn: 'Enable queueing' },
+      { key: 'max_active_downloads', type: 'int', label: '最大同时下载数', labelEn: 'Max active downloads', min: 1 },
+      { key: 'max_active_uploads', type: 'int', label: '最大同时上传数', labelEn: 'Max active uploads', min: 1 },
+      { key: 'max_active_torrents', type: 'int', label: '最大活动种子数', labelEn: 'Max active torrents', min: 1 },
+      { key: 'dont_count_slow_torrents', type: 'bool', label: '不计入慢速种子', labelEn: "Don't count slow torrents" },
+    ],
+  },
+  {
+    key: 'connection', label: '连接', labelEn: 'Connection', icon: 'connect',
+    fields: [
+      { key: 'listen_port', type: 'int', label: '监听端口', labelEn: 'Listening port', min: 1, max: 65535 },
+      { key: 'random_port', type: 'bool', label: '每次启动随机端口', labelEn: 'Use random port on each start' },
+      { key: 'upnp', type: 'bool', label: 'UPnP / NAT-PMP 端口转发', labelEn: 'UPnP / NAT-PMP port forwarding' },
+      { key: 'max_connec', type: 'int', label: '全局最大连接数', labelEn: 'Global max connections', min: -1 },
+      { key: 'max_connec_per_torrent', type: 'int', label: '单种子最大连接数', labelEn: 'Max connections per torrent', min: -1 },
+      { key: 'max_uploads', type: 'int', label: '全局最大上传槽', labelEn: 'Global max upload slots', min: -1 },
+      { key: 'max_uploads_per_torrent', type: 'int', label: '单种子最大上传槽', labelEn: 'Max upload slots per torrent', min: -1 },
+    ],
+  },
+  {
+    key: 'speed', label: '速度', labelEn: 'Speed', icon: 'speed',
+    fields: [
+      { key: 'dl_limit', type: 'int', label: '全局下载限速', labelEn: 'Global download limit', unit: 'B/s', min: 0 },
+      { key: 'up_limit', type: 'int', label: '全局上传限速', labelEn: 'Global upload limit', unit: 'B/s', min: 0 },
+      { key: 'alt_dl_limit', type: 'int', label: '备用下载限速', labelEn: 'Alternative download limit', unit: 'B/s', min: 0 },
+      { key: 'alt_up_limit', type: 'int', label: '备用上传限速', labelEn: 'Alternative upload limit', unit: 'B/s', min: 0 },
+      { key: 'scheduler_enabled', type: 'bool', label: '启用定时备用限速', labelEn: 'Enable scheduled alternative limits' },
+      { key: 'scheduler_from', type: 'time', label: '开始时间', labelEn: 'Schedule from' },
+      { key: 'scheduler_to', type: 'time', label: '结束时间', labelEn: 'Schedule to' },
+    ],
+  },
+  {
+    key: 'bittorrent', label: 'BitTorrent', labelEn: 'BitTorrent', icon: 'bittorrent',
+    fields: [
+      { key: 'dht', type: 'bool', label: '启用 DHT', labelEn: 'Enable DHT' },
+      { key: 'pex', type: 'bool', label: '启用 PeX', labelEn: 'Enable PeX' },
+      { key: 'lsd', type: 'bool', label: '启用本地节点发现', labelEn: 'Enable local peer discovery' },
+      {
+        key: 'encryption', type: 'select', label: '加密模式', labelEn: 'Encryption mode', valueType: 'int',
+        options: [
+          { value: '0', label: '允许加密', labelEn: 'Allow encryption' },
+          { value: '1', label: '强制加密', labelEn: 'Require encryption' },
+          { value: '2', label: '禁用加密', labelEn: 'Disable encryption' },
+        ],
+      },
+      { key: 'announce_to_all_trackers', type: 'bool', label: '向所有 Tracker 汇报', labelEn: 'Announce to all trackers' },
+      { key: 'announce_to_all_tiers', type: 'bool', label: '向所有层级汇报', labelEn: 'Announce to all tiers' },
+      { key: 'add_trackers_enabled', type: 'bool', label: '自动添加 Tracker', labelEn: 'Auto-append trackers' },
+      { key: 'add_trackers', type: 'text', label: 'Tracker 列表', labelEn: 'Tracker list', hint: '每行一个', hintEn: 'one per line' },
+      { key: 'torrent_content_layout', type: 'select', label: '内容布局', labelEn: 'Content layout',
+        options: [
+          { value: 'Original', label: '原始', labelEn: 'Original' },
+          { value: 'Subfolder', label: '创建子文件夹', labelEn: 'Create subfolder' },
+          { value: 'NoSubfolder', label: '不创建子文件夹', labelEn: 'Don\u2019t create subfolder' },
+        ] },
+    ],
+  },
+  {
+    key: 'rss', label: 'RSS', labelEn: 'RSS', icon: 'rss',
+    fields: [
+      { key: 'rss_processing_enabled', type: 'bool', label: '启用 RSS 处理', labelEn: 'Enable RSS processing' },
+      { key: 'rss_auto_downloading_enabled', type: 'bool', label: '启用 RSS 自动下载', labelEn: 'Enable RSS auto-downloading' },
+      { key: 'rss_max_articles_per_feed', type: 'int', label: '每个订阅最多文章数', labelEn: 'Max articles per feed', min: 0 },
+      { key: 'rss_refresh_interval', type: 'int', label: '刷新间隔', labelEn: 'Refresh interval', unit: '分钟', min: 1 },
+    ],
+  },
+  {
+    key: 'webui', label: 'WebUI', labelEn: 'WebUI', icon: 'webui',
+    fields: [
+      { key: 'web_ui_port', type: 'int', label: 'WebUI 端口', labelEn: 'WebUI port', min: 1, max: 65535, danger: true },
+      { key: 'web_ui_username', type: 'string', label: '用户名', labelEn: 'Username', danger: true },
+      { key: 'web_ui_password', type: 'string', label: '密码', labelEn: 'Password', secret: true, writeOnly: true, danger: true },
+      { key: 'web_ui_csrf_protection_enabled', type: 'bool', label: 'CSRF 保护', labelEn: 'CSRF protection' },
+      { key: 'web_ui_clickjacking_protection_enabled', type: 'bool', label: '点击劫持保护', labelEn: 'Clickjacking protection' },
+      { key: 'web_ui_secure_cookie_enabled', type: 'bool', label: 'Cookie 仅走 HTTPS', labelEn: 'Secure cookie' },
+      { key: 'web_ui_max_auth_fail_count', type: 'int', label: '最大认证失败次数', labelEn: 'Max auth fail count', min: 0 },
+      { key: 'web_ui_ban_duration', type: 'int', label: '封禁时长', labelEn: 'Ban duration', unit: '秒', min: 0 },
+      { key: 'web_ui_session_timeout', type: 'int', label: '会话超时', labelEn: 'Session timeout', unit: '秒', min: 0 },
+      { key: 'web_ui_use_https', type: 'bool', label: '启用 HTTPS', labelEn: 'Use HTTPS', danger: true },
+      { key: 'web_ui_https_cert_path', type: 'string', label: '证书路径', labelEn: 'Certificate path', danger: true },
+      { key: 'web_ui_https_key_path', type: 'string', label: '私钥路径', labelEn: 'Key path', danger: true },
+    ],
+  },
+  {
+    key: 'advanced', label: '高级', labelEn: 'Advanced', icon: 'advanced',
+    fields: [
+      { key: 'async_io_threads', type: 'int', label: '异步 IO 线程数', labelEn: 'Async IO threads', min: 1, max: 1024 },
+      { key: 'checking_memory_use', type: 'int', label: '校验内存', labelEn: 'Checking memory use', unit: 'MiB', min: 1 },
+      { key: 'disk_cache', type: 'int', label: '磁盘缓存', labelEn: 'Disk cache', unit: 'MiB', min: -1 },
+      { key: 'disk_cache_ttl', type: 'int', label: '缓存有效期', labelEn: 'Disk cache TTL', unit: '秒', min: 1 },
+      { key: 'disk_queue_size', type: 'int', label: '磁盘队列大小', labelEn: 'Disk queue size', min: 1 },
+      { key: 'enable_embedded_tracker', type: 'bool', label: '启用内置 Tracker', labelEn: 'Enable embedded tracker' },
+      { key: 'embedded_tracker_port', type: 'int', label: '内置 Tracker 端口', labelEn: 'Embedded tracker port', min: 1, max: 65535 },
+      { key: 'enable_multi_connections_from_same_ip', type: 'bool', label: '允许同 IP 多连接', labelEn: 'Allow multiple connections from same IP' },
+      { key: 'send_buffer_watermark', type: 'int', label: '发送缓冲上限', labelEn: 'Send buffer watermark', unit: 'KiB', min: 1 },
+      { key: 'send_buffer_low_watermark', type: 'int', label: '发送缓冲下限', labelEn: 'Send buffer low watermark', unit: 'KiB', min: 1 },
+      { key: 'socket_backlog_size', type: 'int', label: 'Socket 积压', labelEn: 'Socket backlog size', min: 1 },
+      { key: 'current_network_interface', type: 'string', label: '网络接口', labelEn: 'Network interface', readOnly: true },
+      { key: 'current_interface_address', type: 'string', label: '接口地址', labelEn: 'Interface address', readOnly: true },
+    ],
+  },
+]
+
 interface DemoServer {
   index?: number
   name: string
+  type?: 'transmission' | 'qbittorrent'
   url: string
   user: string
   pass?: string
@@ -663,13 +879,43 @@ interface DemoServer {
   enabled: boolean
 }
 
+// 两台：TR 与 qB 各一。设置面板的「下载器设置」按服务器类型渲染不同面板
+// （TR 内置表单 / qB 驱动自述），只有一类就演示不出这个分流，因此默认带上 qB。
 let servers: DemoServer[] = [
-  { name: '演示 Transmission', url: 'http://192.168.1.10:9091/transmission/rpc', user: 'demo', hasPass: true, enabled: true },
+  { name: '演示 Transmission', type: 'transmission', url: 'http://192.168.1.10:9091/transmission/rpc', user: 'demo', hasPass: true, enabled: true },
+  { name: '演示 qBittorrent', type: 'qbittorrent', url: 'http://192.168.1.11:8080', user: 'admin', hasPass: true, enabled: true },
 ]
 let activeServer = 0
 
 export function serverList(): { servers: DemoServer[]; activeServer: number } {
   return { servers: clone(servers), activeServer }
+}
+
+// 指定服务器的会话（GET /servers/:index/session）。
+// 桌面端设置面板靠它按服务器标签各读各的；演示模式下按服务器类型给一份对应的会话，
+// qB 的还带上驱动自述分节，否则「下载器设置」进去只有一片空白。
+export function serverSession(index: number): {
+  index: number
+  name: string
+  active: boolean
+  session: Session
+} | null {
+  ensureDemo()
+  const srv = servers[index]
+  if (!srv) return null
+  const base = clone(session)
+  const kind = srv.type ?? 'transmission'
+  if (kind === 'qbittorrent') {
+    base.type = 'qbittorrent'
+    base.version = '5.2.3'
+    base.prefs = clone(qbPreferences)
+    base.schema = clone(qbSchema)
+  }
+  return { index, name: srv.name, active: index === activeServer, session: base }
+}
+
+export function serverActiveIndex(): number {
+  return activeServer
 }
 
 export function serverSave(arr: DemoServer[]): void {

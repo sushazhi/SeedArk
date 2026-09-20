@@ -16,6 +16,7 @@ import { toast } from '@/lib/toast'
 import { cn, cssVars } from '@/lib/utils'
 import { tagColor } from '@/utils/tagColor'
 import { StatusTag } from '@/components/status/StatusTag'
+import { ServerCell } from '@/components/TorrentList/ServerCell'
 import { ProgressBar } from '@/components/TorrentList/ProgressBar'
 import { EmptyList } from '@/components/TorrentList/EmptyList'
 import { buildTorrentMenu, EditModals, FloatingContextMenu, TorrentMenuDropdown } from '@/components/TorrentMenu'
@@ -143,6 +144,8 @@ function Cell({ torrent, col }: { torrent: Torrent; col: ColumnConfig }) {
       return <span className="text-footnote text-gray-500 truncate" title={torrent.downloadDir}>{sem(torrent.downloadDir) || '-'}</span>
     case 'hashString':
       return <span className="text-footnote tm-mono text-gray-500 truncate" title={torrent.hashString}>{torrent.hashString}</span>
+    case 'server':
+      return <ServerCell torrent={torrent} />
     case 'error':
       return (
         <span className="text-red-500 truncate" title={translateError(torrent.errorString, t) || undefined}>

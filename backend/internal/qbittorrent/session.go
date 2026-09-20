@@ -76,8 +76,14 @@ type mainData struct {
 func (c *Client) GetSession(ctx context.Context) (*models.Session, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	var prefs appPreferences
-	if err := c.get(ctx, "app/preferences", nil, &prefs); err != nil {
+	// 原始偏好表既供下方通用字段映射，又按自述清单原样交给设置面板
+	// （后者要的就是原生键，加一层结构体只会丢字段）
+	var rawPrefs map[string]any
+	if err := c.get(ctx, "app/preferences", nil, &rawPrefs); err != nil {
+		return nil, err
+	}
+	prefs, err := decodePrefs(rawPrefs)
+	if err != nil {
 		return nil, err
 	}
 	var info transferInfo
@@ -124,7 +130,10 @@ func (c *Client) GetSession(ctx context.Context) (*models.Session, error) {
 		IdleSeedingLimitEnabled: prefs.MaxSeedingTimeEnabled,
 		IdleSeedingLimit:        prefs.MaxSeedingTime,
 		DefaultTrackers:         splitTrackers(prefs.AddTrackers),
+		Prefs:                   readQBPreferences(rawPrefs),
 	}
+	// 兼容尚未迁移的调用方（既有测试走 Session.QB）
+	sess.QB = sess.Prefs
 	// 传输限速：优先用 transfer/info 的实时值（备用限速生效时它会变）
 	if info.DlRateLimit > 0 {
 		sess.SpeedLimitDown = info.DlRateLimit / 1024
@@ -234,6 +243,16 @@ func (c *Client) SetSession(ctx context.Context, patch driver.SessionPatch) erro
 	}
 	// Transmission 专属、qBittorrent 无对应能力：忽略（黑名单、脚本钩子、
 	// 未完成文件重命名、回收源文件、队列停滞、全局连接数等）
+	// QB 通道：设置面板直投的原生偏好键，逐个按键值校验（含枚举范围）后并入
+	if len(patch.QB) > 0 {
+		qbPrefs, err := applyQBPreferences(patch.QB)
+		if err != nil {
+			return err
+		}
+		for k, v := range qbPrefs {
+			prefs[k] = v
+		}
+	}
 	if len(prefs) == 0 {
 		return nil
 	}
