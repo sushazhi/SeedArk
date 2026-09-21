@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { client, request } from '@/api/client'
-import { APP_BASE } from '@/platform/appBase'
 import { serverApi, sessionApi, torrentApi, updateApi, type UpdateCheckResult, type UpdateStatus } from '@/api/torrent'
 import { AutoMoveManager } from '@/components/AutoMoveManager'
 import { McpManager } from '@/components/McpManager'
@@ -252,6 +251,15 @@ function AboutSection({ transmissionVersion, framed = true }: { transmissionVers
     }
   }
 
+  // 下载 fpk 给应用中心手动安装：走 updateApi 以便带上鉴权头
+  const downloadFpk = async () => {
+    try {
+      await updateApi.download(updStatus?.fpkFilename)
+    } catch {
+      // 拦截器已提示
+    }
+  }
+
   const downloading = !!updStatus?.updating
   const done = !!updStatus && !updStatus.updating && updStatus.progress >= 100
   const failed = !!updStatus && !updStatus.updating && updStatus.failed
@@ -303,10 +311,8 @@ function AboutSection({ transmissionVersion, framed = true }: { transmissionVers
               {failed && <p className="text-red-500 text-footnote">{updStatus?.message || t('session.updateFailed')}</p>}
               {done || readyWithoutInstall ? (
                 <div className="space-y-1">
-                  <Button asChild size="sm" className="h-8 text-footnote">
-                    <a href={APP_BASE + '/api/update/download'} download={updStatus?.fpkFilename || undefined}>
-                      {t('session.downloadFpk')}
-                    </a>
+                  <Button size="sm" className="h-8 text-footnote" onClick={() => void downloadFpk()}>
+                    {t('session.downloadFpk')}
                   </Button>
                   <p className="text-caption1 text-gray-400">{t('session.fpkInstallHint')}</p>
                 </div>
@@ -1442,9 +1448,13 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => setOpenPolicy(true)}>
             {t('seedPolicy.title')}
           </Button>
-          <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => useAppStore.getState().openSpeedPolicy()}>
-            {t('speedPolicy.title')}
-          </Button>
+          {/* 分组限速依赖 honorsSessionLimits 语义（引擎靠它区分引擎写入与用户手动限速），
+              qBittorrent 的单种限速是绝对值，没有该标记，故整项隐藏 */}
+          {caps?.honorsSessionLimits !== false && (
+            <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => useAppStore.getState().openSpeedPolicy()}>
+              {t('speedPolicy.title')}
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => setOpenMcp(true)}>
             {t('session.mcp.title')}
           </Button>

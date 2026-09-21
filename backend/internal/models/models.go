@@ -295,6 +295,10 @@ type Capabilities struct {
 	PeerLimit bool `json:"peerLimit"`
 	// 单种限速细节（带宽优先级、是否遵循全局限速）
 	PerTorrentLimits bool `json:"perTorrentLimits"`
+	// 「遵循全局限速」标记（honorsSessionLimits）。
+	// 组内总限速引擎靠关闭该标记 + 下发单种限速来接管种子，因此没有该语义的
+	// 下载器（qBittorrent 的单种限速是绝对值）不能启用分组限速。
+	HonorsSessionLimits bool `json:"honorsSessionLimits"`
 	// 下载文件处理项（未完成文件重命名、回收源种子文件）
 	FileHandling bool `json:"fileHandling"`
 	// uTP 传输协议开关

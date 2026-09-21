@@ -93,6 +93,8 @@ func NewProbe(cred Credentials) (driver.Backend, error) {
 
 // newBackend 按类型构造驱动实例
 func newBackend(cred Credentials) (driver.Backend, error) {
+	// 凭据在此登记，后续错误文本回传时按值抹除（见 SanitizeClientMsg）
+	RegisterSecret(cred.Pass)
 	switch driver.NormalizeKind(string(cred.Type)) {
 	case driver.KindQBittorrent:
 		return qbittorrent.New(cred.URL, cred.User, cred.Pass)
@@ -230,32 +232,39 @@ func DecodeID(id int64) (idx int, localID int64) {
 }
 
 // BackendFor 按种子 ID 路由到对应后端，并返回该后端视角的本地 ID。
-// 未编码的 ID（idx=-1）属于当前活动服务器，交给 ActiveBackend 解析到正确实例。
-func (m *Manager) BackendFor(id int64) (driver.Backend, int64) {
+// 未编码的 ID（idx=-1）属于当前活动服务器，交给 ActiveBackend 解析到正确实例；
+// 编码 ID 指向的服务器不可用时返回错误——绝不能回落到活动服务器：
+// 各服务器本地 ID 空间互相独立，「3 号服务器的 9 号种子」与「当前服务器的 9 号种子」
+// 是两颗不同的种子，回落会把删除/暂停等操作施加到错误的种子上（fail closed）。
+func (m *Manager) BackendFor(id int64) (driver.Backend, int64, error) {
 	idx, localID := DecodeID(id)
 	if idx < 0 {
-		return m.ActiveBackend(), localID
+		return m.ActiveBackend(), localID, nil
 	}
 	m.mu.RLock()
 	mb, ok := m.members[idx]
 	m.mu.RUnlock()
 	if !ok {
-		return m.Client(), localID
+		return nil, 0, fmt.Errorf("种子 %d 所属的服务器 %d 未启用或已移除", id, idx+1)
 	}
-	return mb.backend, localID
+	return mb.backend, localID, nil
 }
 
 // GroupIDs 把一批 ID 按目标后端分组（批量操作一次分发到各服务器）。
-// 返回顺序与输入一致，调用方据此拼装响应。
-func (m *Manager) GroupIDs(ids []int64) []IDGroup {
+// 返回顺序与输入一致，调用方据此拼装响应；任一 ID 指向不可用的服务器时
+// 整体报错而不部分执行，避免用户看到「一半成功一半静默跳过」的混乱结果。
+func (m *Manager) GroupIDs(ids []int64) ([]IDGroup, error) {
 	if len(ids) == 0 {
-		return nil
+		return nil, nil
 	}
 	// 保持输入顺序，避免响应里的 id 列表与请求错位
 	order := make(map[driver.Backend]int)
 	var groups []IDGroup
 	for _, id := range ids {
-		b, local := m.BackendFor(id)
+		b, local, err := m.BackendFor(id)
+		if err != nil {
+			return nil, err
+		}
 		i, ok := order[b]
 		if !ok {
 			i = len(groups)
@@ -264,7 +273,7 @@ func (m *Manager) GroupIDs(ids []int64) []IDGroup {
 		}
 		groups[i].IDs = append(groups[i].IDs, local)
 	}
-	return groups
+	return groups, nil
 }
 
 // IDGroup 同一后端上的一批本地 ID

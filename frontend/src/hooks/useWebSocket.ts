@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getAuthToken } from '@/api/authToken'
+import { fetchWsTicket } from '@/api/wsTicket'
 import { useAppStore } from '@/stores/appStore'
 import { torrentApi } from '@/api/torrent'
 import { APP_BASE } from '@/platform/appBase'
@@ -82,7 +83,12 @@ export function useWebSocket() {
       pollTimer = window.setInterval(() => void fetchFallback(), fallbackPollMs())
     }
 
-    const connect = () => {
+    // connectSeq 递增序号：connect 改为异步（先换票）后，
+    // 换票期间若有新的 connect 发起或组件卸载，旧的这次必须放弃
+    let connectSeq = 0
+
+    const connect = async () => {
+      const seq = ++connectSeq
       // 取消已排队的重试，避免与本次调用并发创建多个连接
       if (retryTimer) {
         window.clearTimeout(retryTimer)
@@ -96,9 +102,17 @@ export function useWebSocket() {
         return
       }
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      // 握手无法携带自定义请求头，令牌只能走查询参数（后端仅对 /ws 接受该参数）
+      // 握手无法携带自定义请求头。首选一次性票据（已鉴权的普通请求换取，
+      // 用后即焚）；换票失败时回退到 ?token=，保证旧后端仍可用
+      let handshake = ''
       const token = getAuthToken()
-      const handshake = token ? `?token=${encodeURIComponent(token)}` : ''
+      if (token && !DEMO_MODE) {
+        const ticket = await fetchWsTicket()
+        if (closed || seq !== connectSeq) return
+        handshake = ticket
+          ? `?ticket=${encodeURIComponent(ticket)}`
+          : `?token=${encodeURIComponent(token)}`
+      }
       let socket: WebSocket
       if (DEMO_MODE) {
         socket = new DemoSocket() as unknown as WebSocket
@@ -147,7 +161,7 @@ export function useWebSocket() {
         store.setWsStatus('disconnected')
         startPolling() // ws 断开，REST 轮询兜底
         retries = Math.min(retries + 1, retryLimit())
-        retryTimer = window.setTimeout(connect, Math.min(1000 * retries, 30000))
+        retryTimer = window.setTimeout(() => void connect(), Math.min(1000 * retries, 30000))
       }
       // 不在 onerror 中手动 close（避免在连接未打开时抛 "WebSocket closed without opened"），
       // 让浏览器自动触发 onclose 完成清理与重试
@@ -162,7 +176,7 @@ export function useWebSocket() {
       }
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
       if (retries >= retryLimit()) startPolling()
-      else connect()
+      else void connect()
     }
 
     // 轮询间隔变化（设置页保存）后重建兜底定时器，无需刷新页面
@@ -172,7 +186,7 @@ export function useWebSocket() {
 
     // 挂载时立即用 REST 拉取一次，避免依赖 ws 才出数据
     void fetchFallback()
-    connect()
+    void connect()
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       closed = true

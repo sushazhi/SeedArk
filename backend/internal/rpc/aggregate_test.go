@@ -32,25 +32,29 @@ func TestEncodeDecodeID(t *testing.T) {
 	}
 }
 
-// TestGroupIDs 批量操作的 ID 必须按后端分组，且组内顺序与输入一致
+// TestGroupIDs 批量操作的 ID 必须按后端分组，且组内顺序与输入一致；
+// 指向不可用服务器的编码 ID 必须整体报错，绝不能回落到活动服务器执行
 func TestGroupIDs(t *testing.T) {
 	m, err := NewManager(Credentials{URL: "http://127.0.0.1:9091/transmission/rpc"})
 	if err != nil {
 		t.Fatalf("创建 Manager 失败: %v", err)
 	}
-	// 未设置聚合成员时，全部落到同一组（活动后端）
-	groups := m.GroupIDs([]int64{1, 2, EncodeID(3, 9)})
+	// 未编码的 ID 属于活动后端，全部落到同一组
+	groups, err := m.GroupIDs([]int64{1, 2, 3})
+	if err != nil {
+		t.Fatalf("未编码 ID 不应报错: %v", err)
+	}
 	if len(groups) != 1 {
-		t.Fatalf("未聚合时应只有一组，得到 %d 组", len(groups))
+		t.Fatalf("未编码 ID 应只有一组，得到 %d 组", len(groups))
 	}
 	if len(groups[0].IDs) != 3 {
 		t.Errorf("组内应有 3 个 ID，得到 %d", len(groups[0].IDs))
 	}
-	// 未知服务器的 ID 必须还原成本地 ID 而不是把编码值发给后端
-	if groups[0].IDs[2] != 9 {
-		t.Errorf("未知服务器的 ID 应还原为本地 ID 9，得到 %d", groups[0].IDs[2])
+	// 未知服务器的编码 ID 必须报错：不同服务器的本地 ID 空间独立，回落即误伤
+	if _, err := m.GroupIDs([]int64{EncodeID(3, 9)}); err == nil {
+		t.Error("指向不存在服务器的 ID 必须报错，不能回落到活动服务器")
 	}
-	if m.GroupIDs(nil) != nil {
+	if g, err := m.GroupIDs(nil); g != nil || err != nil {
 		t.Error("空 ID 列表应返回 nil（Transmission 语义：作用于全部种子）")
 	}
 }

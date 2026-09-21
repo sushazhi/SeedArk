@@ -96,9 +96,17 @@ func (c *Client) mapTorrent(t torrentInfo) *models.Torrent {
 		// 组内限速引擎正是靠关闭这个标记来下发单种限速的
 		HonorsSessionLimits: false,
 	}
-	if t.RatioLimit >= 0 {
+	// 分享率模式回读：qBittorrent 的 ratioLimit 语义与面板的三态一一对应
+	//   >= 0 → 单种覆盖（1）
+	//   -1   → 不限（2）
+	//   -2   → 跟随全局（0）
+	// 若不区分 -1 与 -2，面板的「不限」会被显示成「跟随全局」，两者行为完全不同。
+	switch {
+	case t.RatioLimit >= 0:
 		out.SeedRatioMode = 1
-	} else {
+	case t.RatioLimit == -1:
+		out.SeedRatioMode = 2
+	default:
 		out.SeedRatioMode = 0
 	}
 	if t.Tracker != "" {
@@ -201,6 +209,21 @@ func applyTrackers(t *models.Torrent, list []torrentTracker) {
 		// qBittorrent 的 status：0 禁用 / 1 未联系 / 2 正常 / 3 更新中 /
 		// 4 不可用 / 5  Tracker 报错（2.13+）/ 6 不可达（2.13+）
 		ok := tr.Status == 2 || tr.Status == 3
+		// LastAnnounceTime：qBittorrent 不返回 announce 时间戳，但做种策略的
+		// trackerUnreachable() 保护栏按「LastAnnounceTime > 0 且未成功」判定
+		// 「尝试过但全失败」。不填的话该保护栏在 QB 下永不触发，站点没记账的
+		// 种子会被照常暂停 / 删除 —— 这是数据安全相关的差异，必须补。
+		//
+		// 用「已联系过但当前未成功」的状态码反推：状态 3/4/5/6 表示 qBittorrent
+		// 确实尝试过且未成功；0（禁用）/ 1（未联系）与 2/3（成功）都不算失败尝试。
+		// 时间戳取该种子的最近活动时间，保证详情面板渲染出来是合理日期而非 1970。
+		attempted := int64(0)
+		if !ok && tr.Status >= 3 {
+			attempted = t.ActivityDate
+			if attempted <= 0 {
+				attempted = t.AddedDate
+			}
+		}
 		t.TrackerStats = append(t.TrackerStats, models.TrackerStat{
 			ID:                    int64(i),
 			Host:                  hostOf(tr.URL),
@@ -209,6 +232,7 @@ func applyTrackers(t *models.Torrent, list []torrentTracker) {
 			Tier:                  tr.Tier,
 			LastAnnounceResult:    tr.Message,
 			LastAnnounceSucceeded: ok,
+			LastAnnounceTime:      attempted,
 			SeederCount:           tr.NumSeeds,
 			LeecherCount:          tr.NumLeechers,
 			DownloadCount:         tr.NumDownloaded,

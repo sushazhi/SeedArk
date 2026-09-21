@@ -13,6 +13,7 @@
 package qbittorrent
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -206,8 +207,11 @@ func (c *Client) Capabilities() driver.Capabilities {
 		QueueStalled:     false,
 		PeerLimit:        false,
 		PerTorrentLimits: false,
-		FileHandling:     false,
-		UtpToggle:        false,
+		// qBittorrent 的单种限速是绝对值，没有「跟随全局限速」开关：
+		// 分组限速引擎依赖该语义接管种子，故 QB 下不能启用该引擎
+		HonorsSessionLimits: false,
+		FileHandling:        false,
+		UtpToggle:           false,
 	}
 }
 
@@ -243,8 +247,8 @@ func (c *Client) WebAPIVersion(ctx context.Context) (string, error) {
 
 // post 显式 POST（写操作）
 func (c *Client) post(ctx context.Context, endpoint string, form url.Values) error {
-	_, err := c.raw(ctx, http.MethodPost, c.base+"/api/v2/"+endpoint, form,
-		strings.NewReader(form.Encode()), "application/x-www-form-urlencoded", true)
+	_, err := c.raw(ctx, http.MethodPost, c.base+"/api/v2/"+endpoint, formReader(form),
+		"application/x-www-form-urlencoded", true)
 	return err
 }
 
@@ -254,8 +258,8 @@ func (c *Client) postMultipart(ctx context.Context, endpoint string, fields map[
 	if err != nil {
 		return nil, err
 	}
-	return c.raw(ctx, http.MethodPost, c.base+"/api/v2/"+endpoint, nil,
-		strings.NewReader(string(body)), contentType, true)
+	return c.raw(ctx, http.MethodPost, c.base+"/api/v2/"+endpoint,
+		func() io.Reader { return bytes.NewReader(body) }, contentType, true)
 }
 
 // get 读取并把 JSON 响应解析到 out（out 为 nil 时丢弃响应体）
@@ -264,7 +268,7 @@ func (c *Client) get(ctx context.Context, endpoint string, params url.Values, ou
 	if len(params) > 0 {
 		apiURL += "?" + params.Encode()
 	}
-	data, err := c.raw(ctx, http.MethodGet, apiURL, nil, nil, "", true)
+	data, err := c.raw(ctx, http.MethodGet, apiURL, nil, "", true)
 	if err != nil {
 		return err
 	}
@@ -280,11 +284,23 @@ func (c *Client) get(ctx context.Context, endpoint string, params url.Values, ou
 	return decodeJSON(data, out)
 }
 
+// formReader 表单请求体工厂。
+// raw 在 401/403 时会用同一请求重试一次，一次性 io.Reader 第二次读到的是空体，
+// 故这里返回可重复调用的工厂而不是已构造好的 Reader。
+func formReader(form url.Values) func() io.Reader {
+	return func() io.Reader { return strings.NewReader(form.Encode()) }
+}
+
 // raw 执行请求并处理认证：401/403 时重新登录重试一次。
+// body 为请求体工厂（GET 传 nil），每次发送都会重新取一份，保证重试时请求体完整。
 // allowPlain 表示允许非 JSON 的纯文本响应（如 "Ok."）。
-func (c *Client) raw(ctx context.Context, method, apiURL string, form url.Values, body io.Reader, contentType string, allowPlain bool) ([]byte, error) {
+func (c *Client) raw(ctx context.Context, method, apiURL string, body func() io.Reader, contentType string, allowPlain bool) ([]byte, error) {
 	do := func() (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, method, apiURL, body)
+		var r io.Reader
+		if body != nil {
+			r = body()
+		}
+		req, err := http.NewRequestWithContext(ctx, method, apiURL, r)
 		if err != nil {
 			return nil, err
 		}

@@ -59,6 +59,7 @@ func (s *Service) Tick(ctx context.Context) error {
 		slog.Warn("自动文件管理：获取种子列表失败", "err", err)
 		return err
 	}
+	s.pruneProcessed(&st, torrents)
 	moved := 0
 	for _, t := range torrents {
 		if t == nil || !t.IsFinished {
@@ -96,6 +97,39 @@ func (s *Service) Tick(ctx context.Context) error {
 		slog.Info("自动文件管理完成", "moved", moved)
 	}
 	return nil
+}
+
+// pruneProcessed 清理已不存在种子的已处理标记。
+// 标记丢失是安全的：已完成移动的种子下轮会走「已在目标目录」分支被重新标记，
+// 不会发生二次搬移；而不清理则标记会随种子的增删在状态文件里无限堆积。
+// 列表为空（异常态）时跳过，避免把全部标记一次性抹掉。
+func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
+	live := make(map[string]struct{}, len(torrents))
+	for _, t := range torrents {
+		if t != nil && t.HashString != "" {
+			live[t.HashString] = struct{}{}
+		}
+	}
+	if len(live) == 0 {
+		return
+	}
+	stale := false
+	for k := range st.ProcessedMoves {
+		if _, ok := live[k]; !ok {
+			stale = true
+			break
+		}
+	}
+	if !stale {
+		return
+	}
+	removed := 0
+	_ = s.store.Update(func(st2 *state.State) {
+		removed = state.PruneHashMap(st2.ProcessedMoves, live, func(k string) (string, bool) { return k, true })
+	})
+	if removed > 0 {
+		slog.Info("自动文件管理：清理已删除种子的标记", "count", removed)
+	}
 }
 
 func findRule(st state.State, t *rpc.Torrent) *state.AutoMoveRule {

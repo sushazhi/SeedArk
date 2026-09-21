@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -275,6 +277,109 @@ func TestE2ESetTorrentFlagsAndLabels(t *testing.T) {
 	}
 	if !tr.SequentialDownload {
 		t.Errorf("顺序下载开关未生效")
+	}
+}
+
+// 会话中途失效：401/403 重试必须重发完整请求体。
+// raw 若复用已消费的 io.Reader，重登后的第二次请求会变成空体——
+// 表现为「认证恢复了但参数全丢」，且不报错（服务端只当参数缺失）。
+func TestE2ERetryKeepsRequestBody(t *testing.T) {
+	url := startMock(t, qbmock.Options{User: "admin", Pass: "secret", Seed: 1})
+	c, err := New(url, "admin", "secret")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	id := refresh(t, c)[0].ID
+
+	// 以正确凭据再登录一次：服务端换发 SID，驱动器手里的旧 cookie 随即失效，
+	// 下一次写请求必然先吃 403、走重登重试路径
+	resp, err := http.Post(url+"/api/v2/auth/login", "application/x-www-form-urlencoded",
+		strings.NewReader("username=admin&password=secret"))
+	if err != nil {
+		t.Fatalf("重新登录: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+
+	limited, dl := true, int64(1000)
+	if err := c.SetTorrent(ctx, []int64{id}, driver.TorrentPatch{
+		DownloadLimited: &limited, DownloadLimit: &dl,
+	}); err != nil {
+		t.Fatalf("重登后 SetTorrent: %v", err)
+	}
+	detail, err := c.GetTorrentDetail(ctx, id)
+	if err != nil {
+		t.Fatalf("GetTorrentDetail: %v", err)
+	}
+	if detail.DownloadLimit != 1000 || !detail.DownloadLimited {
+		t.Errorf("重登重试丢掉了请求体：下载限速 = %d (limited=%v)", detail.DownloadLimit, detail.DownloadLimited)
+	}
+}
+
+// 顺序下载必须按目标值收敛，而不是「按当前状态取反」。
+// Web API 只有 toggle 接口：无视参数的实现会把「设为开启」变成「关掉已开启的」。
+func TestE2ESequentialDownloadHonorsValue(t *testing.T) {
+	url := startMock(t, qbmock.Options{Seed: 8})
+	c, _ := New(url, "", "")
+	ctx := context.Background()
+	list := refresh(t, c)
+
+	on, off := true, false
+	// mock 初始值按 i%7==3 播种：挑一颗开着、一颗关着的，两个方向都验
+	var wasOn, wasOff = list[3].ID, list[0].ID
+	if !list[3].SequentialDownload {
+		t.Fatalf("测试前提不成立：list[3] 应为已开启顺序下载")
+	}
+
+	// 已开启的再置 true：必须保持 true（旧实现会切成 false）
+	if err := c.SetTorrentFlags(ctx, []int64{wasOn}, driver.TorrentFlagPatch{SequentialDownload: &on}); err != nil {
+		t.Fatalf("置 true: %v", err)
+	}
+	if tr := findById(t, refresh(t, c), wasOn); !tr.SequentialDownload {
+		t.Error("对已开启的种子再置 true 后被切成 false（toggle 语义未收敛）")
+	}
+	// 未开启的置 true
+	if err := c.SetTorrentFlags(ctx, []int64{wasOff}, driver.TorrentFlagPatch{SequentialDownload: &on}); err != nil {
+		t.Fatalf("置 true: %v", err)
+	}
+	if tr := findById(t, refresh(t, c), wasOff); !tr.SequentialDownload {
+		t.Error("置 true 未生效")
+	}
+	// 置 false 必须真正关闭
+	if err := c.SetTorrentFlags(ctx, []int64{wasOff}, driver.TorrentFlagPatch{SequentialDownload: &off}); err != nil {
+		t.Fatalf("置 false: %v", err)
+	}
+	if tr := findById(t, refresh(t, c), wasOff); tr.SequentialDownload {
+		t.Error("置 false 未生效")
+	}
+}
+
+// 删除种子后，其站点记录必须从缓存中剪掉：站点分组不应残留已删除的种子
+func TestE2ETorrentSitesPruneDeleted(t *testing.T) {
+	url := startMock(t, qbmock.Options{Seed: 4})
+	c, _ := New(url, "", "")
+	ctx := context.Background()
+	list := refresh(t, c)
+
+	before, err := c.GetTorrentSites(ctx)
+	if err != nil {
+		t.Fatalf("GetTorrentSites: %v", err)
+	}
+	victim := list[1]
+	if _, ok := before[victim.ID]; !ok {
+		t.Fatalf("测试前提不成立：种子 %d 没有站点记录", victim.ID)
+	}
+
+	if err := c.RemoveTorrents(ctx, []int64{victim.ID}, false); err != nil {
+		t.Fatalf("RemoveTorrents: %v", err)
+	}
+	after, err := c.GetTorrentSites(ctx)
+	if err != nil {
+		t.Fatalf("删除后 GetTorrentSites: %v", err)
+	}
+	if _, ok := after[victim.ID]; ok {
+		t.Error("已删除种子的站点记录仍残留在站点映射中")
 	}
 }
 

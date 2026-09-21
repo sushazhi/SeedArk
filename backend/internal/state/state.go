@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -305,6 +306,31 @@ func DefaultStatePath(dir string) string {
 // PolicyKey 构造做种策略已处理标记键
 func PolicyKey(ruleID, hashString string) string {
 	return ruleID + "\x00" + hashString
+}
+
+// PolicyKeyHash 从做种策略已处理标记键中还原 hash（键格式异常时 ok=false）
+func PolicyKeyHash(key string) (string, bool) {
+	_, hash, ok := strings.Cut(key, "\x00")
+	return hash, ok
+}
+
+// PruneHashMap 删除「关联种子已不存在」的标记（live 为当前全部种子的 hash 集合，
+// keyHash 从键中取出关联 hash），返回删除条数。
+// 已处理标记只为「避免重复处理已存在的种子」而存在，种子删除后标记再无读者，
+// 不清会在状态文件里随种子增删无限堆积，而每次落盘都要重写全表。
+func PruneHashMap(m map[string]string, live map[string]struct{}, keyHash func(string) (string, bool)) int {
+	removed := 0
+	for k := range m {
+		h, ok := keyHash(k)
+		if !ok {
+			continue // 键格式异常：留给人工排查，不猜测
+		}
+		if _, exist := live[h]; !exist {
+			delete(m, k)
+			removed++
+		}
+	}
+	return removed
 }
 
 // NowUnix 当前 Unix 时间戳

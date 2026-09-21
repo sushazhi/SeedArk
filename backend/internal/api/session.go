@@ -119,7 +119,7 @@ func (h *Handler) sessionStats(c *gin.Context) {
 	respond(c, stats)
 }
 
-// freeSpace 查询目录可用空间
+// freeSpace 查询目录可用空间（活动连接那台）
 func (h *Handler) freeSpace(c *gin.Context) {
 	path := c.Query("path")
 	if path == "" {
@@ -132,6 +132,51 @@ func (h *Handler) freeSpace(c *gin.Context) {
 		return
 	}
 	respond(c, gin.H{"path": path, "freeSpace": free, "totalSize": total})
+}
+
+// serverFreeSpace 查询指定服务器的磁盘剩余空间。
+// 聚合视图下侧栏逐台显示余量，而 /session/free-space 只查活动那台；
+// 各台的下载目录可能不同，必须回读该台自己的总会话取路径。
+func (h *Handler) serverFreeSpace(c *gin.Context) {
+	idx, err := strconv.Atoi(c.Param("index"))
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "无效的服务器索引")
+		return
+	}
+	b, err := h.memberBackend(idx)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, errServerNotFound) {
+			status = http.StatusNotFound
+		}
+		respondError(c, status, err.Error())
+		return
+	}
+	sess, err := b.GetSession(c.Request.Context())
+	if err != nil {
+		respondBackendError(c, "获取会话信息失败", err)
+		return
+	}
+	path := ""
+	if sess != nil {
+		path = sess.DownloadDir
+	}
+	if path == "" {
+		respondError(c, http.StatusBadRequest, "该服务器未提供下载目录")
+		return
+	}
+	free, total, err := b.GetFreeSpace(c.Request.Context(), path)
+	if err != nil {
+		respondBackendError(c, "查询失败", err)
+		return
+	}
+	respond(c, gin.H{
+		"index":     idx,
+		"name":      h.state.Get().Servers[idx].Name,
+		"path":      path,
+		"freeSpace": free,
+		"totalSize": total,
+	})
 }
 
 // sessionBody 会话配置修改请求体（/api/session 与 /api/servers/:index/session 共用）。

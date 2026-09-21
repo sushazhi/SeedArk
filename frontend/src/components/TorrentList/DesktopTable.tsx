@@ -531,6 +531,9 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((vi) => {
             const torrent = sortedTorrents[vi.index]
+            // 虚拟滚动位置可能在本帧数据收缩后短暂越界（列表刚被过滤/删除），
+            // 此时跳过本项渲染，下一帧 virtualizer 会自行修正
+            if (!torrent) return null
             const menuItems = buildTorrentMenu(menuCtx, torrent)
             return (
               <div

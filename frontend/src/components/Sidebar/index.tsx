@@ -11,7 +11,6 @@ import {
   FolderOpen,
   Gauge,
   Globe,
-  HardDrive,
   Layers,
   PauseCircle,
   RotateCcw,
@@ -25,9 +24,9 @@ import {
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { useAppStore } from '@/stores/appStore'
-import { sessionApi } from '@/api/torrent'
 import { matchesStatus } from '@/hooks/useFilter'
 import { useNavRail } from '@/hooks/useNavRail'
+import { useDiskSpaces } from '@/hooks/useDiskSpaces'
 import { useFloatingMenuPosition, useDismissOnOutside } from '@/hooks/useFloatingMenuPosition'
 import { useSemanticPath } from '@/hooks/useSemanticPath'
 import { usePlatform } from '@/platform'
@@ -41,6 +40,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { KindBadge } from '@/components/TorrentList/ServerCell'
+import { DiskSpaceCard } from '@/components/Sidebar/DiskSpaceCard'
 import type { DownloaderKind, SidebarMenuVisible } from '@/types'
 
 // 主状态过滤：全部 / 活跃 / 正在下载 / 正在做种 / 已完成 / 暂停 / 校验 / 错误
@@ -67,7 +67,6 @@ export const DesktopSidebar: React.FC = () => {
   const setFilters = useAppStore((s) => s.setFilters)
   const torrents = useAppStore((s) => s.torrents)
   const torrentSites = useAppStore((s) => s.torrentSites)
-  const session = useAppStore((s) => s.session)
   const showStats = useAppStore((s) => s.showStats)
   const setShowStats = useAppStore((s) => s.setShowStats)
   const groupShowSize = useAppStore((s) => s.groupShowSize)
@@ -89,6 +88,10 @@ export const DesktopSidebar: React.FC = () => {
   const [submenuOpen, setSubmenuOpen] = useState(false)
   // 分组项右键：站点 / 标签 → 快速新建组内总限速规则
   const [groupCtx, setGroupCtx] = useState<{ x: number; y: number; kind: 'site' | 'label'; value: string } | null>(null)
+  // 分组限速依赖 honorsSessionLimits：qBittorrent 的单种限速是绝对值、没有
+  // 「遵循全局限速」开关，引擎无法区分自己写入的值和用户手动限速，会误覆盖，
+  // 故该能力缺失时整个入口隐藏（后端 Tick 同样会跳过）
+  const groupLimitSupported = useAppStore((s) => s.session?.caps?.honorsSessionLimits !== false)
   const groupLimit = (kind: 'site' | 'label', value: string) => {
     setGroupCtx(null)
     useAppStore.getState().openSpeedPolicy(kind === 'site' ? { sites: [value] } : { labels: [value] })
@@ -122,31 +125,8 @@ export const DesktopSidebar: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey)
   }, [ctxMenu])
 
-  // 下载目录可用空间（DiskRing，60s 刷新）
-  const [freeSpace, setFreeSpace] = useState<{ freeSpace: number; totalSize: number } | null>(null)
-  useEffect(() => {
-    if (!session?.downloadDir) {
-      // 会话断开或目录为空时清空，避免残留上一台服务器的数据
-      setFreeSpace(null)
-      return
-    }
-    let cancelled = false
-    const load = () => {
-      sessionApi
-        .freeSpace(session.downloadDir)
-        .then((d) => { if (!cancelled) setFreeSpace(d) })
-        .catch(() => { if (!cancelled) setFreeSpace(null) })
-    }
-    load()
-    const id = setInterval(load, 60000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [session?.downloadDir])
-
-  // 可用空间占比（totalSize 可能为 0，需防除零，否则 SVG 属性为 NaN）
-  const freeRatio =
-    freeSpace && freeSpace.totalSize > 0
-      ? Math.min(1, Math.max(0, freeSpace.freeSpace / freeSpace.totalSize))
-      : 0
+  // 下载目录可用空间（DiskRing / 聚合逐台，60s 刷新）
+  const disk = useDiskSpaces()
 
   // 拖拽调整宽度
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -364,32 +344,8 @@ export const DesktopSidebar: React.FC = () => {
             )}
           </div>
 
-          {/* DiskRing：SVG 环形图 + 可用容量 */}
-          <div className="shrink-0 glass-subcard rounded-tile px-3 py-2.5 flex items-center gap-3">
-            <svg width="58" height="58" viewBox="0 0 58 58" className="-rotate-90 shrink-0">
-              <circle cx="29" cy="29" r="22" stroke="rgba(120,130,160,0.16)" strokeWidth="6.5" fill="none" />
-              <circle
-                cx="29" cy="29" r="22"
-                strokeWidth="6.5" fill="none" strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 22 * freeRatio} ${2 * Math.PI * 22}`}
-                style={{ stroke: 'var(--color-primary)', transition: 'stroke-dasharray 0.6s var(--ease-standard)' }}
-              />
-            </svg>
-            <div className="min-w-0">
-              <div className="text-caption1 text-gray-400 flex items-center gap-1">
-                <HardDrive className="w-3 h-3" />
-                {t('statusBar.freeSpace')}
-              </div>
-              <div className="tm-mono truncate whitespace-nowrap">
-                <span className="text-subhead font-semibold text-gray-700 dark:text-gray-200">
-                  {freeSpace ? formatBytes(freeSpace.freeSpace) : '--'}
-                </span>
-                {freeSpace && (
-                  <span className="text-caption1 text-gray-400"> / {formatBytes(freeSpace.totalSize)}</span>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* DiskRing：单台环形图 / 聚合逐台列出 */}
+          <DiskSpaceCard disk={disk} />
 
           {/* 过滤器 */}
           {sidebarMenuVisible.status && (
@@ -767,7 +723,7 @@ export const DesktopSidebar: React.FC = () => {
       )}
 
       {/* 站点 / 标签分组项右键：快速新建组内总限速规则 */}
-      {groupCtx && (
+      {groupCtx && groupLimitSupported && (
         <GroupCtxMenu pos={groupCtx} onClose={() => setGroupCtx(null)} onGroupLimit={groupLimit} />
       )}
     </aside>
@@ -850,6 +806,8 @@ interface SiteNavProps {
 const SiteNav: React.FC<SiteNavProps> = ({ sites, siteStats, currentSiteIds, onSelect, onDblSelect, groupShowSize, collapsed, onToggle, onGroupMenu }) => {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
+  // 分组限速入口：当前下载器不支持「遵循全局限速」时隐藏（见 Sidebar 顶部的同名判断）
+  const groupLimitSupported = useAppStore((s) => s.session?.caps?.honorsSessionLimits !== false)
 
   // sites 的语义是「种子 ID → 该种子的站点名数组」，
   // 这里需按站点名聚合去重，否则同一站点会按种子数重复成多行，
@@ -999,7 +957,6 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
   const setFilters = useAppStore((s) => s.setFilters)
   const torrentSites = useAppStore((s) => s.torrentSites)
   const torrents = useAppStore((s) => s.torrents)
-  const session = useAppStore((s) => s.session)
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed)
   const statusFilterVisible = useAppStore((s) => s.statusFilterVisible)
@@ -1008,32 +965,11 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
   const selectedIds = useAppStore((s) => s.selectedIds)
   const setSelection = useAppStore((s) => s.setSelection)
   const clearSelection = useAppStore((s) => s.clearSelection)
+  // 分组限速入口：当前下载器不支持「遵循全局限速」时隐藏（与桌面端 Sidebar 一致）
+  const groupLimitSupported = useAppStore((s) => s.session?.caps?.honorsSessionLimits !== false)
 
-  // 下载目录可用空间（DiskRing）：抽屉未打开时不轮询，避免后台空转
-  const [freeSpace, setFreeSpace] = useState<{ freeSpace: number; totalSize: number } | null>(null)
-  useEffect(() => {
-    if (!visible || !session?.downloadDir) {
-      // 抽屉关闭或会话断开时清空，避免残留上一台服务器的数据
-      setFreeSpace(null)
-      return
-    }
-    let cancelled = false
-    const load = () => {
-      sessionApi
-        .freeSpace(session.downloadDir)
-        .then((d) => { if (!cancelled) setFreeSpace(d) })
-        .catch(() => { if (!cancelled) setFreeSpace(null) })
-    }
-    load()
-    const id = setInterval(load, 60000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [visible, session?.downloadDir])
-
-  // 可用空间占比（totalSize 可能为 0，需防除零，否则 SVG 属性为 NaN）
-  const freeRatio =
-    freeSpace && freeSpace.totalSize > 0
-      ? Math.min(1, Math.max(0, freeSpace.freeSpace / freeSpace.totalSize))
-      : 0
+  // 下载目录可用空间（DiskRing / 聚合逐台）：抽屉未打开时不轮询，避免后台空转
+  const disk = useDiskSpaces(visible)
 
   const dirCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -1246,32 +1182,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
             </div>
           </div>
 
-          {/* DiskRing */}
-          <div className="glass-subcard rounded-tile px-3 py-2.5 flex items-center gap-3">
-            <svg width="52" height="52" viewBox="0 0 58 58" className="-rotate-90 shrink-0">
-              <circle cx="29" cy="29" r="22" stroke="rgba(120,130,160,0.16)" strokeWidth="6.5" fill="none" />
-              <circle
-                cx="29" cy="29" r="22"
-                strokeWidth="6.5" fill="none" strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 22 * freeRatio} ${2 * Math.PI * 22}`}
-                style={{ stroke: 'var(--color-primary)', transition: 'stroke-dasharray 0.6s var(--ease-standard)' }}
-              />
-            </svg>
-            <div className="min-w-0">
-              <div className="text-caption1 text-gray-400 flex items-center gap-1">
-                <HardDrive className="w-3 h-3" />
-                {t('statusBar.freeSpace')}
-              </div>
-              <div className="tm-mono truncate whitespace-nowrap">
-                <span className="text-subhead font-semibold text-gray-700 dark:text-gray-200">
-                  {freeSpace ? formatBytes(freeSpace.freeSpace) : '--'}
-                </span>
-                {freeSpace && (
-                  <span className="text-caption1 text-gray-400"> / {formatBytes(freeSpace.totalSize)}</span>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* DiskRing：单台环形图 / 聚合逐台列出 */}
+          <DiskSpaceCard disk={disk} ringSize={52} />
 
           {/* 状态筛选 */}
           {sidebarMenuVisible.status && (
@@ -1663,7 +1575,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ visible, onClose, on
                 icon: <Check className="w-3.5 h-3.5 text-primary shrink-0" strokeWidth={2.5} />,
                 label: t('sidebar.selectGroupAll', { n: groupMenu.ids.length }),
               },
-              ...(groupMenu.scope
+              ...(groupMenu.scope && groupLimitSupported
                 ? ([
                     { type: 'divider' },
                     {

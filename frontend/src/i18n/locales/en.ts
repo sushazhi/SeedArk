@@ -423,9 +423,7 @@ export default {
     singleLine: 'Single Line',
     showCheckboxes: 'Show Checkboxes',
     // Wallpaper / glass opacity + the three accessibility downgrades live here.
-    // Named for the outcome rather than the implementation ("Liquid Glass" is
-    // our internal material name; users think in terms of how it looks)
-    a11yTitle: 'Appearance & Accessibility',
+    a11yTitle: 'Appearance',
     a11yHint: 'Follows the system by default; takes over once you adjust it',
     reduceGlass: 'Reduce Transparent Effects',
     reduceMotion: 'Reduce Motion',

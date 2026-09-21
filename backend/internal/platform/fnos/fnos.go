@@ -32,7 +32,7 @@ func New(cfg platform.Config) platform.Platform {
 		// fnOS 文件选择器返回宿主语义路径，默认允许读取；
 		// 配置 FILE_ALLOWED_PREFIXES 后可把范围收紧到指定目录，不影响其它能力。
 		fileAccess: platform.NewFileAccess(true, cfg.FileAllowedPrefixes),
-		update:     newUpdateHandler(),
+		update:     newUpdateHandler(cfg.DataDir),
 		paths:      &pathHandler{tc: newTrimPathClient()},
 	}
 	return p

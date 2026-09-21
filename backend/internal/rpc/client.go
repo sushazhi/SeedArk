@@ -109,8 +109,10 @@ func (c *Client) Capabilities() driver.Capabilities {
 		QueueStalled:       true,
 		PeerLimit:          true,
 		PerTorrentLimits:   true,
-		FileHandling:       true,
-		UtpToggle:          true,
+		// honorsSessionLimits 是 Transmission 原生语义（分组限速引擎依赖它）
+		HonorsSessionLimits: true,
+		FileHandling:        true,
+		UtpToggle:           true,
 	}
 }
 

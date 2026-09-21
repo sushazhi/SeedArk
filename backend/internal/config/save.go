@@ -72,7 +72,15 @@ func SaveLocalSettings(dataDir string, s LocalSettings) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("创建数据目录失败: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dataDir, localConfigName), []byte(content.String()), 0o600); err != nil {
+	// 原子写入 + 0600：文件含下载器密码，且进程中断不能留下半截文件
+	// （半截文件会让下次启动的配置解析失败，界面也读不回原值）
+	path := filepath.Join(dataDir, localConfigName)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(content.String()), 0o600); err != nil {
+		return fmt.Errorf("保存配置失败: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
 		return fmt.Errorf("保存配置失败: %w", err)
 	}
 	return nil

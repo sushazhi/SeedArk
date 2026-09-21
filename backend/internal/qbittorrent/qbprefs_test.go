@@ -58,8 +58,14 @@ func TestSettingsSchemaShape(t *testing.T) {
 						t.Errorf("[%s] 枚举 %s 的取值 %q 缺少文案", sec.Key, f.Key, o.Value)
 					}
 				}
-				if f.ValueType != "" && f.ValueType != driver.FieldInt && f.ValueType != driver.FieldString {
-					t.Errorf("[%s] 枚举 %s 的 ValueType = %q, 只允许空、int 或 string", sec.Key, f.Key, f.ValueType)
+				if f.ValueType != "" && f.ValueType != driver.FieldInt && f.ValueType != driver.FieldString && f.ValueType != driver.FieldBool {
+					t.Errorf("[%s] 枚举 %s 的 ValueType = %q, 只允许空、int、string 或 bool", sec.Key, f.Key, f.ValueType)
+				}
+				// 布尔枚举只允许 true/false 两个取值，且必须成对出现
+				if f.ValueType == driver.FieldBool {
+					if len(f.Options) != 2 || !optSeen["true"] || !optSeen["false"] {
+						t.Errorf("[%s] 布尔枚举 %s 必须恰好有 true/false 两个取值", sec.Key, f.Key)
+					}
 				}
 			case driver.FieldInt, driver.FieldFloat:
 				if f.Min != nil && f.Max != nil && *f.Min > *f.Max {
@@ -186,6 +192,10 @@ func TestQBWriteRoundTrip(t *testing.T) {
 		"schedule_from":        "09:30",        // 虚拟时刻（HH:MM）
 		"file_log_path":        "/tmp/qb-logs", // 文本
 		"add_trackers_enabled": true,
+		// 布尔枚举（上游界面是下拉）：真值与字符串两种写法都要能落地
+		"auto_tmm_enabled":              true,
+		"torrent_changed_tmm_enabled":   false,
+		"save_path_changed_tmm_enabled": "true",
 	}
 	if err := c.SetSession(ctx, driver.SessionPatch{QB: patch}); err != nil {
 		t.Fatalf("SetSession: %v", err)
@@ -200,6 +210,9 @@ func TestQBWriteRoundTrip(t *testing.T) {
 		{"schedule_from_hour", float64(9)},
 		{"schedule_from_min", float64(30)},
 		{"max_ratio_enabled", true}, // 只提交值 → 自动补启用位
+		{"auto_tmm_enabled", true},
+		{"torrent_changed_tmm_enabled", false},
+		{"save_path_changed_tmm_enabled", true}, // "true" 字符串也要落地为布尔
 	} {
 		if got := raw[tc.key]; got != tc.want {
 			t.Errorf("上游 %s = %#v, 期望 %#v", tc.key, got, tc.want)
@@ -224,6 +237,9 @@ func TestQBWriteRoundTrip(t *testing.T) {
 		{"schedule_from", "09:30"},
 		{"file_log_path", "/tmp/qb-logs"},
 		{"add_trackers_enabled", true},
+		{"auto_tmm_enabled", true},
+		{"torrent_changed_tmm_enabled", false},
+		{"save_path_changed_tmm_enabled", true},
 		// 未提交的键不受影响
 		{"scheduler_enabled", false},
 		{"save_path", "/downloads"},

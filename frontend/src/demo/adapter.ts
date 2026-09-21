@@ -28,6 +28,7 @@ import {
   serverSave,
   serverSession,
   serverSwitch,
+  serverFreeSpace,
   sessionStats,
   speedPolicyAll,
   speedPolicyRemove,
@@ -186,6 +187,13 @@ export const demoAdapter: AxiosAdapter = async (config) => {
   }
   const serverDel = /^\/servers\/(\d+)$/.exec(url)
   if (serverDel && method === 'delete') { serverRemove(Number(serverDel[1])); return respond(config) }
+  // 指定服务器的磁盘余量：聚合视图下侧栏逐台显示
+  const srvFree = /^\/servers\/(\d+)\/free-space$/.exec(url)
+  if (srvFree && method === 'get') {
+    const res = serverFreeSpace(Number(srvFree[1]))
+    if (!res) return fail(config, '服务器不存在')
+    return respond(config, res)
+  }
 
   // —— 做种策略 ——
   if (url === '/seedpolicy' && method === 'get') return respond(config, seedPolicyAll())

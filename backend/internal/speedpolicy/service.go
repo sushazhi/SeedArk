@@ -64,7 +64,13 @@ type Result struct {
 
 // Run 后台循环
 func (s *Service) Run(ctx context.Context) {
-	slog.Info("组内总限速引擎已启动")
+	// 循环照常跑：用户可能在运行期热切换到支持该能力的下载器，
+	// 每轮 Tick 自行判定是否生效，这里只做一次提示性日志。
+	if !s.manager.Capabilities().HonorsSessionLimits {
+		slog.Info("组内总限速引擎已启动（当前下载器不支持「遵循全局限速」，引擎暂不生效）")
+	} else {
+		slog.Info("组内总限速引擎已启动")
+	}
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	for {
@@ -81,6 +87,15 @@ func (s *Service) Run(ctx context.Context) {
 func (s *Service) Tick(ctx context.Context) (*Result, error) {
 	s.tickMu.Lock()
 	defer s.tickMu.Unlock()
+	// 当前下载器不具备「遵循全局限速」语义（qBittorrent 的单种限速是绝对值）：
+	// 引擎的接管判定 isFixed() 依赖该标记区分「用户手动限速」与「引擎写入」，
+	// 缺了它会把用户手动设的限速误判为可接管并覆盖掉，因此直接不启用。
+	// 这里仍走 releaseAll，把此前（如切换下载器前）写入的限速还原干净。
+	if !s.manager.Capabilities().HonorsSessionLimits {
+		st := s.store.Get()
+		s.releaseAll(ctx, &st)
+		return &Result{}, nil
+	}
 	st := s.store.Get()
 	rules := enabledRules(st.SpeedPolicyRules)
 	res := &Result{Enabled: st.SpeedPolicyGuard.Enforce && len(rules) > 0}

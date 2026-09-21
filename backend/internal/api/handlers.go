@@ -45,6 +45,8 @@ type Handler struct {
 	apiToken     string
 	mcp          *McpControl
 	pathMappings []models.PathMapping
+	// wsTickets 一次性 WebSocket 握手票据（见 wsticket.go）
+	wsTickets *wsTicketStore
 
 	// MCP 直连端口：设置界面可改，读写跨请求并发，必须加锁
 	mcpPortMu sync.RWMutex
@@ -73,6 +75,7 @@ func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store
 		mcpPort:      strings.TrimSpace(cfg.MCPPort),
 		mcp:          mcp,
 		pathMappings: parsePathMappings(cfg.PathMappings),
+		wsTickets:    newWSTicketStore(),
 		createJobs:   make(map[string]*createJob),
 	}
 }
@@ -241,6 +244,8 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		// 指定服务器的会话配置（聚合视图下设置面板按服务器标签各读各的）
 		api.GET("/servers/:index/session", h.getServerSession)
 		api.PUT("/servers/:index/session", h.setServerSession)
+		// 指定服务器的磁盘余量（聚合视图下侧栏逐台显示）
+		api.GET("/servers/:index/free-space", h.serverFreeSpace)
 		// 自动文件管理
 		api.GET("/automove", h.listAutoMoveRules)
 		api.POST("/automove", h.saveAutoMoveRule)
@@ -266,16 +271,13 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		api.GET("/paths/map", h.listPathMappings)
 		// 系统命令
 		api.POST("/system/:action", h.systemCommand)
+		// WebSocket 握手票据：用已鉴权的普通请求换取，避免长期令牌出现在握手查询串
+		api.POST("/ws-ticket", h.issueWsTicket)
 	}
 	// 宿主平台专属接口（如 fnOS 的应用更新；通用平台为空实现，不挂载任何路由）
 	h.plat.RegisterRoutes(api)
-	// WebSocket：浏览器无法为握手设置自定义请求头，令牌只能走 ?token=，
-	// 因此这条路由单独使用允许查询参数的鉴权（普通 API 只认请求头）。
-	wsGuard := []gin.HandlerFunc{}
-	if h.apiToken != "" {
-		wsGuard = append(wsGuard, middleware.AuthAllowQuery(h.apiToken))
-	}
-	r.GET(prefix+"/ws", append(wsGuard, h.hub.HandleWS)...)
+	// WebSocket：浏览器无法为握手设置自定义请求头，鉴权走一次性票据（见 wsGuard）
+	r.GET(prefix+"/ws", h.wsGuard(), h.hub.HandleWS)
 }
 
 // respond 成功响应

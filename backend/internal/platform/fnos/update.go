@@ -78,9 +78,14 @@ func appArch() string {
 	}
 }
 
-// fpkPath 已下载的更新包落盘位置
-func fpkPath() string {
-	return filepath.Join(os.TempDir(), "transmission-update.fpk")
+// updateDirName 更新包在数据目录下的子目录名
+const updateDirName = "update"
+
+// fpkPath 已下载的更新包落盘位置。
+// 放在数据目录（0600/0700）而非系统临时目录：后者所有本机用户可写，
+// 固定文件名可被预置软链，服务写入时即以自身权限覆盖任意文件。
+func (u *updateHandler) fpkPath() string {
+	return filepath.Join(u.dir, updateDirName, "transmission-update.fpk")
 }
 
 // currentAppVersion 优先读 fnOS 运行时注入的版本信息，退回宿主机上的应用 manifest
@@ -251,10 +256,16 @@ func newUpdateService() *updateService { return &updateService{} }
 // updateHandler fnOS 应用更新接口（仅在 fnOS 平台注册）
 type updateHandler struct {
 	svc *updateService
+	// dir 服务数据目录（更新包落盘位置的根）
+	dir string
 }
 
-func newUpdateHandler() *updateHandler {
-	return &updateHandler{svc: newUpdateService()}
+func newUpdateHandler(dataDir string) *updateHandler {
+	if strings.TrimSpace(dataDir) == "" {
+		// 未配置数据目录时退回用户主目录，绝不回落系统临时目录（见 fpkPath 注释）
+		dataDir = "."
+	}
+	return &updateHandler{svc: newUpdateService(), dir: dataDir}
 }
 
 // RegisterRoutes 挂载更新相关路由
@@ -299,7 +310,7 @@ func (u *updateHandler) check(c *gin.Context) {
 		"fpkUrl":         info.FPKURL,
 		"fpkSize":        info.FPKSize,
 		"arch":           appArch(),
-		"downloadReady":  fpkReady(info.FPKSize),
+		"downloadReady":  u.fpkReady(info.FPKSize),
 	}
 	svc.mu.Lock()
 	svc.cached, svc.cachedAt = result, time.Now()
@@ -369,7 +380,7 @@ func (u *updateHandler) status(c *gin.Context) {
 		"fpkFilename":   svc.fpkName,
 	}
 	svc.mu.Unlock()
-	if !result["updating"].(bool) && result["progress"].(int) >= 100 && fileExists(fpkPath()) {
+	if !result["updating"].(bool) && result["progress"].(int) >= 100 && fileExists(u.fpkPath()) {
 		result["downloadUrl"] = "/api/update/download"
 	}
 	respond(c, result)
@@ -377,12 +388,14 @@ func (u *updateHandler) status(c *gin.Context) {
 
 // download GET /api/update/download 下发已下载的 fpk（供应用中心手动安装）
 func (u *updateHandler) download(c *gin.Context) {
-	path := fpkPath()
+	path := u.fpkPath()
 	if !fileExists(path) {
 		respondError(c, http.StatusNotFound, "更新包不存在，请先点击一键更新")
 		return
 	}
+	u.svc.mu.Lock()
 	name := u.svc.fpkName
+	u.svc.mu.Unlock()
 	if name == "" {
 		name = filepath.Base(path)
 	}
@@ -397,34 +410,50 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 		svc.progress, svc.message = progress, message
 		svc.mu.Unlock()
 	}
+	fail := func(msg string) {
+		svc.mu.Lock()
+		svc.failed, svc.progress, svc.message = true, 0, "更新失败: "+msg
+		svc.mu.Unlock()
+	}
 	defer func() {
 		svc.mu.Lock()
 		svc.updating = false
 		svc.mu.Unlock()
 	}()
 
-	dest := fpkPath()
-	urls := []string{updateProxyMain + info.FPKURL, updateProxyBackup + info.FPKURL, info.FPKURL}
-	messages := []string{"正在下载更新包...", "主代理下载失败，切换备用代理...", "备用代理下载失败，尝试直连..."}
+	dest := u.fpkPath()
+	// 0700：更新包目录仅服务自身可进，杜绝同机用户预置软链/替换文件
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		fail(err.Error())
+		return
+	}
+	type source struct {
+		url    string
+		direct bool // 直连 GitHub：元数据与文件同源，摘要缺失时才允许作为可信来源
+		msg    string
+	}
+	sources := []source{
+		{updateProxyMain + info.FPKURL, false, "正在下载更新包..."},
+		{updateProxyBackup + info.FPKURL, false, "主代理下载失败，切换备用代理..."},
+		{info.FPKURL, true, "备用代理下载失败，尝试直连..."},
+	}
 	lastErr := ""
-	for i, url := range urls {
-		set(10, messages[i])
-		if err := downloadFPK(url, dest, info, set); err != nil {
+	for _, s := range sources {
+		set(10, s.msg)
+		if err := downloadFPK(s.url, dest, s.direct, info, set); err != nil {
 			lastErr = err.Error()
-			slog.Warn("更新包下载失败", "url", url, "err", err)
+			slog.Warn("更新包下载失败", "url", s.url, "err", err)
 			continue
 		}
 		set(100, "下载完成")
 		return
 	}
-	svc.mu.Lock()
-	svc.failed, svc.progress = true, 0
-	svc.message = "更新失败: " + lastErr
-	svc.mu.Unlock()
+	fail(lastErr)
 }
 
-// downloadFPK 单个 URL 的下载 + 校验（格式魔数 / 大小 / 上限），失败时清理临时文件
-func downloadFPK(url, dest string, info *releaseInfo, set func(int, string)) error {
+// downloadFPK 单个 URL 的下载 + 校验（格式魔数 / 大小 / 摘要），失败时清理临时文件。
+// direct 表示本轮是 GitHub 直连下载（仅影响「上游未提供摘要」时的取舍）。
+func downloadFPK(url, dest string, direct bool, info *releaseInfo, set func(int, string)) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -443,8 +472,11 @@ func downloadFPK(url, dest string, info *releaseInfo, set func(int, string)) err
 		return fmt.Errorf("服务器返回 HTTP %d", resp.StatusCode)
 	}
 
+	// 先清掉上次失败留下的残件，再以 O_EXCL 创建：即便有人预置了同名软链，
+	// Remove 只删链接本身，O_EXCL 也不会跟随链接写到目标文件上
 	tmp := dest + ".part"
-	f, err := os.Create(tmp)
+	_ = os.Remove(tmp)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
@@ -509,6 +541,12 @@ func downloadFPK(url, dest string, info *releaseInfo, set func(int, string)) err
 	// （随 api.github.com 元数据直连取得）能证明这个包没被替换过
 	got := hex.EncodeToString(hasher.Sum(nil))
 	if info.FPKDigest == "" {
+		// 无摘要可校验时，代理链路一律拒绝——否则「校验」形同虚设。
+		// GitHub 直连下载时文件与元数据同源，才降级为仅告警。
+		if !direct {
+			_ = os.Remove(tmp)
+			return fmt.Errorf("发布资源未提供 SHA-256 摘要，无法校验经代理下载的更新包")
+		}
 		slog.Warn("发布资源未提供 SHA-256 摘要，本次仅校验了大小与魔数", "fpk", info.FPKName, "sha256", got)
 	} else if !strings.EqualFold(got, info.FPKDigest) {
 		_ = os.Remove(tmp)
@@ -523,8 +561,8 @@ func fileExists(p string) bool {
 }
 
 // fpkReady 本地已下载的更新包是否与目标版本大小一致
-func fpkReady(expectedSize int64) bool {
-	st, err := os.Stat(fpkPath())
+func (u *updateHandler) fpkReady(expectedSize int64) bool {
+	st, err := os.Stat(u.fpkPath())
 	if err != nil || st.IsDir() {
 		return false
 	}

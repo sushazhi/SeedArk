@@ -149,6 +149,8 @@ export interface DownloaderCaps {
   queueStalled: boolean
   peerLimit: boolean
   perTorrentLimits: boolean
+  // 「遵循全局限速」标记：没有该语义的下载器不能启用分组限速
+  honorsSessionLimits: boolean
   fileHandling: boolean
   utpToggle: boolean
 }

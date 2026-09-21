@@ -76,6 +76,7 @@ func newMemberFixtureWith(t *testing.T, primaryIdx int) *memberFixture {
 	r := gin.New()
 	r.GET("/api/servers/:index/session", h.getServerSession)
 	r.PUT("/api/servers/:index/session", h.setServerSession)
+	r.GET("/api/servers/:index/free-space", h.serverFreeSpace)
 	return &memberFixture{handler: h, engine: r, mocks: mocks}
 }
 
@@ -217,6 +218,68 @@ func TestServerSessionTargetErrors(t *testing.T) {
 	}
 }
 
+// 逐台查询磁盘余量：路径取该台自己的下载目录（不是活动那台），
+// 且 qBittorrent 的总量未知以 0 回传——界面据此隐藏「/ 总量」
+func TestServerFreeSpacePerIndex(t *testing.T) {
+	f := newMemberFixture(t)
+	mockSetPref(t, f.mocks[0].URL, `{"save_path":"/mnt/A"}`)
+	mockSetPref(t, f.mocks[1].URL, `{"save_path":"/mnt/B"}`)
+
+	cases := []struct {
+		idx      string
+		name     string
+		wantPath string
+	}{
+		{"0", "本地", "/mnt/A"},
+		{"1", "远端", "/mnt/B"},
+	}
+	for _, c := range cases {
+		code, resp := f.doJSON(t, "GET", "/api/servers/"+c.idx+"/free-space", "")
+		if code != http.StatusOK {
+			t.Fatalf("GET %s 状态码 = %d, 响应 %v", c.idx, code, resp)
+		}
+		data := resp["data"].(map[string]any)
+		if data["name"] != c.name {
+			t.Errorf("%s 号 name = %v, 期望 %v", c.idx, data["name"], c.name)
+		}
+		if data["path"] != c.wantPath {
+			t.Errorf("%s 号 path = %v, 期望 %v（必须是该台自己的下载目录）", c.idx, data["path"], c.wantPath)
+		}
+		if got := data["freeSpace"]; got != float64(500*1024*1024*1024) {
+			t.Errorf("%s 号 freeSpace = %v, 期望 500 GiB", c.idx, got)
+		}
+		if got := data["totalSize"]; got != float64(0) {
+			t.Errorf("%s 号 totalSize = %v, 期望 0（qBittorrent 不提供总容量）", c.idx, got)
+		}
+	}
+}
+
+// 索引不合法 / 越界 / 未启用时应给出可分辨的错误，而不是回落到活动那台
+func TestServerFreeSpaceTargetErrors(t *testing.T) {
+	f := newMemberFixture(t)
+	cases := []struct {
+		name string
+		path string
+		code int
+		want string
+	}{
+		{"非法索引", "/api/servers/abc/free-space", http.StatusBadRequest, "无效的服务器索引"},
+		{"索引越界", "/api/servers/9/free-space", http.StatusNotFound, "服务器不存在"},
+		{"未启用", "/api/servers/2/free-space", http.StatusBadRequest, "未启用"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			code, resp := f.doJSON(t, "GET", c.path, "")
+			if code != c.code {
+				t.Fatalf("状态码 = %d, 期望 %d（响应 %v）", code, c.code, resp)
+			}
+			if msg, _ := resp["message"].(string); !strings.Contains(msg, c.want) {
+				t.Errorf("message = %q, 期望包含 %q", msg, c.want)
+			}
+		})
+	}
+}
+
 // 偏好键名/取值不合法时是调用方的问题，返回 400 而不是「上游故障」502
 func TestServerSessionInvalidPrefIsBadRequest(t *testing.T) {
 	f := newMemberFixture(t)
@@ -252,6 +315,15 @@ func TestServerSessionActiveMismatchUsesOwnServer(t *testing.T) {
 	// 连接指向 1 号，但 0 号标签读到的必须是 0 号的设置
 	if got := sessionOf(t, resp)["prefs"].(map[string]any)["save_path"]; got != "/mnt/A" {
 		t.Errorf("0 号 save_path = %v, 期望 /mnt/A", got)
+	}
+
+	// 磁盘余量走同一条路由规则：问 0 号的余量，查的必须是 0 号的目录
+	code, resp = f.doJSON(t, "GET", "/api/servers/0/free-space", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET free-space 状态码 = %d, 期望 200（响应 %v）", code, resp)
+	}
+	if got := resp["data"].(map[string]any)["path"]; got != "/mnt/A" {
+		t.Errorf("0 号 free-space path = %v, 期望 /mnt/A（当前连接那台的 /mnt/B 不得被查到）", got)
 	}
 
 	code, resp = f.doJSON(t, "PUT", "/api/servers/0/session", `{"qb":{"preallocate_all":true}}`)

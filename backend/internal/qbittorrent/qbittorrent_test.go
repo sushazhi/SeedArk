@@ -173,8 +173,11 @@ func TestCapabilities(t *testing.T) {
 		"QueueStalled":     caps.QueueStalled,
 		"PeerLimit":        caps.PeerLimit,
 		"PerTorrentLimits": caps.PerTorrentLimits,
-		"FileHandling":     caps.FileHandling,
-		"UtpToggle":        caps.UtpToggle,
+		// 单种限速在 QB 里是绝对值、没有「遵循全局限速」开关，
+		// 分组限速引擎靠该语义区分引擎写入与用户手动限速，故必须为 false
+		"HonorsSessionLimits": caps.HonorsSessionLimits,
+		"FileHandling":        caps.FileHandling,
+		"UtpToggle":           caps.UtpToggle,
 	} {
 		if ok {
 			t.Errorf("%s 在 qBittorrent 下应为 false", name)
@@ -182,6 +185,141 @@ func TestCapabilities(t *testing.T) {
 	}
 	if !caps.SequentialDownload || !caps.FreeSpace {
 		t.Error("顺序下载与磁盘空间查询在 qBittorrent 下应可用")
+	}
+}
+
+// TestApplyTrackersLastAnnounceTime 做种策略的 trackerUnreachable() 保护栏按
+// 「LastAnnounceTime > 0 且未成功」判定「尝试过但全失败」。qBittorrent 不返回
+// announce 时间，若不补该字段，保护栏在 QB 下永不触发 —— 站点没记账的种子
+// 会被照常暂停 / 删除（本地分享率不代表真实贡献）。本测试锁住补充逻辑。
+func TestApplyTrackersLastAnnounceTime(t *testing.T) {
+	const activity = int64(1700000000)
+	cases := []struct {
+		name          string
+		status        int64
+		wantOK        bool
+		wantAttempted bool // LastAnnounceTime 是否应非零
+	}{
+		// 0 禁用 / 1 未联系：没尝试过，不算「失败尝试」
+		{"禁用", 0, false, false},
+		{"未联系", 1, false, false},
+		// 2 正常 / 3 更新中：成功，保护栏第一分支就 return false
+		{"正常", 2, true, false},
+		{"更新中", 3, true, false},
+		// 4 不可用 / 5 报错 / 6 不可达：尝试过且未成功 → 必须非零
+		{"不可用", 4, false, true},
+		{"报错", 5, false, true},
+		{"不可达", 6, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tr := &models.Torrent{ActivityDate: activity, AddedDate: activity - 100}
+			applyTrackers(tr, []torrentTracker{{URL: "https://tracker.example/announce", Status: c.status}})
+			if len(tr.TrackerStats) != 1 {
+				t.Fatalf("TrackerStats 应有 1 项，得到 %d", len(tr.TrackerStats))
+			}
+			got := tr.TrackerStats[0]
+			if got.LastAnnounceSucceeded != c.wantOK {
+				t.Errorf("status=%d 时 LastAnnounceSucceeded 应为 %v，得到 %v", c.status, c.wantOK, got.LastAnnounceSucceeded)
+			}
+			nonZero := got.LastAnnounceTime > 0
+			if nonZero != c.wantAttempted {
+				t.Errorf("status=%d 时 LastAnnounceTime 非零应为 %v，得到 %d", c.status, c.wantAttempted, got.LastAnnounceTime)
+			}
+		})
+	}
+}
+
+// TestApplyTrackersAttemptedFallsBackToAdded 最近活动时间缺失时（部分种子
+// 从未产生活动），仍要回退到添加时间，保证保护栏能生效而不是退化成 0。
+func TestApplyTrackersAttemptedFallsBackToAdded(t *testing.T) {
+	const added = int64(1690000000)
+	tr := &models.Torrent{AddedDate: added}
+	applyTrackers(tr, []torrentTracker{{URL: "https://t.example/a", Status: 4}})
+	if got := tr.TrackerStats[0].LastAnnounceTime; got != added {
+		t.Errorf("活动时间缺失时应回退到 AddedDate=%d，得到 %d", added, got)
+	}
+}
+
+// TestPlanTopLevelRename 右键「重命名」传的是种子名：Transmission 用它重命名
+// 顶层目录，但 qBittorrent 的 renameFile/renameFolder 只认种子内相对路径，直接
+// 转发必然 404。这里锁住翻译逻辑。
+func TestPlanTopLevelRename(t *testing.T) {
+	f := func(names ...string) []torrentFile {
+		out := make([]torrentFile, 0, len(names))
+		for i, n := range names {
+			out = append(out, torrentFile{Index: int64(i), Name: n})
+		}
+		return out
+	}
+
+	t.Run("多文件单目录改目录名", func(t *testing.T) {
+		got, err := planTopLevelRename(f("Old/a.mkv", "Old/b.srt"), "Old", "New")
+		if err != nil {
+			t.Fatalf("不应报错: %v", err)
+		}
+		want := []renameStep{{Old: "Old", New: "New", Folder: true}}
+		if len(got) != 1 || got[0] != want[0] {
+			t.Errorf("得到 %+v，期望 %+v", got, want)
+		}
+	})
+
+	t.Run("单文件种子改文件名", func(t *testing.T) {
+		got, err := planTopLevelRename(f("movie.mkv"), "movie.mkv", "new.mkv")
+		if err != nil {
+			t.Fatalf("不应报错: %v", err)
+		}
+		want := renameStep{Old: "movie.mkv", New: "new.mkv", Folder: false}
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("得到 %+v，期望 %+v", got, want)
+		}
+	})
+
+	t.Run("多顶层目录只改匹配的那个", func(t *testing.T) {
+		got, err := planTopLevelRename(f("A/1.mkv", "B/2.mkv"), "A", "Z")
+		if err != nil {
+			t.Fatalf("不应报错: %v", err)
+		}
+		// 只能改 A，不能碰 B —— 否则会把不属于该名字的内容一起改掉
+		if len(got) != 1 || got[0].Old != "A" || got[0].New != "Z" || !got[0].Folder {
+			t.Errorf("得到 %+v，期望只改 A→Z", got)
+		}
+	})
+
+	t.Run("多顶层目录无匹配则报错", func(t *testing.T) {
+		if _, err := planTopLevelRename(f("A/1.mkv", "B/2.mkv"), "Missing", "Z"); err == nil {
+			t.Error("找不到旧名时应报错，而不是乱改一通")
+		}
+	})
+
+	t.Run("空文件列表报错", func(t *testing.T) {
+		if _, err := planTopLevelRename(nil, "Old", "New"); err == nil {
+			t.Error("空文件列表应报错")
+		}
+	})
+}
+
+// TestSeedRatioModeRoundTrip 面板的分享率是三态（0 跟随全局 / 1 单种覆盖 /
+// 2 不限），qBittorrent 用 ratio_limit 的 -2 / >=0 / -1 表达。若把 -1 与 -2
+// 混为一谈，「不限」会被显示成「跟随全局」，「单种覆盖」还会静默退化成「不限」。
+func TestSeedRatioModeRoundTrip(t *testing.T) {
+	cases := []struct {
+		ratioLimit float64
+		wantMode   int64
+		desc       string
+	}{
+		{-2, 0, "跟随全局"},
+		{0, 1, "单种覆盖（0 倍）"},
+		{1.5, 1, "单种覆盖"},
+		{-1, 2, "不限"},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			got := (&Client{}).mapTorrent(torrentInfo{Hash: "abc", RatioLimit: c.ratioLimit})
+			if got.SeedRatioMode != c.wantMode {
+				t.Errorf("ratio_limit=%v 应回读为 mode %d，得到 %d", c.ratioLimit, c.wantMode, got.SeedRatioMode)
+			}
+		})
 	}
 }
 

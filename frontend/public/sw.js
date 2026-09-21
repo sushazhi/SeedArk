@@ -98,9 +98,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      // 只保留当前版本的缓存：带版本号后，旧版本条目在此被彻底清除，
-      // 不再像旧实现那样所有版本共用一个 cache 名、旧资源永久残留
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // 只清理本应用的历史版本缓存（前缀 tm-cache-）：同源下可能还住着别的
+      // 应用，无差别删除会把它们的缓存一并清掉
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('tm-cache-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   )
 })

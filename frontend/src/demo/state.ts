@@ -488,6 +488,25 @@ export function freeSpace(path: string): { path: string; freeSpace: number; tota
   return { path, freeSpace: 512 * GB, totalSize: 2 * TB }
 }
 
+// 指定服务器的磁盘余量（GET /servers/:index/free-space）。聚合视图下侧栏逐台显示：
+// TR 有总量（RPC v17 起可用），qB 的总量按 Web API 的真实能力回 0（未知，不显示 / 总量）
+export function serverFreeSpace(index: number): {
+  index: number
+  name: string
+  path: string
+  freeSpace: number
+  totalSize: number
+} | null {
+  ensureDemo()
+  const srv = servers[index]
+  if (!srv) return null
+  const path = session.downloadDir
+  if ((srv.type ?? 'transmission') === 'qbittorrent') {
+    return { index, name: srv.name, path, freeSpace: 320 * GB, totalSize: 0 }
+  }
+  return { index, name: srv.name, path, freeSpace: 512 * GB, totalSize: 2 * TB }
+}
+
 // —— 种子操作 ——
 
 export function findTorrent(id: number): MockTorrent | undefined {

@@ -420,10 +420,8 @@ export default {
     fontSize: '字体大小',
     singleLine: '单行显示',
     showCheckboxes: '显示选择框',
-    // 这一节放壁纸/玻璃浓度 + 三档无障碍降级。
-    // 原标题「液态玻璃无障碍」是拿实现命名（Liquid Glass 是内部材质叫法），
-    // 而用户在这一节里管的是"界面看起来怎么样"，改用面向结果的说法
-    a11yTitle: '外观与无障碍',
+    // 这一节放壁纸/玻璃浓度 + 三档无障碍降级
+    a11yTitle: '外观',
     a11yHint: '默认跟随系统设置，手动调整后将由你接管',
     reduceGlass: '减弱透明效果',
     reduceMotion: '减弱动效',

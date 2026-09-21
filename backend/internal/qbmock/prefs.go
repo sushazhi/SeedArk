@@ -27,6 +27,7 @@ func defaultPrefs(apiKey string) map[string]any {
 		"file_log_path":              "/config/qbittorrent/logs",
 		"file_log_backup_enabled":    true,
 		"file_log_max_size":          int64(65),
+		"file_log_delete_old":        false,
 		"file_log_age":               int64(1),
 		"file_log_age_type":          int64(0),
 

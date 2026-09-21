@@ -262,7 +262,10 @@ func (m *Manager) tagSingle(list []*models.Torrent) {
 // GetTorrentDetail 种子详情（按 ID 路由到所属服务器）。
 // 详情同样带上归属：聚合视图下从列表点进详情时，用户仍然需要知道这一颗属于哪台。
 func (m *Manager) GetTorrentDetail(ctx context.Context, id int64) (*models.Torrent, error) {
-	b, local := m.BackendFor(id)
+	b, local, err := m.BackendFor(id)
+	if err != nil {
+		return nil, err
+	}
 	t, err := b.GetTorrentDetail(ctx, local)
 	if err == nil && t != nil {
 		t.ID = id
@@ -291,12 +294,15 @@ func (m *Manager) tagOne(t *models.Torrent, id int64) {
 	t.Kind = target.Kind.String()
 }
 
-// GetTorrentSites 种子 → Tracker 站点映射。聚合模式下合并各成员结果并编码 ID。
+// GetTorrentSites 种子 → Tracker 站点映射。聚合模式下合并各成员结果，
+// ID 编码口径必须与 AggregateTorrents 的打标一致：活动服务器的 ID 不编码，
+// 否则前端按列表里的未编码 ID 查不到站点，活动服务器的种子会整列缺站点。
 func (m *Manager) GetTorrentSites(ctx context.Context) (map[int64][]string, error) {
 	if !m.AggregateEnabled() {
 		return m.ActiveBackend().GetTorrentSites(ctx)
 	}
 	indexes := m.AggregateIndexes()
+	activeIdx := m.activeIndex()
 	out := make(map[int64][]string, 256)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -314,9 +320,14 @@ func (m *Manager) GetTorrentSites(ctx context.Context) (map[int64][]string, erro
 			if err != nil {
 				return
 			}
+			encoded := idx != activeIdx
 			mu.Lock()
 			for id, sites := range sub {
-				out[EncodeID(idx, id)] = sites
+				if encoded {
+					out[EncodeID(idx, id)] = sites
+				} else {
+					out[id] = sites
+				}
 			}
 			mu.Unlock()
 		}(idx, mb.backend)
@@ -372,13 +383,19 @@ func (m *Manager) QueueMove(ctx context.Context, ids []int64, direction string) 
 
 // SetTorrentLocation 迁移存储位置
 func (m *Manager) SetTorrentLocation(ctx context.Context, id int64, location string, move bool) error {
-	b, local := m.BackendFor(id)
+	b, local, err := m.BackendFor(id)
+	if err != nil {
+		return err
+	}
 	return b.SetTorrentLocation(ctx, local, location, move)
 }
 
 // RenameFile 重命名种子内文件 / 目录
 func (m *Manager) RenameFile(ctx context.Context, id int64, path, name string) error {
-	b, local := m.BackendFor(id)
+	b, local, err := m.BackendFor(id)
+	if err != nil {
+		return err
+	}
 	return b.RenameFile(ctx, local, path, name)
 }
 
@@ -431,7 +448,10 @@ func (m *Manager) eachIDs(ctx context.Context, ids []int64, fn func(driver.Backe
 		m.dropAggCache()
 		return nil
 	}
-	groups := m.GroupIDs(ids)
+	groups, err := m.GroupIDs(ids)
+	if err != nil {
+		return err
+	}
 	if len(groups) == 1 {
 		err := fn(groups[0].Backend, groups[0].IDs)
 		if err == nil {

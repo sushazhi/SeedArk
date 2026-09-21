@@ -78,6 +78,8 @@ func main() {
 		GatewayPrefix: gatewayPrefix,
 		// 「按路径添加种子」允许读取的根目录：配置项 + 数据目录
 		FileAllowedPrefixes: append(append([]string{}, cfg.TorrentPathRoots...), cfg.DataDir),
+		// 平台落盘（更新包等）统一放数据目录，避免系统临时目录被预置软链
+		DataDir: cfg.DataDir,
 	})
 	slog.Info("宿主平台已就绪", "platform", plat.ID(),
 		"gatewayPrefix", gatewayPrefix, "registered", strings.Join(platform.Registered(), ","))

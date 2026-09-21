@@ -126,6 +126,12 @@ export const sessionApi = {
   blocklistUpdate: () => request<{ entries: number }>(client.post('/session/blocklist/update')),
   freeSpace: (path: string) =>
     request<{ path: string; freeSpace: number; totalSize: number }>(client.get('/session/free-space', { params: { path } })),
+  // 指定服务器的磁盘余量：聚合视图下侧栏逐台显示，各查各的盘
+  // （总量未知以 0 回传，如 qBittorrent 的 Web API 不提供总容量）
+  freeSpaceAt: (index: number) =>
+    request<{ index: number; name: string; path: string; freeSpace: number; totalSize: number }>(
+      client.get(`/servers/${index}/free-space`),
+    ),
   // 带宽组（Transmission 4.x）：列出 / 创建或更新
   groups: () => request<BandwidthGroup[]>(client.get('/session/groups')),
   saveGroup: (g: Partial<BandwidthGroup> & { name: string }) =>
@@ -193,8 +199,40 @@ export interface UpdateStatus {
   downloadUrl?: string
 }
 
+// 从 Content-Disposition 提取文件名：中文名走 RFC 5987 的 filename*，退回普通 filename=
+function filenameFromDisposition(header: string | undefined): string {
+  if (!header) return ''
+  const star = /filename\*=\s*utf-8''([^;]+)/i.exec(header)
+  if (star) {
+    try {
+      return decodeURIComponent(star[1])
+    } catch {
+      return ''
+    }
+  }
+  const plain = /filename=\s*"?([^";]+)"?/i.exec(header)
+  return plain ? plain[1] : ''
+}
+
 export const updateApi = {
   check: () => request<UpdateCheckResult>(client.get('/update/check')),
   install: () => request<{ message: string }>(client.post('/update/install')),
   status: () => request<UpdateStatus>(client.get('/update/status')),
+  // 下载已就绪的 fpk（应用中心手动安装用）。必须走 axios 才能带上 X-Auth-Token：
+  // 裸 <a href> 在配置了 API_TOKEN 的部署上只会 401。文件名优先用调用方给的状态值，
+  // 缺失时（如刷新页面后重新发现已下好的包）从响应头兜底
+  download: async (filename?: string): Promise<void> => {
+    const resp = await client.get('/update/download', { responseType: 'blob' })
+    const name =
+      filename ||
+      filenameFromDisposition(resp.headers['content-disposition'] as string | undefined) ||
+      'seedark.fpk'
+    const url = URL.createObjectURL(resp.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    // 立即撤销会让部分浏览器取消下载，延后回收
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  },
 }

@@ -9,8 +9,8 @@
 FROM node:24-alpine AS web
 WORKDIR /src
 
-# pnpm 11（与 CI 一致，pnpm-workspace.yaml 的 allowBuilds 需要 11+）
-RUN corepack enable && corepack prepare pnpm@11 --activate
+# pnpm 12（与 CI、开发机一致，pnpm-workspace.yaml 的 allowBuilds 需要 11+）
+RUN corepack enable && corepack prepare pnpm@12 --activate
 
 # 先只复制清单文件，依赖未变动时可命中缓存层
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./

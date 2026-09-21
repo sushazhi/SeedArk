@@ -3,7 +3,9 @@ import { HardDrive } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { sessionApi } from '@/api/torrent'
 import { STATUS_ITEMS } from '@/components/Sidebar'
+import { KindBadge } from '@/components/TorrentList/ServerCell'
 import { matchesStatus } from '@/hooks/useFilter'
+import { useDiskSpaces } from '@/hooks/useDiskSpaces'
 import { useAppStore } from '@/stores/appStore'
 import { usePlatform } from '@/platform'
 import { cn } from '@/lib/utils'
@@ -29,24 +31,10 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
   const prevCountRef = useRef(torrents.length)
   const firstLoadRef = useRef(true)
   const [newCount, setNewCount] = useState(0)
-  // 下载目录可用空间（60s 刷新）
-  const [freeSpace, setFreeSpace] = useState<{ freeSpace: number; totalSize: number } | null>(null)
+  // 下载目录可用空间（60s 刷新）：单台一台数；聚合逐台列出
+  const disk = useDiskSpaces()
   // 会话统计（本次会话流量）
   const [stats, setStats] = useState<SessionStats | null>(null)
-
-  useEffect(() => {
-    if (!session?.downloadDir) return
-    let cancelled = false
-    const load = () => {
-      sessionApi
-        .freeSpace(session.downloadDir)
-        .then((d) => { if (!cancelled) setFreeSpace(d) })
-        .catch(() => {})
-    }
-    load()
-    const id = setInterval(load, 60000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [session?.downloadDir])
 
   useEffect(() => {
     let cancelled = false
@@ -102,6 +90,14 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
     : wsStatus === 'connecting'
       ? t('common.connecting')
       : t('common.disconnected')
+
+  // 磁盘余量：聚合逐台列在 title 与弹层里，不把某一台的值当成全局；
+  // 总量未知（qBittorrent Web API 不提供）时不显示「/ 总量」
+  const diskTitle = disk.aggregate
+    ? `${t('statusBar.freeSpace')}: ${disk.rows.map((r) => `${r.name} ${r.ok ? formatBytes(r.freeSpace) : '--'}`).join(' · ')}`
+    : disk.single
+      ? `${t('statusBar.freeSpace')}: ${formatBytes(disk.single.freeSpace)}${disk.single.totalSize > 0 ? ` / ${formatBytes(disk.single.totalSize)}` : ''}`
+      : ''
 
   return (
     <div className="tm-dock glass-panel rounded-dock h-9 flex items-center gap-2 px-4 text-footnote text-gray-500 dark:text-gray-400 tm-glass-label">
@@ -166,16 +162,18 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
           </span>
         )}
 
-        {/* 硬盘剩余空间：窄屏降级为纯图标，数字收进 title 与详情弹层 */}
-        {freeSpace && (
-          <span
-            className="flex items-center gap-1 shrink-0"
-            title={`${t('statusBar.freeSpace')}: ${formatBytes(freeSpace.freeSpace)} / ${formatBytes(freeSpace.totalSize)}`}
-          >
+        {/* 硬盘剩余空间：聚合时只留图标（逐台数字在详情弹层，避免拿一台的值冒充全局），
+            单台窄屏同样降级为纯图标，数字收进 title 与详情弹层 */}
+        {disk.aggregate ? (
+          <span className="flex items-center gap-1 shrink-0" title={diskTitle}>
             <HardDrive className="w-3 h-3 text-gray-400" />
-            <span className="tm-mono hidden md:inline">{formatBytes(freeSpace.freeSpace)}</span>
           </span>
-        )}
+        ) : disk.single ? (
+          <span className="flex items-center gap-1 shrink-0" title={diskTitle}>
+            <HardDrive className="w-3 h-3 text-gray-400" />
+            <span className="tm-mono hidden md:inline">{formatBytes(disk.single.freeSpace)}</span>
+          </span>
+        ) : null}
 
         {/* 统计详情弹窗 */}
         <Popover open={showStats} onOpenChange={setShowStats}>
@@ -184,8 +182,29 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
               {t('status.details')}
             </button>
           </PopoverTrigger>
-          <PopoverContent className="glass-panel-strong p-3 w-56" align="end">
+          <PopoverContent className={cn('glass-panel-strong p-3', disk.aggregate ? 'w-64' : 'w-56')} align="end">
             <div className="space-y-2 text-footnote">
+              {/* 聚合视图：逐台列出磁盘余量（底栏只留图标，md+ 也需在此查看） */}
+              {disk.aggregate && (
+                <div className="space-y-1 pb-2 border-b border-white/60 dark:border-white/10">
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <HardDrive className="w-3 h-3" />
+                    {t('statusBar.freeSpace')}
+                  </div>
+                  {disk.rows.map((r) => (
+                    <div key={r.key} className="flex items-center gap-2">
+                      <KindBadge kind={r.kind} />
+                      <span className="truncate flex-1 text-gray-600 dark:text-gray-300">{r.name}</span>
+                      <span className="tm-mono shrink-0">
+                        {r.ok ? formatBytes(r.freeSpace) : '--'}
+                        {r.ok && r.totalSize > 0 && (
+                          <span className="text-gray-400"> / {formatBytes(r.totalSize)}</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* 会话流量与实时计数在窄屏从底栏移入此处，保证信息不丢失 */}
               <div className="md:hidden space-y-1 pb-2 border-b border-white/60 dark:border-white/10">
                 <div className="flex justify-between">
@@ -196,11 +215,12 @@ export const StatusBar: React.FC<Props> = ({ isMobile }) => {
                   <span className="text-gray-500">{t('nav.active')}</span>
                   <span className="tm-mono text-primary">{activeCount}</span>
                 </div>
-                {freeSpace && (
+                {disk.single && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">{t('statusBar.freeSpace')}</span>
                     <span className="tm-mono">
-                      {formatBytes(freeSpace.freeSpace)} / {formatBytes(freeSpace.totalSize)}
+                      {formatBytes(disk.single.freeSpace)}
+                      {disk.single.totalSize > 0 && ` / ${formatBytes(disk.single.totalSize)}`}
                     </span>
                   </div>
                 )}

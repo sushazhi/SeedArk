@@ -938,6 +938,25 @@ type apiRequestIn struct {
 	Args   map[string]any `json:"args,omitempty" jsonschema:"RPC arguments 对象，键使用 Transmission 官方下划线命名（如 ids / fields / download-dir）；留空表示无参数"`
 }
 
+// validateTorrentAddArgs 对透传的 torrent-add 做与 add_torrent 同口径的校验。
+// Transmission 的 filename 参数原生支持本地路径：透传入口若只按方法名放行，
+// 调用方可传任意宿主机路径借 Transmission 进程权限读文件，绕过文件读取白名单
+//（与 rpc.ValidTorrentLink 注释描述的是同一处风险，两侧必须一致）。
+func validateTorrentAddArgs(args map[string]any) error {
+	raw, ok := args["filename"]
+	if !ok || raw == nil {
+		return nil
+	}
+	link, ok := raw.(string)
+	if !ok {
+		return errors.New("torrent-add 的 filename 必须是字符串")
+	}
+	if !rpc.ValidTorrentLink(link) {
+		return errors.New("torrent-add 的 filename 仅支持 http(s) 链接或磁力链接（本地路径请用 add_torrent 的 path 参数，受文件白名单限制）")
+	}
+	return nil
+}
+
 func (s *Server) transmissionAPIRequest(ctx context.Context, _ *mcp.CallToolRequest, in apiRequestIn) (*mcp.CallToolResult, any, error) {
 	if s.manager.Kind() != driver.KindTransmission {
 		return nil, nil, fmt.Errorf("原始 RPC 透传仅支持 Transmission，当前连接的是 %s", s.manager.Kind().Label())
@@ -956,9 +975,15 @@ func (s *Server) transmissionAPIRequest(ctx context.Context, _ *mcp.CallToolRequ
 		}
 		if method == "session-set" {
 			for k := range in.Args {
-				if sessionSetBlockedKeys[strings.ToLower(k)] {
+				// RPC 规范用连字符，但客户端常按下划线提交，两种写法都要挡住
+				if sessionSetBlockedKeys[strings.ReplaceAll(strings.ToLower(k), "_", "-")] {
 					return nil, nil, fmt.Errorf("session-set 的 %q 属敏感配置（可在宿主机执行脚本），已屏蔽", k)
 				}
+			}
+		}
+		if method == "torrent-add" {
+			if err := validateTorrentAddArgs(in.Args); err != nil {
+				return nil, nil, err
 			}
 		}
 	default:

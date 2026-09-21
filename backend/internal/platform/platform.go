@@ -31,6 +31,10 @@ type Config struct {
 	// FileAllowedPrefixes 允许「按路径添加种子」读取的目录前缀（含数据目录）。
 	// 为空表示关闭该能力，避免接口沦为任意文件读取入口。
 	FileAllowedPrefixes []string
+	// DataDir 服务数据目录（默认 ~/.seedark）。平台专属的落盘（如更新包）
+	// 必须放在这里：系统临时目录所有本机用户可写，固定文件名 + 可预置软链
+	// 会让服务以自身权限覆盖任意文件。
+	DataDir string
 }
 
 // SecurityPolicy 安全响应头与同源判定策略。

@@ -342,6 +342,18 @@ func (c *Client) trackerMap(ctx context.Context, hashes []string) (map[string][]
 	wg.Wait()
 
 	c.trackerMu.Lock()
+	// 按当前清单剪枝：已被删除的种子的站点记录必须一并清掉，
+	// 否则界面上的站点分组会一直挂着早就删掉的种子。
+	// （hashes 由调用方传入完整清单，见 GetTorrentSites / ReplaceTracker）
+	current := make(map[string]struct{}, len(hashes))
+	for _, h := range hashes {
+		current[h] = struct{}{}
+	}
+	for k := range c.trackers {
+		if _, ok := current[k]; !ok {
+			delete(c.trackers, k)
+		}
+	}
 	c.trackerTime = time.Now()
 	out := make(map[string][]string, len(c.trackers))
 	for k, v := range c.trackers {
@@ -402,8 +414,8 @@ func (c *Client) AddTorrentByURL(ctx context.Context, link, downloadDir string, 
 	if len(labels) > 0 {
 		form.Set("tags", strings.Join(labels, ","))
 	}
-	resp, err := c.raw(ctx, "POST", c.base+"/api/v2/torrents/add", form,
-		strings.NewReader(form.Encode()), "application/x-www-form-urlencoded", true)
+	resp, err := c.raw(ctx, "POST", c.base+"/api/v2/torrents/add", formReader(form),
+		"application/x-www-form-urlencoded", true)
 	if err != nil {
 		return 0, err
 	}
@@ -529,6 +541,9 @@ func (c *Client) RemoveTorrents(ctx context.Context, ids []int64, deleteData boo
 }
 
 // invalidate 写操作后作废列表与 tracker 缓存，保证下次拉取是最新状态
+// invalidate 缓存失效：列表缓存整体作废，站点缓存标记过期。
+// 站点缓存不作整体清空——下次取站点时 trackerMap 会按最新清单剪枝并补齐，
+// 既清掉已删除种子的残留，又不必为一次属性修改重拉全部 Tracker
 func (c *Client) invalidate() {
 	c.listMu.Lock()
 	c.listCache = nil
@@ -571,22 +586,25 @@ func (c *Client) SetTorrent(ctx context.Context, ids []int64, patch driver.Torre
 		}
 	}
 	// 分享率 / 做种时长：qBittorrent 用 -1 表示「无限制」，-2 表示「跟随全局」。
-	// 面板的 seedRatioMode：0 跟随全局 / 1 单种覆盖 / 2 不限
+	// 面板的 seedRatioMode：0 跟随全局 / 1 单种覆盖 / 2 不限。
+	//
+	// 注意 case 1 与 case 2 不能都落到 -1：面板的「不限」是 -1、但「单种覆盖」
+	// 必须用用户填的具体数值（下面 SeedRatioLimit 分支会覆盖它），若这里先把
+	// case 1 也写成 -1，一旦前端没带 limit 就会静默变成「不限」——用户以为设了
+	// 目标，实际永不停止做种。
 	if patch.SeedRatioLimit != nil || patch.SeedRatioMode != nil {
 		ratio := -2.0
 		seeding := int64(-2)
-		if patch.SeedRatioMode != nil {
-			switch *patch.SeedRatioMode {
-			case 1:
-				ratio = -1
-				seeding = -1
-			case 2:
-				ratio = -1
-				seeding = -1
-			}
+		if patch.SeedRatioMode != nil && *patch.SeedRatioMode == 2 {
+			ratio = -1
+			seeding = -1
 		}
 		if patch.SeedRatioLimit != nil && *patch.SeedRatioLimit > 0 {
 			ratio = *patch.SeedRatioLimit
+			// 单种覆盖：时长仍跟随全局（QB 没有单种时长独立入口时保持 -2）
+			if patch.SeedRatioMode != nil && *patch.SeedRatioMode == 2 {
+				seeding = -1
+			}
 		}
 		if err := c.post(ctx, "torrents/setShareLimits", url.Values{
 			"hashes":           {hashes},
@@ -596,6 +614,13 @@ func (c *Client) SetTorrent(ctx context.Context, ids []int64, patch driver.Torre
 			return err
 		}
 	}
+	// 空闲做种上限：qBittorrent 的 setShareLimits 只认整体设置，没有只改一个
+	// 字段的接口，所以必须把当前值一并带回去。
+	//
+	// 早前这里硬编码 ratioLimit=-1 / seedingTimeLimit=-1，会把手动设置分享率
+	// 的那一步刚写进去的值直接覆盖成「不限」——用户在同一个面板里同时设了
+	// 分享率和做种空闲上限，分享率就静默失效了。改为：先读回当前值，只替换
+	// inactiveSeedingTimeLimit。
 	if patch.SeedIdleLimitMin != nil || patch.SeedIdleMode != nil {
 		idle := int64(-2)
 		if patch.SeedIdleLimitMin != nil && *patch.SeedIdleLimitMin > 0 {
@@ -603,13 +628,22 @@ func (c *Client) SetTorrent(ctx context.Context, ids []int64, patch driver.Torre
 		} else if patch.SeedIdleMode != nil && *patch.SeedIdleMode == 2 {
 			idle = -1
 		}
+		curRatio, curSeeding, ok := c.currentShareLimits(ctx, hashes)
+		if !ok {
+			// 读不回当前值时不能拿 -1 顶上：那等于把用户的分享率改成「不限」。
+			// 宁可明确失败，也不静默破坏用户已有的做种目标。
+			return fmt.Errorf("qBittorrent 读取分享率设置失败，无法在保留现有分享率的前提下设置空闲做种上限")
+		}
 		if err := c.post(ctx, "torrents/setShareLimits", url.Values{
 			"hashes":                   {hashes},
-			"ratioLimit":               {"-1"},
-			"seedingTimeLimit":         {"-1"},
+			"ratioLimit":               {strconv.FormatFloat(curRatio, 'f', 2, 64)},
+			"seedingTimeLimit":         {strconv.FormatInt(curSeeding, 10)},
 			"inactiveSeedingTimeLimit": {strconv.FormatInt(idle, 10)},
 		}); err != nil {
-			slog.Debug("qBittorrent 不支持空闲做种上限，已跳过", "err", err)
+			// 旧版 qBittorrent（< 4.3）没有 inactiveSeedingTimeLimit 参数，
+			// 这里明确报错而不是静默跳过：用户以为设上了、实际没生效，
+			// 种子的做种时长会无限增长。
+			return fmt.Errorf("qBittorrent 设置空闲做种上限失败（需 4.3+）: %w", err)
 		}
 	}
 	if patch.QueuePosition != nil {
@@ -795,7 +829,7 @@ func (c *Client) SetTorrentFlags(ctx context.Context, ids []int64, flags driver.
 		return err
 	}
 	if flags.SequentialDownload != nil {
-		if err := c.post(ctx, "torrents/toggleSequentialDownload", url.Values{"hashes": {hashes}}); err != nil {
+		if err := c.setSequentialDownload(ctx, hashes, *flags.SequentialDownload); err != nil {
 			return err
 		}
 	}
@@ -815,6 +849,29 @@ func (c *Client) SetTorrentFlags(ctx context.Context, ids []int64, flags driver.
 	}
 	c.invalidate()
 	return nil
+}
+
+// setSequentialDownload 把顺序下载设置为目标值。
+// Web API 只有 toggle 接口（无参数版 set），直接调用等于「按当前状态取反」：
+// 设 true 会把本已开启的种子关掉。先读当前状态、只对不一致的种子切换。
+func (c *Client) setSequentialDownload(ctx context.Context, hashes string, want bool) error {
+	var list []struct {
+		Hash       string `json:"hash"`
+		Sequential bool   `json:"seq_dl"`
+	}
+	if err := c.get(ctx, "torrents/info", url.Values{"hashes": {hashes}}, &list); err != nil {
+		return err
+	}
+	diff := make([]string, 0, len(list))
+	for _, t := range list {
+		if t.Sequential != want {
+			diff = append(diff, t.Hash)
+		}
+	}
+	if len(diff) == 0 {
+		return nil
+	}
+	return c.post(ctx, "torrents/toggleSequentialDownload", url.Values{"hashes": {strings.Join(diff, "|")}})
 }
 
 // SetTorrentLocation 迁移存储位置（qBittorrent 总是实际搬移文件）
@@ -856,7 +913,23 @@ func (c *Client) QueueMove(ctx context.Context, ids []int64, direction string) e
 	return nil
 }
 
-// RenameFile 重命名种子内文件 / 目录（先按文件试，失败再按目录）
+// currentShareLimits 读回种子的当前分享率 / 做种时长限制。
+// qBittorrent 的 setShareLimits 是整体覆盖，改一个字段必须把其余字段原值带回，
+// 否则会把用户已有的设置抹掉。ok=false 表示没读到，调用方不能拿默认值顶上。
+func (c *Client) currentShareLimits(ctx context.Context, hashes string) (ratio float64, seeding int64, ok bool) {
+	var raw []torrentInfo
+	if err := c.get(ctx, "torrents/info", url.Values{"hashes": {hashes}}, &raw); err != nil || len(raw) == 0 {
+		return 0, 0, false
+	}
+	return raw[0].RatioLimit, raw[0].MaxSeedingTime, true
+}
+
+// RenameFile 重命名种子内文件 / 目录。
+//
+// 与 Transmission 的差异：Transmission 的 TorrentRenamePath 支持把 path 传成
+// 种子自己的名字来重命名顶层目录，qBittorrent 的 renameFile / renameFolder 只认
+// 种子内的相对路径，传种子名必然 404。界面上的「重命名」传的正是种子名，所以
+// 这里要把顶层重命名翻译成：枚举该种子的顶层条目，逐个改名。
 func (c *Client) RenameFile(ctx context.Context, id int64, path, name string) error {
 	hash := c.HashFor(id)
 	if hash == "" {
@@ -864,6 +937,10 @@ func (c *Client) RenameFile(ctx context.Context, id int64, path, name string) er
 	}
 	if name == "" {
 		return fmt.Errorf("缺少新的名称")
+	}
+	// 顶层重命名：path 为空或等于种子名（Transmission 语义）时，改为逐个顶层条目改名
+	if path == "" || c.torrentName(ctx, hash) == path {
+		return c.renameTopLevel(ctx, hash, path, name)
 	}
 	err := c.post(ctx, "torrents/renameFile", url.Values{
 		"hash": {hash}, "oldPath": {path}, "newPath": {name}})
@@ -877,6 +954,114 @@ func (c *Client) RenameFile(ctx context.Context, id int64, path, name string) er
 	}
 	c.invalidate()
 	return nil
+}
+
+// torrentName 读取种子的显示名称（顶层重命名需要它来判断 path 是不是种子名）
+func (c *Client) torrentName(ctx context.Context, hash string) string {
+	var raw []torrentInfo
+	if err := c.get(ctx, "torrents/info", url.Values{"hashes": {hash}}, &raw); err != nil || len(raw) == 0 {
+		return ""
+	}
+	return raw[0].Name
+}
+
+// renameTopLevel 重命名种子的顶层条目。
+//
+// 单文件种子：文件名就是顶层，直接改文件名。
+// 多文件种子：所有文件共享同一个顶层目录，改目录名即可（QB 会连带移动文件）。
+// 混合 / 无目录前缀的种子：退化为逐个顶层前缀改名。
+func (c *Client) renameTopLevel(ctx context.Context, hash, oldName, newName string) error {
+	var files []torrentFile
+	if err := c.get(ctx, "torrents/files", url.Values{"hash": {hash}}, &files); err != nil {
+		return fmt.Errorf("读取种子文件列表失败: %w", err)
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("种子内没有文件，无法重命名")
+	}
+	plan, err := planTopLevelRename(files, oldName, newName)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, step := range plan {
+		endpoint := "torrents/renameFile"
+		if step.Folder {
+			endpoint = "torrents/renameFolder"
+		}
+		if err := c.post(ctx, endpoint, url.Values{
+			"hash": {hash}, "oldPath": {step.Old}, "newPath": {step.New}}); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if firstErr != nil {
+		return fmt.Errorf("重命名失败: %w", firstErr)
+	}
+	c.invalidate()
+	return nil
+}
+
+// renameStep 一次改名动作：Old → New，Folder 决定走 renameFolder 还是 renameFile
+type renameStep struct {
+	Old    string
+	New    string
+	Folder bool
+}
+
+// planTopLevelRename 把「重命名种子顶层」翻译成具体的改名步骤。
+//
+// 与 Transmission 的差异：Transmission 的 TorrentRenamePath 接受种子自己的名字
+// 作为 path 来重命名顶层，qBittorrent 只认种子内的相对路径。界面「重命名」传进来
+// 的正是种子名，所以必须在这里翻译，否则请求必然 404。
+//
+// 规则：
+//   - 多文件且只有一个顶层目录（名字等于 oldName）→ 只改这一层目录
+//   - 单文件种子 → 改那一个文件名
+//   - 多个顶层条目 → 只改名字等于 oldName 的那一个，其余不动（避免把无关条目也改名）
+func planTopLevelRename(files []torrentFile, oldName, newName string) ([]renameStep, error) {
+	prefixes := make([]string, 0, 4)
+	seen := make(map[string]bool, 4)
+	hasBareTopLevel := false
+	for _, f := range files {
+		if f.Name == "" {
+			continue
+		}
+		top := f.Name
+		if i := strings.IndexByte(f.Name, '/'); i >= 0 {
+			top = f.Name[:i]
+		} else {
+			hasBareTopLevel = true
+		}
+		if top == "" || seen[top] {
+			continue
+		}
+		seen[top] = true
+		prefixes = append(prefixes, top)
+	}
+	if len(prefixes) == 0 {
+		return nil, fmt.Errorf("未能解析种子顶层名称")
+	}
+
+	// 多文件且只有一个顶层目录、名字正好是旧名：只改这一层目录名
+	if !hasBareTopLevel && len(prefixes) == 1 && prefixes[0] == oldName {
+		return []renameStep{{Old: prefixes[0], New: newName, Folder: true}}, nil
+	}
+
+	steps := make([]renameStep, 0, len(prefixes))
+	if len(prefixes) > 1 {
+		// 多个顶层条目：只改名字等于 oldName 的那一个
+		for _, top := range prefixes {
+			if top == oldName {
+				steps = append(steps, renameStep{Old: top, New: newName, Folder: !hasBareTopLevel})
+			}
+		}
+		if len(steps) == 0 {
+			return nil, fmt.Errorf("种子内未找到「%s」（可能已被重命名或属于另一形态）", oldName)
+		}
+		return steps, nil
+	}
+
+	// 单个顶层条目：就是整个种子的名字
+	return []renameStep{{Old: prefixes[0], New: newName, Folder: !hasBareTopLevel}}, nil
 }
 
 // ReplaceTracker 批量替换 / 追加 Tracker

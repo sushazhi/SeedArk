@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sushazhi/seedark/backend/internal/rpc"
@@ -21,6 +22,10 @@ const (
 type Service struct {
 	manager *rpc.Manager
 	store   *state.Store
+
+	// tickMu 串行化一轮执行：后台定时 tick 与「立即执行」接口可能同时触发，
+	// 并发跑会让同一批种子被下发两次删除、已处理标记互相覆盖
+	tickMu sync.Mutex
 }
 
 // New 创建做种策略服务
@@ -73,16 +78,20 @@ type PlanEntry struct {
 
 // Tick 执行一轮策略评估。列表接口已带 trackerStats，站点判定无需逐种拉详情。
 func (s *Service) Tick(ctx context.Context) (*Result, error) {
-	plan, err := s.plan(ctx)
+	s.tickMu.Lock()
+	defer s.tickMu.Unlock()
+	plan, torrents, err := s.plan(ctx)
 	if err != nil {
 		return nil, err
 	}
 	result := &Result{Matched: len(plan)}
+	// 只取一次状态快照，供保护栏判断与预览落盘复用，避免对同一份状态多次 JSON 深拷贝
+	st := s.store.Get()
+	// 预览路径不写状态，清理已删除种子的已处理标记只能在这里做
+	s.pruneProcessed(&st, torrents)
 	if len(plan) == 0 {
 		return result, nil
 	}
-	// 只取一次状态快照，供保护栏判断与预览落盘复用，避免对同一份状态多次 JSON 深拷贝
-	st := s.store.Get()
 	if !st.SeedPolicyGuard.Enforce {
 		result.Previewed = len(plan)
 		s.persistPreview(plan, &st)
@@ -95,7 +104,7 @@ func (s *Service) Tick(ctx context.Context) (*Result, error) {
 // Preview 只读评估：返回当前已达标且尚未被策略处理的种子，不执行动作、不落盘。
 // enforce 表示保护栏开关（true 时执行 Tick 会真正动作），供调用方一并展示。
 func (s *Service) Preview(ctx context.Context) ([]PlanEntry, bool, error) {
-	plan, err := s.plan(ctx)
+	plan, _, err := s.plan(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -114,18 +123,19 @@ func (s *Service) Preview(ctx context.Context) ([]PlanEntry, bool, error) {
 	return entries, s.store.Get().SeedPolicyGuard.Enforce, nil
 }
 
-// plan 计算当前已达标且未处理的种子清单（不执行、不落盘）
-func (s *Service) plan(ctx context.Context) ([]planItem, error) {
+// plan 计算当前已达标且未处理的种子清单（不执行、不落盘）。
+// 同时返回本轮拉到的全量种子列表，供 Tick 清理失效标记用。
+func (s *Service) plan(ctx context.Context) ([]planItem, []*rpc.Torrent, error) {
 	st := s.store.Get()
 	rules := enabledRules(st.SeedPolicyRules)
 	if len(rules) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	// 动作按 ID 批量下发，必须用最新列表：缓存里已被用户删掉的种子会让整批 RPC 失败
 	torrents, err := s.manager.GetTorrentsFresh(ctx)
 	if err != nil {
 		slog.Warn("做种策略：获取种子列表失败", "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 	// 站点规则用中文名选站（与侧边栏/自动文件管理同一口径），但列表接口只带
 	// trackerStats 主机名，站点名在详情的 trackers 里；这里复用同一份站点映射一次
@@ -152,7 +162,42 @@ func (s *Service) plan(ctx context.Context) ([]planItem, error) {
 		}
 		plan = append(plan, item)
 	}
-	return plan, nil
+	return plan, torrents, nil
+}
+
+// pruneProcessed 清理已不存在种子的已处理标记。
+// 标记只对仍存在的种子有意义：种子被删除后标记再无读者，不清会在状态文件里
+// 随增删无限堆积（每次落盘都要重写全表）。暂停类种子的标记仍在 live 集合中，
+// 不受影响。列表为空（异常态）时不清理，避免把全部标记一次性抹掉。
+func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
+	live := make(map[string]struct{}, len(torrents))
+	for _, t := range torrents {
+		if t != nil && t.HashString != "" {
+			live[t.HashString] = struct{}{}
+		}
+	}
+	if len(live) == 0 {
+		return
+	}
+	stale := false
+	for k := range st.ProcessedPolicy {
+		if h, ok := state.PolicyKeyHash(k); ok {
+			if _, exist := live[h]; !exist {
+				stale = true
+				break
+			}
+		}
+	}
+	if !stale {
+		return
+	}
+	removed := 0
+	_ = s.store.Update(func(st2 *state.State) {
+		removed = state.PruneHashMap(st2.ProcessedPolicy, live, state.PolicyKeyHash)
+	})
+	if removed > 0 {
+		slog.Info("做种策略：清理已删除种子的已处理标记", "count", removed)
+	}
 }
 
 func enabledRules(all []state.SeedPolicyRule) []*state.SeedPolicyRule {
@@ -267,19 +312,27 @@ func (s *Service) execute(ctx context.Context, plan []planItem, result *Result) 
 		for _, it := range items {
 			ids = append(ids, it.torrent.ID)
 		}
-		pause := rule.Action == state.PolicyActionPause
+		// 动作白名单：未知取值绝不落入删除分支。手改状态文件或历史遗留的
+		// 笔误动作（曾按「非 pause 即删除」处理）会因此变成删种事故。
 		var err error
-		if pause {
+		switch rule.Action {
+		case state.PolicyActionPause:
 			err = s.manager.StopTorrents(ctx, ids)
-		} else {
-			err = s.manager.RemoveTorrents(ctx, ids, rule.Action == state.PolicyActionDeleteData)
+		case state.PolicyActionDelete:
+			err = s.manager.RemoveTorrents(ctx, ids, false)
+		case state.PolicyActionDeleteData:
+			err = s.manager.RemoveTorrents(ctx, ids, true)
+		default:
+			result.Failed += len(items)
+			slog.Warn("做种策略：规则动作无法识别，本轮跳过", "rule", rule.Name, "action", rule.Action)
+			continue
 		}
 		if err != nil {
 			result.Failed += len(items)
 			slog.Warn("做种策略：动作失败", "rule", rule.Name, "action", rule.Action, "err", err)
 			continue
 		}
-		if pause {
+		if rule.Action == state.PolicyActionPause {
 			result.Paused += len(items)
 		} else {
 			result.Deleted += len(items)

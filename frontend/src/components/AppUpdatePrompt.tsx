@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { client } from '@/api/client'
-import { APP_BASE } from '@/platform/appBase'
 import { updateApi, type UpdateCheckResult, type UpdateStatus } from '@/api/torrent'
 import type { ApiResponse } from '@/types'
 import { usePlatform } from '@/platform'
@@ -137,6 +136,15 @@ export function AppUpdatePrompt() {
     }
   }
 
+  // 下载 fpk 给应用中心手动安装：走 updateApi 以便带上鉴权头
+  const downloadFpk = async () => {
+    try {
+      await updateApi.download(updStatus?.fpkFilename)
+    } catch {
+      // 拦截器已提示
+    }
+  }
+
   // 「稍后」/右上 ×/Esc/遮罩：记录关闭时间，24h 内不再弹
   const snooze = () => {
     lsSet(CLOSED_KEY, String(Date.now()))
@@ -190,10 +198,8 @@ export function AppUpdatePrompt() {
 
         {done || readyWithoutInstall ? (
           <div className="space-y-1">
-            <Button asChild size="sm" className="h-8 text-footnote w-full">
-              <a href={APP_BASE + '/api/update/download'} download={updStatus?.fpkFilename || undefined}>
-                {t('session.downloadFpk')}
-              </a>
+            <Button size="sm" className="h-8 text-footnote w-full" onClick={() => void downloadFpk()}>
+              {t('session.downloadFpk')}
             </Button>
             <p className="text-footnote text-gray-500 dark:text-gray-400">{t('session.fpkInstallHint')}</p>
           </div>
