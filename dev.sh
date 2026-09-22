@@ -253,7 +253,8 @@ http_ok() {
 }
 
 wait_http() {
-  local url="$1" name="$2" log="$3" timeout="${4:-90}" waited=0
+  # 调用方按 (url 超时秒数 名称 日志) 传参，与 dev.ps1 的 Wait-Http 一致
+  local url="$1" timeout="${2:-90}" name="$3" log="$4" waited=0
   while [ "$waited" -lt "$timeout" ]; do
     if http_ok "$url"; then return 0; fi
     sleep 1

@@ -19,6 +19,7 @@ import { useFilter } from '@/hooks/useFilter'
 import { useGlassChrome } from '@/hooks/useGlassChrome'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useResponsive } from '@/hooks/useResponsive'
+import { useEnsureSemanticPaths } from '@/hooks/useSemanticPath'
 import { useSafeAreaGuard } from '@/hooks/useSafeAreaGuard'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { useWebSocket } from '@/hooks/useWebSocket'
@@ -49,7 +50,7 @@ const SWIPE_CHROME = '.tm-dock-top, .tm-dock-bottom, [role="dialog"], [role="men
 export default function App() {
   const { t, i18n } = useTranslation()
   const { isMobile } = useResponsive()
-  const { env, ready, can } = usePlatform()
+  const { env } = usePlatform()
   useWebSocket()
 
   const torrents = useAppStore((s) => s.torrents)
@@ -64,7 +65,6 @@ export default function App() {
   const setTheme = useAppStore((s) => s.setTheme)
   const setLanguage = useAppStore((s) => s.setLanguage)
   const setSession = useAppStore((s) => s.setSession)
-  const setSemanticDirs = useAppStore((s) => s.setSemanticDirs)
   const fontSize = useAppStore((s) => s.fontSize)
   const sortField = useAppStore((s) => s.sortField)
   const sortOrder = useAppStore((s) => s.sortOrder)
@@ -232,48 +232,13 @@ export default function App() {
     }
   }, [wsStatus, setTorrentSites])
 
-  // 语义路径（仅 fnOS）：把 Transmission 报上的 /vol1/... 目录转成宿主展示名。
-  // 展示属增强：失败按「暂不可用」处理，退避重试后仍失败才本会话放弃——
-  // 此前任何一次失败都直接永久放弃，宿主一次瞬时抖动就会让整个会话都看不到语义路径
-  // （只有切语言才能重置）。这里改为指数退避：瞬时故障可自愈，持续故障也不会在
-  // 2s 轮询下反复打转换接口。连续失败 3 次即认为宿主侧不可用，放弃本会话。
-  const [semanticAttempt, setSemanticAttempt] = useState(0)
-  const canSemantic = ready && can('paths.semantic')
-  const semanticDirsKey = useMemo(
-    () => Array.from(new Set(torrents.map((x) => x.downloadDir).filter(Boolean))).join('\u0000'),
+  // 语义路径（仅 fnOS）：把下载器报上的 /vol1/... 目录转成宿主展示名。
+  // 拉取与退避逻辑见 useEnsureSemanticPaths；设置面板里的路径字段同样复用该 hook。
+  const torrentDirs = useMemo(
+    () => Array.from(new Set(torrents.map((x) => x.downloadDir).filter(Boolean))),
     [torrents],
   )
-
-  // 语言切换后旧映射全部失效：清空并重置退避，让下方 effect 重新全量拉取
-  useEffect(() => {
-    useAppStore.getState().resetSemantic()
-    setSemanticAttempt(0)
-  }, [language])
-
-  useEffect(() => {
-    if (!canSemantic) return
-    const known = useAppStore.getState().semanticDirs
-    const missing = (semanticDirsKey ? semanticDirsKey.split('\u0000') : []).filter((d) => !(d in known))
-    if (missing.length === 0) return
-    // 退避档位：0s（首次）→ 3s → 15s；用尽后本会话不再重试
-    const backoff = [0, 3000, 15000][semanticAttempt]
-    if (backoff === undefined) return
-    const timer = setTimeout(() => {
-      torrentApi
-        .semanticPaths(missing, language)
-        .then((res) => {
-          if (res.available) {
-            setSemanticDirs(res.map)
-            // 成功即复位：后续新出现的目录仍走首次快速路径
-            setSemanticAttempt(0)
-          } else {
-            setSemanticAttempt((n) => n + 1)
-          }
-        })
-        .catch(() => setSemanticAttempt((n) => n + 1))
-    }, backoff)
-    return () => clearTimeout(timer)
-  }, [semanticDirsKey, language, canSemantic, setSemanticDirs, semanticAttempt])
+  useEnsureSemanticPaths(torrentDirs)
 
   useEffect(() => {
     void i18n.changeLanguage(language)

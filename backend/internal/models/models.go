@@ -314,6 +314,10 @@ const (
 	SettingSelect = "select" // 枚举下拉
 	SettingText   = "text"   // 多行文本（换行分隔的列表）
 	SettingTime   = "time"   // 时刻（HH:MM）
+	// SettingPath 宿主文件系统路径（目录 / 文件）。与单行文本同形，但界面
+	// 知道它是路径：整行宽呈现便于看全，并提供宿主目录选择器与语义路径提示。
+	// 驱动只在该值确实是宿主路径时声明，纯文本键（如程序参数）不得使用。
+	SettingPath = "path"
 )
 
 // SettingsOption 枚举项

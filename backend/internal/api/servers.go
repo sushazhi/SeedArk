@@ -20,13 +20,14 @@ func (h *Handler) listServers(c *gin.Context) {
 	out := make([]map[string]any, 0, len(st.Servers))
 	for i, s := range st.Servers {
 		out = append(out, map[string]any{
-			"index":   i,
-			"name":    s.Name,
-			"type":    driver.NormalizeKind(s.Type).String(),
-			"url":     s.URL,
-			"user":    s.User,
-			"hasPass": s.Pass != "",
-			"enabled": s.Enabled,
+			"index":     i,
+			"name":      s.Name,
+			"type":      driver.NormalizeKind(s.Type).String(),
+			"url":       s.URL,
+			"user":      s.User,
+			"hasPass":   s.Pass != "",
+			"enabled":   s.Enabled,
+			"diskTotal": s.DiskTotal,
 		})
 	}
 	respond(c, gin.H{"servers": out, "activeServer": st.ActiveServer})
@@ -37,13 +38,16 @@ func (h *Handler) listServers(c *gin.Context) {
 //   - 非 nil（含空串）：显式设置密码，空串表示清空
 //
 // 若无此区分，界面仅编辑地址或名称时（前端全量回传、密码字段留空）就会静默清空凭据。
+// DiskTotal 同样用指针：列表接口虽会回传它，但缓存了旧版前端的客户端回传的列表里
+// 没有这个键，按零值落盘会把用户手填的总容量悄悄抹掉。
 type serverInput struct {
-	Name    string  `json:"name"`
-	Type    string  `json:"type"`
-	URL     string  `json:"url"`
-	User    string  `json:"user"`
-	Pass    *string `json:"pass"`
-	Enabled bool    `json:"enabled"`
+	Name      string  `json:"name"`
+	Type      string  `json:"type"`
+	URL       string  `json:"url"`
+	User      string  `json:"user"`
+	Pass      *string `json:"pass"`
+	Enabled   bool    `json:"enabled"`
+	DiskTotal *int64  `json:"diskTotal"`
 }
 
 // saveServers 全量保存服务器列表
@@ -74,14 +78,20 @@ func (h *Handler) saveServers(c *gin.Context) {
 				return
 			}
 		}
+		if t := body.Servers[i].DiskTotal; t != nil && *t < 0 {
+			respondError(c, http.StatusBadRequest, fmt.Sprintf("第 %d 个服务器：磁盘总容量不能为负", i+1))
+			return
+		}
 	}
 	err := h.state.Update(func(st *state.State) {
 		// 密码沿用采用两级匹配，兼顾两种编辑方式：
 		//  1) 地址+名称相同 —— 覆盖「仅调整顺序」的场景（纯按索引回填会在重排后串号）
 		//  2) 索引相同 —— 覆盖「改了地址或名称」的场景（此时按地址匹配必然落空）
 		byKey := make(map[string]string, len(st.Servers))
+		diskTotalByKey := make(map[string]int64, len(st.Servers))
 		for _, s := range st.Servers {
 			byKey[s.URL+"\x00"+s.Name] = s.Pass
+			diskTotalByKey[s.URL+"\x00"+s.Name] = s.DiskTotal
 		}
 		next := make([]state.Server, 0, len(body.Servers))
 		for i := range body.Servers {
@@ -95,6 +105,16 @@ func (h *Handler) saveServers(c *gin.Context) {
 					s.Pass = pass
 				} else if i < len(st.Servers) {
 					s.Pass = st.Servers[i].Pass
+				}
+			}
+			switch {
+			case in.DiskTotal != nil:
+				s.DiskTotal = *in.DiskTotal
+			default:
+				if total, ok := diskTotalByKey[in.URL+"\x00"+in.Name]; ok {
+					s.DiskTotal = total
+				} else if i < len(st.Servers) {
+					s.DiskTotal = st.Servers[i].DiskTotal
 				}
 			}
 			next = append(next, s)

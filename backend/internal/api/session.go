@@ -131,6 +131,10 @@ func (h *Handler) freeSpace(c *gin.Context) {
 		respondBackendError(c, "查询失败", err)
 		return
 	}
+	if total <= 0 {
+		st := h.state.Get()
+		total = st.DiskTotal(st.ActiveServer)
+	}
 	respond(c, gin.H{"path": path, "freeSpace": free, "totalSize": total})
 }
 
@@ -169,6 +173,10 @@ func (h *Handler) serverFreeSpace(c *gin.Context) {
 	if err != nil {
 		respondBackendError(c, "查询失败", err)
 		return
+	}
+	if total <= 0 {
+		st := h.state.Get()
+		total = st.DiskTotal(idx)
 	}
 	respond(c, gin.H{
 		"index":     idx,

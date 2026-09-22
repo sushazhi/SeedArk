@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  Accessibility,
   Bug,
   ExternalLink,
   FolderOpen,
@@ -42,6 +41,9 @@ import {
   isOtherDefault,
   sectionIcon,
 } from '@/components/SettingsModal/downloaders'
+
+// 磁盘容量按 GB 录入、按字节落库（1024 进制，与做种策略的上传量目标同口径）
+const GIB = 1024 ** 3
 
 // 设置弹窗的一节：既是移动端长滚动里的一个分节，也是桌面端左栏的一个导航项。
 // 两者同源——加/删一节只改这一份数据，状态不会漂移。
@@ -865,83 +867,76 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
       <Row label={t('session.showCheckboxes')} hint={t('session.showCheckboxesHint')}>
         <Switch checked={showCheckboxes} onCheckedChange={setShowCheckboxes} />
       </Row>
-      <Row label={t('session.clearDirHistory')}>
-        <Button size="sm" variant="outline" className="h-8 text-footnote" onClick={() => { localStorage.removeItem('tm_dirs'); toast.success(t('toast.updated')) }}>
-          {t('session.clear')}
-        </Button>
-      </Row>
-    </div>
-  )
-
-  // 无障碍与界面拆成两节：它们此前挤在同一个滚动区里，桌面端展开后是整页最长的一块
-  const a11yPane = (
-    <div className="space-y-1">
-      <p className="text-caption1 text-gray-400 pb-1">{t('session.a11yHint')}</p>
-      <Row label={t('session.reduceGlass')} hint={t('session.reduceGlassHint')}>
-        <Switch checked={reduceGlass} onCheckedChange={setReduceGlass} />
-      </Row>
-      <Row label={t('session.reduceMotion')} hint={t('session.reduceMotionHint')}>
-        <Switch checked={reduceMotion} onCheckedChange={setReduceMotion} />
-      </Row>
-      <Row label={t('session.moreContrast')} hint={t('session.moreContrastHint')}>
-        <Switch checked={moreContrast} onCheckedChange={setMoreContrast} />
-      </Row>
-      <Row label={t('session.glassOpacity')} hint={t('session.glassOpacityHint')}>
-        <div className="flex items-center gap-2 shrink-0">
-          <input
-            type="range"
-            min={20}
-            max={100}
-            step={5}
-            value={glassOpacity}
-            disabled={reduceGlass}
-            onChange={(e) => setGlassOpacity(Number(e.target.value))}
-            className="w-36 h-2 appearance-none disabled:opacity-40 cursor-pointer"
-            aria-label={t('session.glassOpacity')}
-          />
-          <span className="text-footnote text-gray-400 tm-mono w-10 text-right">{glassOpacity}%</span>
-        </div>
-      </Row>
-      <Row label={t('session.wallpaper')} hint={t('session.wallpaperHint')}>
-        <div className="flex items-center gap-2">
-          {wallpaper && (
-            <img
-              src={wallpaper}
-              alt=""
-              className="h-8 w-12 rounded-md object-cover border border-gray-200 dark:border-gray-700 shrink-0"
+      {/* 材质与无障碍降级：原「外观」一节并入此处。桌面端已是左导航 + 单节渲染，
+          两组加起来 8 行并不长，为它单占一个导航项反而要多认一个入口 */}
+      <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-700 space-y-1">
+        <p className="text-caption1 text-gray-400">{t('session.a11yHint')}</p>
+        <Row label={t('session.reduceGlass')} hint={t('session.reduceGlassHint')}>
+          <Switch checked={reduceGlass} onCheckedChange={setReduceGlass} />
+        </Row>
+        <Row label={t('session.reduceMotion')} hint={t('session.reduceMotionHint')}>
+          <Switch checked={reduceMotion} onCheckedChange={setReduceMotion} />
+        </Row>
+        <Row label={t('session.moreContrast')} hint={t('session.moreContrastHint')}>
+          <Switch checked={moreContrast} onCheckedChange={setMoreContrast} />
+        </Row>
+        <Row label={t('session.glassOpacity')} hint={t('session.glassOpacityHint')}>
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              type="range"
+              min={20}
+              max={100}
+              step={5}
+              value={glassOpacity}
+              disabled={reduceGlass}
+              onChange={(e) => setGlassOpacity(Number(e.target.value))}
+              className="w-36 h-2 appearance-none disabled:opacity-40 cursor-pointer"
+              aria-label={t('session.glassOpacity')}
             />
-          )}
-          <input
-            ref={wallpaperInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              void pickWallpaper(e.target.files?.[0])
-              // 允许选同一张图重试（失败后再次选择需触发 change）
-              e.target.value = ''
-            }}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-footnote shrink-0"
-            onClick={() => wallpaperInputRef.current?.click()}
-          >
-            {t('session.wallpaperChoose')}
-          </Button>
-          {wallpaper && (
+            <span className="text-footnote text-gray-400 tm-mono w-10 text-right">{glassOpacity}%</span>
+          </div>
+        </Row>
+        <Row label={t('session.wallpaper')} hint={t('session.wallpaperHint')}>
+          <div className="flex items-center gap-2">
+            {wallpaper && (
+              <img
+                src={wallpaper}
+                alt=""
+                className="h-8 w-12 rounded-md object-cover border border-gray-200 dark:border-gray-700 shrink-0"
+              />
+            )}
+            <input
+              ref={wallpaperInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void pickWallpaper(e.target.files?.[0])
+                // 允许选同一张图重试（失败后再次选择需触发 change）
+                e.target.value = ''
+              }}
+            />
             <Button
               size="sm"
               variant="outline"
               className="h-8 text-footnote shrink-0"
-              onClick={() => setWallpaper('')}
+              onClick={() => wallpaperInputRef.current?.click()}
             >
-              {t('session.wallpaperClear')}
+              {t('session.wallpaperChoose')}
             </Button>
-          )}
-        </div>
-      </Row>
+            {wallpaper && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-footnote shrink-0"
+                onClick={() => setWallpaper('')}
+              >
+                {t('session.wallpaperClear')}
+              </Button>
+            )}
+          </div>
+        </Row>
+      </div>
     </div>
   )
 
@@ -1288,7 +1283,6 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
       )),
     },
     { id: 'ui', label: t('session.ui'), icon: <Palette />, node: chrome('ui', t('session.ui'), uiPane) },
-    { id: 'a11y', label: t('session.a11yTitle'), icon: <Accessibility />, node: chrome('a11y', t('session.a11yTitle'), a11yPane) },
     // 下载器设置：连接的是哪个就显示哪个的自述面板。
     // qBittorrent 有上百个偏好键，由驱动自述分节后通用渲染；
     // Transmission 沿用内置表单（没连 qB 时行为与改造前一致）。
@@ -1409,6 +1403,24 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                 placeholder={server.hasPass ? `${t('session.password')} · ${t('session.passwordSaved')}` : t('session.password')}
                 autoComplete="new-password"
               />
+            </div>
+            {/* 磁盘总容量：下载器报不出总容量时（qBittorrent 只有剩余空间）手填，
+                侧栏的占比环据此恢复；留空表示未知 */}
+            <div className="flex items-center gap-2">
+              <span className="text-footnote text-gray-500 shrink-0">{t('session.multiServer.diskTotal')}</span>
+              <NumInput
+                aria-label={t('session.multiServer.diskTotal')}
+                value={server.diskTotal ? Math.round(server.diskTotal / GIB) : undefined}
+                min={0}
+                step={1}
+                className="h-8 text-footnote w-28"
+                onChange={(v) => {
+                  const s = [...servers]
+                  s[idx] = { ...s[idx], diskTotal: v && v > 0 ? Math.round(v * GIB) : 0 }
+                  saveServers(s)
+                }}
+              />
+              <span className="text-caption1 text-gray-400 min-w-0">{t('session.multiServer.diskTotalUnit')}</span>
             </div>
           </div>
         ))}

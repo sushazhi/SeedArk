@@ -7,6 +7,7 @@ import { useSemanticPath } from '@/hooks/useSemanticPath'
 import { useAppStore } from '@/stores/appStore'
 import { confirm } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
+import { ClearDirHistory, DIR_HISTORY_KEY } from '@/components/DirHistory'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -414,7 +415,7 @@ export function BatchMoveDialog({ open, ids, onClose }: { open: boolean; ids: nu
       setPath('')
       setMoveData(true)
       try {
-        const h = localStorage.getItem('tm_dirs')
+        const h = localStorage.getItem(DIR_HISTORY_KEY)
         if (h) {
           const parsed = JSON.parse(h) as string[]
           if (Array.isArray(parsed)) setHistory(parsed.slice(0, 8))
@@ -436,7 +437,7 @@ export function BatchMoveDialog({ open, ids, onClose }: { open: boolean; ids: nu
       await torrentApi.moveMany(ids, path.trim(), moveData)
       // 记录历史目录
       const h = [path.trim(), ...history.filter((x) => x !== path.trim())].slice(0, 8)
-      localStorage.setItem('tm_dirs', JSON.stringify(h))
+      localStorage.setItem(DIR_HISTORY_KEY, JSON.stringify(h))
       toast.success(t('toast.updated'))
       onClose()
     } catch {
@@ -472,6 +473,7 @@ export function BatchMoveDialog({ open, ids, onClose }: { open: boolean; ids: nu
             <datalist id="tm-dir-history">
               {history.map((h) => <option key={h} value={h} />)}
             </datalist>
+            <ClearDirHistory count={history.length} onClear={() => setHistory([])} />
           </div>
           <div className={row}>
             <span className={label}>{t('action.moveData')}</span>

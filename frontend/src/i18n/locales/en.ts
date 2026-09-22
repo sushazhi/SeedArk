@@ -22,6 +22,7 @@ export default {
     failed: 'failed',
     eachLineOne: 'one per line',
     dragToAdd: 'Drag files here to add torrents',
+    clearDirHistory: 'Clear directory history',
     eachLineTier: 'one per line, blank line between tiers',
     enabled: 'Enabled',
     status: 'Status',
@@ -422,14 +423,11 @@ export default {
     fontSize: 'Font Size',
     singleLine: 'Single Line',
     showCheckboxes: 'Show Checkboxes',
-    // Wallpaper / glass opacity + the three accessibility downgrades live here.
-    a11yTitle: 'Appearance',
+    // Shown inside 界面设置: wallpaper / glass opacity + the three accessibility downgrades.
     a11yHint: 'Follows the system by default; takes over once you adjust it',
     reduceGlass: 'Reduce Transparent Effects',
     reduceMotion: 'Reduce Motion',
     moreContrast: 'Increase Contrast',
-    clearDirHistory: 'Clear directory history',
-    clear: 'Clear',
     scriptAdded: 'Run on torrent added',
     scriptDone: 'Run on torrent done',
     scriptDoneSeeding: 'Run on seeding done',
@@ -500,6 +498,8 @@ export default {
       server: 'Server',
       addServer: 'Add Server',
       activeServer: 'Switch Server',
+      diskTotal: 'Disk total',
+      diskTotalUnit: 'GB; leave blank if unknown (qBittorrent does not report it — fill it in to get the usage ring)',
     },
     // Settings target tabs + driver-described panel (qBittorrent settings)
     targetTitle: 'Settings target',

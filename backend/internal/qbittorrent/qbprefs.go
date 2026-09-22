@@ -108,6 +108,12 @@ func fs(key, label, labelEn string) driver.SettingsField {
 	return driver.SettingsField{Key: key, Type: driver.FieldString, Label: label, LabelEn: labelEn}
 }
 
+// fpath 宿主文件系统上的目录路径：读写与单行文本同形，界面据类型提供
+// 整行宽（路径通常较长）、宿主目录选择器与语义路径提示
+func fpath(key, label, labelEn string) driver.SettingsField {
+	return driver.SettingsField{Key: key, Type: driver.FieldPath, Label: label, LabelEn: labelEn}
+}
+
 // ft 多行文本
 func ft(key, label, labelEn string) driver.SettingsField {
 	return driver.SettingsField{Key: key, Type: driver.FieldText, Label: label, LabelEn: labelEn}
@@ -238,12 +244,12 @@ var qbSchema = []driver.SettingsSection{
 				boolOpt(false, "切换受影响的 Torrent 至手动模式", "Switch affected torrents to Manual Mode")),
 			hint(fb("use_category_paths_in_manual_mode", "手动模式下使用分类路径", "Use Category paths in Manual Mode"),
 				"相对保存路径按对应分类路径解析，而非默认路径", "Resolve relative Save Path against the category path instead of the default one"),
-			fs("save_path", "默认保存路径", "Default Save Path"),
+			fpath("save_path", "默认保存路径", "Default Save Path"),
 			fb("temp_path_enabled", "保存未完成的 torrent 到", "Keep incomplete torrents in"),
-			fs("temp_path", "未完成文件目录", "Incomplete files path"),
-			hint(fs("export_dir", "复制 .torrent 文件到", "Copy .torrent files to"),
+			fpath("temp_path", "未完成文件目录", "Incomplete files path"),
+			hint(fpath("export_dir", "复制 .torrent 文件到", "Copy .torrent files to"),
 				"留空表示不导出", "Leave empty to disable"),
-			hint(fs("export_dir_fin", "复制已完成下载的 .torrent 文件到", "Copy .torrent files for finished downloads to"),
+			hint(fpath("export_dir_fin", "复制已完成下载的 .torrent 文件到", "Copy .torrent files for finished downloads to"),
 				"留空表示不导出", "Leave empty to disable"),
 			fb("excluded_file_names_enabled", "排除的文件名", "Excluded file names"),
 			hint(ft("excluded_file_names", "排除的文件名（每行一个）", "Excluded file names (one per line)"),

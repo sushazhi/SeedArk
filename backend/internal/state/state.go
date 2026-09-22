@@ -20,6 +20,10 @@ type Server struct {
 	User    string `json:"user"`
 	Pass    string `json:"pass"`
 	Enabled bool   `json:"enabled"`
+	// DiskTotal 该盘总容量（字节，界面按 GB 录入）。0 表示未知：
+	// qBittorrent Web API 只给剩余空间，界面无从自动取得总容量（Transmission
+	// 的 free-space 接口两者都给），故允许手填，用于侧栏的占比环。
+	DiskTotal int64 `json:"diskTotal,omitempty"`
 }
 
 // AutoMoveRule 自动文件管理规则
@@ -144,6 +148,15 @@ func (st *State) Applied(id int64) (SpeedApplied, bool) {
 	}
 	a, ok := st.SpeedPolicyApplied[id]
 	return a, ok
+}
+
+// DiskTotal 第 idx 台服务器手填的磁盘总容量（字节）；越界或未填返回 0。
+// API 与 MCP 都拿它补下载器自述里缺失的总容量，判定口径必须一致。
+func (st *State) DiskTotal(idx int) int64 {
+	if idx < 0 || idx >= len(st.Servers) {
+		return 0
+	}
+	return st.Servers[idx].DiskTotal
 }
 
 // AppliedCap 返回引擎在某方向下发给该种子的限速（0 表示该方向未接管）

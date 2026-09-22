@@ -22,6 +22,7 @@ export default {
     failed: '失败',
     eachLineOne: '每行一个',
     dragToAdd: '拖拽文件到这里添加种子',
+    clearDirHistory: '清除目录历史',
     eachLineTier: '一行一个 Tracker，空行分隔分组',
     enabled: '启用',
     status: '状态',
@@ -420,14 +421,11 @@ export default {
     fontSize: '字体大小',
     singleLine: '单行显示',
     showCheckboxes: '显示选择框',
-    // 这一节放壁纸/玻璃浓度 + 三档无障碍降级
-    a11yTitle: '外观',
+    // 界面设置一节：显示偏好 + 壁纸/玻璃浓度 + 三档无障碍降级
     a11yHint: '默认跟随系统设置，手动调整后将由你接管',
     reduceGlass: '减弱透明效果',
     reduceMotion: '减弱动效',
     moreContrast: '增强对比度',
-    clearDirHistory: '清除下载目录历史',
-    clear: '清除',
     scriptAdded: '添加种子时执行',
     scriptDone: '下载完成时执行',
     scriptDoneSeeding: '做种完成时执行',
@@ -498,6 +496,8 @@ export default {
       server: '服务器',
       addServer: '添加服务器',
       activeServer: '切换服务器',
+      diskTotal: '磁盘总容量',
+      diskTotalUnit: 'GB，留空表示未知（qBittorrent 报不出总容量，填写后侧栏才显示占比）',
     },
     // 设置面板的目标标签与驱动自述面板（qBittorrent 设置）
     targetTitle: '设置目标',

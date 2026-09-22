@@ -124,6 +124,7 @@ const (
 	FieldSelect = models.SettingSelect // 枚举下拉
 	FieldText   = models.SettingText   // 多行文本（换行分隔的列表）
 	FieldTime   = models.SettingTime   // 时刻（HH:MM）
+	FieldPath   = models.SettingPath   // 宿主文件系统路径（目录 / 文件）
 )
 
 // 分节语义图标名（取值与 models.SettingIcon* 一致）。

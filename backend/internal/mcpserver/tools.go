@@ -58,7 +58,7 @@ func registerTools(srv *mcp.Server, s *Server, sig driverSig) {
 	addToolIf(srv, sig.caps.FreeSpace, &mcp.Tool{
 		Name: "get_free_space",
 		Description: "查询下载器主机某目录的剩余空间与总容量；不传 path 时查询全局下载目录（添加种子前预判磁盘是否够用）" +
-			qbNote(sig, "qBittorrent 只提供全局下载目录的剩余空间：path 参数被忽略且拿不到总容量"),
+			qbNote(sig, "qBittorrent 只提供全局下载目录的剩余空间：path 参数被忽略；总容量需在多服务器管理里手填，未填时为 0"),
 	}, s.getFreeSpace)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "get_session_config",
@@ -481,6 +481,11 @@ func (s *Server) getFreeSpace(ctx context.Context, _ *mcp.CallToolRequest, in ge
 	free, total, err := s.manager.GetFreeSpace(ctx, path)
 	if err != nil {
 		return nil, nil, errors.New(rpc.SanitizeClientMsg(err.Error()))
+	}
+	// 下载器不提供总容量时用手填值补（qBittorrent 即如此），与 HTTP 接口同口径
+	if total <= 0 {
+		st := s.store.Get()
+		total = st.DiskTotal(st.ActiveServer)
 	}
 	out := map[string]any{"path": path, "freeSpace": free, "totalSize": total}
 	// qBittorrent 忽略 path（只有全局下载目录的剩余空间），如实说明而不是让它看起来像按目录查的

@@ -156,7 +156,7 @@ export interface DownloaderCaps {
 }
 
 // 设置项控件类型（与后端 models.Setting* 一致）
-export type SettingFieldType = 'bool' | 'int' | 'float' | 'string' | 'select' | 'text' | 'time'
+export type SettingFieldType = 'bool' | 'int' | 'float' | 'string' | 'select' | 'text' | 'time' | 'path'
 
 // 枚举项
 export interface SettingsOption {
@@ -421,6 +421,9 @@ export interface ServerInfo {
   pass?: string
   hasPass?: boolean
   enabled: boolean
+  // 该盘总容量（字节，界面按 GB 录入）。0 或未填表示未知：下载器自己报不出总容量
+  // （qBittorrent Web API 只给剩余空间）时，手填它侧栏才能显示占比环
+  diskTotal?: number
 }
 
 // 自动文件管理规则

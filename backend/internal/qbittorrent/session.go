@@ -341,7 +341,8 @@ func (c *Client) GetFreeSpace(ctx context.Context, path string) (int64, int64, e
 	if free <= 0 {
 		return 0, 0, fmt.Errorf("qBittorrent 未提供剩余空间信息")
 	}
-	// 总容量 Web API 不提供，返回 0 表示未知（界面只显示剩余空间）
+	// 总容量 Web API 不提供，返回 0 表示未知：界面只显示剩余空间，
+	// 或在服务器配置里手填总容量后由 API 层补上（见 api 包的 free-space 处理器）
 	return free, 0, nil
 }
 

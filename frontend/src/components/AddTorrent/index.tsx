@@ -25,12 +25,10 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/appStore'
+import { ClearDirHistory, DIR_HISTORY_KEY } from '@/components/DirHistory'
 import { formatBytes } from '@/utils/format'
 import { parseTorrentFile } from '@/utils/torrentParser'
 import type { ParsedTorrent } from '@/utils/torrentParser'
-
-// 目录历史记录 key
-const DIR_HISTORY_KEY = 'tm_dirs'
 
 function loadDirHistory(): string[] {
   try {
@@ -476,6 +474,7 @@ export function AddTorrent({ open, onClose, initialFiles, initialText }: {
             <datalist id="tm-dir-history">
               {dirHistory.map((d) => <option key={d} value={d} />)}
             </datalist>
+            <ClearDirHistory count={dirHistory.length} onClear={() => setDirHistory([])} />
             <div className="grid grid-cols-2 gap-2">
               <TagInput value={labels} onChange={setLabels} placeholder={t('addTorrent.labels')} />
               <Select value={String(priority)} onValueChange={(v) => setPriority(Number(v))}>

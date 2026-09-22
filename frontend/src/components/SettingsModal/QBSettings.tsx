@@ -3,10 +3,14 @@
 // 本组件不含任何 qBittorrent 专有知识——上游增删偏好键只需改驱动，
 // 面板与翻译都不用动（字段标题由 schema 自带 zh/en 文案）。
 import { useEffect, useState, type ReactNode } from 'react'
+import { FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { useEnsureSemanticPaths, useSemanticPath } from '@/hooks/useSemanticPath'
+import { usePlatform } from '@/platform'
+import { cn } from '@/lib/utils'
 import type { SettingsField, SettingsSection } from '@/types'
 import { Group, NumInput, Row, Section, SmallSelect } from './controls'
 
@@ -21,6 +25,61 @@ const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
   const s = `${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}`
   return { value: s, label: s }
 })
+
+// 路径字段（驱动自述的 path 类型）。单独占一整行：路径普遍偏长，与标签同行只能
+// 看见开头。有宿主能力时给出目录选择器，选中即填入草稿——仍走面板顶部的「保存」
+// 提交，与同面板其它键一致。下方灰字是宿主语义路径（如飞牛的存储空间展示名），
+// 只作提示：提交给下载器的始终是它命名空间里的原始路径。
+function PathField({ label, value, disabled, onChange }: {
+  label: string
+  value: string
+  disabled?: boolean
+  onChange: (v: string) => void
+}) {
+  const { t } = useTranslation()
+  const { can, pickFolder } = usePlatform()
+  const sem = useSemanticPath()
+  const semantic = value ? sem(value) : ''
+
+  return (
+    <div className="w-full min-w-0 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 w-full">
+        <Input
+          aria-label={label}
+          value={value}
+          disabled={disabled}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          title={value || undefined}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 text-footnote flex-1 min-w-0"
+        />
+        {can('fs.pickFolder') && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            title={t('action.selectDir')}
+            onClick={async () => {
+              const picked = await pickFolder()
+              // 取消选择（宿主没回路径）不动现有取值
+              if (picked) onChange(picked)
+            }}
+            className="h-8 shrink-0 gap-1 px-2"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('action.selectDir')}</span>
+          </Button>
+        )}
+      </div>
+      {semantic && semantic !== value && (
+        <p className="text-caption1 text-gray-400 truncate" title={semantic}>→ {semantic}</p>
+      )}
+    </div>
+  )
+}
 
 interface QBFieldProps {
   field: SettingsField
@@ -112,6 +171,17 @@ function QBField({ field, lang, value, changed, onChange }: QBFieldProps) {
       )
       break
     }
+    case 'path': {
+      control = (
+        <PathField
+          label={label}
+          value={typeof value === 'string' ? value : value == null ? '' : String(value)}
+          disabled={field.readOnly}
+          onChange={onChange}
+        />
+      )
+      break
+    }
     default: {
       if (field.readOnly) {
         control = <span className="text-caption1 tm-mono text-gray-500 break-all max-w-[16rem] text-right">{String(value ?? '')}</span>
@@ -134,7 +204,9 @@ function QBField({ field, lang, value, changed, onChange }: QBFieldProps) {
   return (
     <>
       <Row label={field.danger ? `${label} ⚠` : label} hint={hint}>
-        <div className="flex items-center gap-1.5">
+        {/* 这层包装必须跟着 path 撑满整行：它是 Row 的收缩包裹项，
+            里面的 w-full 只会退化成控件固有宽度（约 154px），路径照样看不全 */}
+        <div className={cn('flex items-center gap-1.5', field.type === 'path' && 'w-full')}>
           {changed && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden />}
           {control}
         </div>
@@ -263,6 +335,12 @@ export function QBFields({ sec, lang, values, draft, setDraft }: {
   setDraft: DraftSetter
 }) {
   const { t } = useTranslation()
+  // 本节路径字段的语义映射：种子列表之外，设置面板里的路径同样显示宿主展示名
+  useEnsureSemanticPaths(
+    sec.fields
+      .filter((f) => f.type === 'path')
+      .map((f) => String((f.key in draft ? draft[f.key] : values[f.key]) ?? '')),
+  )
   const render = (f: SettingsField) => (
     <QBField
       key={f.key}
