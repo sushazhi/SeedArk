@@ -78,6 +78,10 @@ func boolOpt(v bool, label, labelEn string) driver.SettingsOption               
    - `incomplete_files_ext` → "为不完整的文件添加扩展名 .!qB"
    - `use_unwanted_folder` → "将未选中的文件保留在 \".unwanted\" 文件夹中"
 
+   > 2026-09-22 更新：本组里把 torrent 改成「Torrent」的条目已按应用内用词统一回「种子」（见第七节），
+   > `ip_filter_trackers` 只保留官方的「匹配」措辞、大小写按本表风格作 "Tracker"。
+   > `incomplete_files_ext` / `use_unwanted_folder` 两条不受影响。
+
 3b. **枚举选项中文对齐官方 zh_CN**（本轮补齐）
 
 | 键 | 选项 | 原 | 现（官方 zh_CN） |
@@ -96,6 +100,9 @@ func boolOpt(v bool, label, labelEn string) driver.SettingsOption               
 | `disk_io_write_mode` | Write-through | 直写（Write-through） | 连续写入 |
 
 （`dyndns_service` 的 DynDNS / NO-IP 上游为裸文本无 QBT_TR，保持原样。）
+
+> 2026-09-22 更新：本表中改出「Torrent」的四行已回改为「种子」（第七节）；`utp_tcp_mixed_mode` 的
+> "Peer proportional" 选项改按第七节的 Peer 统一用词（「按 Peer 比重（抑制 TCP）」）；其余各行不受影响。
 
 3c. **`web_ui_api_key` 标签改为应用内自述**
    - 上游仅作 "Key:"。SeedArk 的 qB 驱动把 `qbt_` 前缀 + 32 位的密码识别为 5.2+ API Key（`backend/internal/qbittorrent/client.go:103` `isAPIKey(pass)` → `c.apiKey = pass`，:319 以 `Authorization: Bearer <key>` 发送），用户在「连接设置」里就是把 API Key 填在密码栏。
@@ -196,3 +203,62 @@ $txt = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($j.con
 
 - PowerShell 控制台显示 UTF-8 中文会 mojibake，但写入文件后再用 read 工具读取是正确的。
 - 版本边界：`release-5.2.3` 的 Advanced 页**没有** `startPaused` / `sessionShutdownTimeout` / `web_ui_sessions_count_limit`，Behavior 页**没有** Search 分节与 `addTorrentWindowEnabled`（这些是 master/5.3 才有的），当前 schema 的版本取向正确。
+
+---
+
+## 七、2026-09-22 第三轮：用词统一与漏网自译
+
+复查 215 条标签时发现两类问题：一是仍有官方有现成译法却自译的条目（「发送缓冲区高水位」这类），
+二是面板内同一概念两套叫法。本轮逐条重对 `release-5.2.3` 的 `webui_zh_CN.ts` / `qbittorrent_zh_CN.ts`。
+
+### 7.1 用词统一（政策，覆盖第三节相关条目）
+
+| 概念 | 统一为 | 理由与改动面 |
+|---|---|---|
+| torrent | **种子** | 与本应用其他界面一致（前端中文包 56 处「种子」，列表 / 右键 / 添加弹窗均如此）。据此回改第三节 3.3 与 3b 中此前改成「Torrent」的条目：`torrent_content_layout`、`torrent_stop_condition`、`max_active_checking_torrents`、`queueing_enabled`、`slow_torrent_inactive_timer`、`temp_path_enabled`、`dont_count_slow_torrents`，以及 TMM 四项与 `max_ratio_act` 的枚举选项；`confirm_torrent_*`、`autorun_*`、`add_to_top_of_queue`、`merge_trackers`、`max_active_torrents`、`rss_auto_downloading_enabled`、`torrent_content_remove_option` 本来就是「种子」，未动。`.torrent 文件`、`BitTorrent`、`qBittorrent` 等专名不动 |
+| peer | **Peer** | 与本应用其他界面一致（「已连接 Peer」「Peer 连接端口」）。官方中文自身是 对等节点 / 用户 / peer 三套混用，无法照抄。改 `mixedPeerProp` 选项、`peer_turnover` ×3、`request_queue_size`；`peer_turnover` 三项顺带从官方直译的「对等节点进出…」改写为「Peer 轮换…」——英文 turnover 在此是"轮换/更替"（超限时断开旧 Peer 给新 Peer 让位），「进出」读不出这层语义 |
+
+### 7.2 按官方中文纠正的自译条目
+
+| 键 | 原 | 现（官方 zh_CN） |
+|---|---|---|
+| `send_buffer_watermark` | 发送缓冲区高水位 | 发送缓冲区上限 |
+| `send_buffer_low_watermark` | 发送缓冲区低水位 | 发送缓冲区下限 |
+| `send_buffer_watermark_factor` | 发送缓冲区水位系数 | 发送缓冲区增长系数 |
+| `max_uploads` / `max_uploads_per_torrent` | 全局 / 单种最大上传槽 | 全局 / 单种最大上传窗口数 |
+| `upload_slots_behavior` | 上传槽位行为 | 上传窗口策略 |
+| `upload_choking_algorithm` | 上传阻塞算法 | 上传连接策略 |
+| `utp_tcp_mixed_mode` | µTP-TCP 混合模式算法 | µTP-TCP 混合模式策略 |
+| `enable_piece_extent_affinity` | 使用分片区段亲和 | 启用相连分块下载模式（官方作「文件块」，此处随本表统一用「分块」） |
+| `enable_upload_suggestions` | 发送上传分块建议 | 发送分块上传建议 |
+| `bdecode_token_limit` | bdecode Token 数量上限 | bdecode 令牌数量上限 |
+| `dyndns_domain` | 域名名称 | 域名 |
+| `ip_filter_trackers` | 匹配 tracker | 匹配 Tracker（仅大小写跟本表风格） |
+
+「上传槽」一组是上一轮的半成品：当时已把选项改成官方的「固定窗口数」，字段标签却还留着自译的「上传槽位行为」。
+
+### 7.3 有意保留（官方译法更差，或与扁平列表渲染模型不符）
+
+- `mail_notification_sender` / `mail_notification_email`：官方作「从：/ 到：」→ 保留「发件人 / 收件人」。
+- `checking_memory_use`：官方作「校验时内存使用扩增量」（outstanding 的误译）→ 保留「校验时内存占用上限」。
+- `save_resume_data_interval` / `resume_data_storage_type`：官方作「恢复数据」，与"恢复出厂/还原"易混 → 保留「续传数据」。
+- `file_pool_size` / `socket_backlog_size`：官方作「文件池大小」「Socket backlog 大小」→ 保留加了限定语的「文件句柄池大小」「Socket 积压队列大小」。
+- `listen_port`、`dl_limit` 等上游「主机：」「Download:」式行内片段 → 仍按第四节保留带上下文的完整表述。
+
+### 7.4 同日续：`max_ratio_act` 与演示模式对齐
+
+- **`max_ratio_act` 的连接词标签已改写**。官方 5.2.3 WebUI 作「然后」（源码即 `QBT_TR(then)`），桌面端作「达到上限后：」——两者都是靠上游的分组框撑住的行内片段，在本面板的扁平列表里像半句话。现改为「达到上述任一上限时」/ "When any of the above limits are reached"，并按第四节的约定把适用条件移到小字提示：「分享率 / 做种时长 / 闲置做种时长任一触顶后执行所选动作」。上游 `preferences.html` 里该下拉的禁用条件是三个开关的或（`isMaxRatioEnabled || isMaxSeedingTimeEnabled || isMaxInactiveSeedingTimeEnabled`），故用「任一上限」而非只指分享率。
+- **演示模式（`frontend/src/demo/state.ts`）的 qB 自述已按驱动逐字段对齐**：56 处中文 / 英文标签与单位、`save_path` / `temp_path` 的类型（`string` → `path`，否则演示里走不到整行路径渲染）、`torrent_content_layout` 的枚举文案，另修正 5 个键名（`scheduler_from` / `scheduler_to` → 真实键 `schedule_from` / `schedule_to`，`web_ui_use_https` → 真实键 `use_https`，删掉真实 schema 里没有的 `start_paused_enabled`、`random_port` 两行——前者属 5.3 边界项、后者是上游已废弃项），并清掉演示偏好回读表里 11 个真实 schema 之外的键（这些不会显示，写入也会被白名单拦下，留着只会误导后续维护）。对齐后演示 65 个字段与真实自述零差异。
+  - 有意未同步的两类：演示是每节挑几项的精简版，**字段取值范围（min/max）与小字提示（hint）仍按演示自己的一套**——它们不是文案问题，全量照搬会把演示撑得跟真实面板一样长。
+  - 该文件已加注释声明这条约束：在线演示是公开预览页，收录进来的项不许另写一套文案。
+
+### 7.5 仍待定
+
+- `dht` / `pex` / `lsd` 三条沿用官方整句（「…以找到更多用户」），官方在句中把 peers 译作「用户」，与 7.1 已统一的 Peer 并存。改法待定；**真实驱动与演示 schema 现在是同一份文案，改时要一起改**（演示按 7.4 已照抄驱动）。
+
+### 7.6 验证方式
+
+- 界面侧没有硬编码文案（`QBSettings.tsx` 只按 `lang` 在 `field.label` / `field.labelEn` 间二选一），所以下发什么就显示什么；核对以接口为准：用当前源码单独编译一个后端实例接 qbmock，读 `GET /api/session` 的 `data.schema`，把 8 节 216 个字段的 label / labelEn / unit / hint / 枚举选项全量走一遍字符串扫描——「水位 / 上传槽 / 分片区段 / 阻塞算法 / 对等节点」零命中，含中文的串里除 `.torrent 文件`、`BitTorrent`、`qBittorrent` 外无 Torrent 字样。
+- 演示模式另做了一次真渲染核对：`npm run build:demo` + `vite preview`，脚本点开「设置 → 演示 qBittorrent」后取弹窗 `textContent`，确认「全局最大上传窗口数」「发送缓冲区上限」「计划开始时刻」「种子内容布局 / 原始（种子内结构）」「可选：绑定的 IP 地址」等在页面上实际出现，旧写法仅剩「种子内容布局」这种包含关系内的字面重合。
+- 注意：`dev.sh` 起着的老后端是改动之前的二进制，界面上会新旧混排（如 `peer_turnover` 仍显示「对等节点进出断开百分比」），**看到旧文案先重启 dev 后端再判定制**。
+
