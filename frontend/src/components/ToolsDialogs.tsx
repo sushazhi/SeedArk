@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { torrentApi } from '@/api/torrent'
 import { useTorrentActions } from '@/hooks/useTorrentActions'
+import { useResponsive } from '@/hooks/useResponsive'
 import { useSemanticPath } from '@/hooks/useSemanticPath'
 import { useAppStore } from '@/stores/appStore'
 import { confirm } from '@/lib/confirm'
@@ -24,11 +25,13 @@ import { cssVars } from '@/lib/utils'
 
 export function ReplaceTrackerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation()
+  const { isMobile, isCoarse } = useResponsive()
   const torrents = useAppStore((s) => s.torrents)
   const setTorrents = useAppStore((s) => s.setTorrents)
   const [search, setSearch] = useState('')
   const [replace, setReplace] = useState('')
   const [loading, setLoading] = useState(false)
+  const isTouchUi = isMobile || isCoarse
 
   useEffect(() => {
     if (open) {
@@ -89,7 +92,13 @@ export function ReplaceTrackerDialog({ open, onClose }: { open: boolean; onClose
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        // 触屏浏览器把「输入框获得焦点」当成展开候选项的信号，datalist 里整库的 Tracker
+        // 地址会连同软键盘一起盖住刚进的弹窗；手指端改成不自动聚焦（进来即看到完整弹窗，
+        // 要打字再点搜索框），桌面端保留聚焦以便直接开搜
+        onOpenAutoFocus={isTouchUi ? (e) => e.preventDefault() : undefined}
+      >
         <DialogHeader>
           <DialogTitle>{t('replaceTracker.title')}</DialogTitle>
         </DialogHeader>
