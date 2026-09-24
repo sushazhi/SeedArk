@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { statusMeta } from '@/utils/status'
+import { isActiveTorrent } from '@/hooks/useFilter'
 
 // 统计仪表盘：全局概览 + 状态分布 + 速度历史 + 标签/站点流量
 export function Dashboard({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -33,7 +34,7 @@ export function Dashboard({ open, onClose }: { open: boolean; onClose: () => voi
     for (const t2 of torrents) {
       downloaded += t2.downloadedEver || 0
       uploaded += t2.uploadedEver || 0
-      if (t2.status === 4 || t2.status === 6) active++
+      if (isActiveTorrent(t2)) active++
       if (t2.status === 3 || t2.status === 4) downloading++
       if (t2.status === 5 || t2.status === 6) seeding++
       if (t2.status === 0) paused++

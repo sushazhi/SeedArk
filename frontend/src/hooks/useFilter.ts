@@ -73,14 +73,18 @@ export function normalizeSearch(s: string): string {
   return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
+// 活跃 = 实际有传输流量（下载或上传），处于下载/做种状态但没有流量的种子不算
+export function isActiveTorrent(t: Torrent): boolean {
+  return t.rateDownload > 0 || t.rateUpload > 0
+}
+
 // 状态过滤匹配
 export function matchesStatus(t: Torrent, s: string): boolean {
   switch (s) {
     case 'all':
       return true
     case 'active':
-      // 活跃 = 实际有传输流量（下载或上传），处于下载/做种状态但没有流量的种子不算
-      return t.rateDownload > 0 || t.rateUpload > 0
+      return isActiveTorrent(t)
     case 'downloading':
       return t.status === 3 || t.status === 4
     case 'seeding':
