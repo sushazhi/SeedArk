@@ -170,6 +170,11 @@ func (s *Service) plan(ctx context.Context) ([]planItem, []*rpc.Torrent, error) 
 // 随增删无限堆积（每次落盘都要重写全表）。暂停类种子的标记仍在 live 集合中，
 // 不受影响。列表为空（异常态）时不清理，避免把全部标记一次性抹掉。
 func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
+	// 聚合拉取对失败的成员只记日志后跳过（AggregateTorrents 仍返回 err==nil），
+	// 这轮的 live 集合是不全的：按它清理会把那台的标记当成「种子已删」抹掉
+	if len(s.manager.AggregateErrors()) > 0 {
+		return
+	}
 	live := make(map[string]struct{}, len(torrents))
 	for _, t := range torrents {
 		if t != nil && t.HashString != "" {

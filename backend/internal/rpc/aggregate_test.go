@@ -116,29 +116,34 @@ func TestTagTorrentsOwnership(t *testing.T) {
 
 	// 活动服务器：ID 保持原值，但归属照写
 	active := []*models.Torrent{{ID: 7}, {ID: 8}}
-	m.tagTorrents(active, 1, true)
-	for _, x := range active {
+	taggedActive := m.tagTorrents(active, 1, true)
+	for _, x := range taggedActive {
 		if x.ServerIndex == nil || *x.ServerIndex != 1 || x.ServerName != "QB机" || x.Kind != "qbittorrent" {
 			t.Errorf("活动服务器归属错误: %+v", x)
 		}
 	}
-	if active[0].ID != 7 {
-		t.Errorf("活动服务器的 ID 不应编码，得到 %d", active[0].ID)
+	if taggedActive[0].ID != 7 {
+		t.Errorf("活动服务器的 ID 不应编码，得到 %d", taggedActive[0].ID)
 	}
 
 	// 非活动服务器：ID 编码，归属照写
 	other := []*models.Torrent{{ID: 7}}
-	m.tagTorrents(other, 0, false)
-	if other[0].ID != EncodeID(0, 7) {
-		t.Errorf("非活动服务器的 ID 应编码，得到 %d", other[0].ID)
+	taggedOther := m.tagTorrents(other, 0, false)
+	if taggedOther[0].ID != EncodeID(0, 7) {
+		t.Errorf("非活动服务器的 ID 应编码，得到 %d", taggedOther[0].ID)
 	}
 	// 未命名成员回落到「服务器 N」
-	if other[0].ServerName != "服务器 1" {
-		t.Errorf("未命名成员应回落「服务器 1」，得到 %q", other[0].ServerName)
+	if taggedOther[0].ServerName != "服务器 1" {
+		t.Errorf("未命名成员应回落「服务器 1」，得到 %q", taggedOther[0].ServerName)
 	}
 	// 0 号服务器的归属必须是个「有值的 0」，不能被当成没有归属
-	if other[0].ServerIndex == nil || *other[0].ServerIndex != 0 {
-		t.Errorf("0 号服务器的 ServerIndex 必须显式为 0，得到 %v", other[0].ServerIndex)
+	if taggedOther[0].ServerIndex == nil || *taggedOther[0].ServerIndex != 0 {
+		t.Errorf("0 号服务器的 ServerIndex 必须显式为 0，得到 %v", taggedOther[0].ServerIndex)
+	}
+	// 驱动那份列表同时是它的 TTL 缓存：打标只许产生副本，改写原元素会把编码 ID
+	// 与归属留在缓存里，跨聚合/单服务器两种视图互相污染
+	if other[0].ID != 7 || other[0].ServerIndex != nil || other[0].ServerName != "" {
+		t.Errorf("tagTorrents 就地改写了入参元素: %+v", *other[0])
 	}
 }
 
@@ -151,18 +156,18 @@ func TestTagTorrentsIndexNotAliased(t *testing.T) {
 		t.Fatalf("创建 Manager 失败: %v", err)
 	}
 	list := []*models.Torrent{{ID: 1}, {ID: 2}, {ID: 3}}
-	m.tagTorrents(list, 2, false)
-	for i, x := range list {
+	tagged := m.tagTorrents(list, 2, false)
+	for i, x := range tagged {
 		if x.ServerIndex == nil || *x.ServerIndex != 2 {
 			t.Fatalf("第 %d 颗归属错误: %v", i, x.ServerIndex)
 		}
-		if x.ServerIndex == list[0].ServerIndex && i > 0 {
+		if x.ServerIndex == tagged[0].ServerIndex && i > 0 {
 			t.Fatalf("第 %d 颗与第 0 颗共享了同一个指针，改一台会串改全部", i)
 		}
 	}
 	// 改一颗不得影响其它
-	*list[0].ServerIndex = 9
-	if *list[1].ServerIndex != 2 {
+	*tagged[0].ServerIndex = 9
+	if *tagged[1].ServerIndex != 2 {
 		t.Error("修改一颗的归属串改了另一颗：指针被共享")
 	}
 }

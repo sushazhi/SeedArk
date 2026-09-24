@@ -109,6 +109,10 @@ func (s *Service) Tick(ctx context.Context) (*Result, error) {
 		slog.Warn("组内限速：获取种子列表失败", "err", err)
 		return res, err
 	}
+	// 上面的门卫只看活动下载器，聚合列表里可能混着不支持该语义的成员：
+	// qBittorrent 没有 honorsSessionLimits，接管会把用户手动设的单种限速当成引擎
+	// 写的并覆盖掉，还原时又只能清成 0（不限速）而不是恢复原值，因此逐台剔掉。
+	torrents = filterHonorsCapable(torrents)
 	siteNames := s.sites(ctx, rules)
 
 	// 目标：torrent id -> 方向 -> 引擎本轮应设置的限速（KB/s，>0）
@@ -482,6 +486,20 @@ func otherDir(dir string) string {
 		return state.SpeedDirectionDown
 	}
 	return state.SpeedDirectionUp
+}
+
+// filterHonorsCapable 剔除所属下载器不支持「遵循全局限速」的种子。
+// 归属类型由聚合打标写在每颗种子上（Kind 为空即未打标：单服务器或纯 .env 部署，
+// 那种场景下 Tick 开头的活动下载器门卫已经处理过了）。
+func filterHonorsCapable(list []*rpc.Torrent) []*rpc.Torrent {
+	out := make([]*rpc.Torrent, 0, len(list))
+	for _, t := range list {
+		if t != nil && t.Kind == driver.KindQBittorrent.String() {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
 }
 
 // limitPayload 下发单种限速。必须同时关掉 honorsSessionLimits：

@@ -203,8 +203,7 @@ func (m *Manager) ActiveBackend() driver.Backend {
 func (m *Manager) GetTorrents(ctx context.Context) ([]*models.Torrent, error) {
 	if !m.AggregateEnabled() {
 		list, err := m.ActiveBackend().GetTorrents(ctx)
-		m.tagSingle(list)
-		return list, err
+		return m.tagSingle(list), err
 	}
 	m.mu.RLock()
 	list, at := m.aggList, m.aggAt
@@ -226,8 +225,7 @@ func (m *Manager) GetTorrents(ctx context.Context) ([]*models.Torrent, error) {
 func (m *Manager) GetTorrentsFresh(ctx context.Context) ([]*models.Torrent, error) {
 	if !m.AggregateEnabled() {
 		list, err := m.ActiveBackend().GetTorrentsFresh(ctx)
-		m.tagSingle(list)
-		return list, err
+		return m.tagSingle(list), err
 	}
 	fresh, err := m.AggregateTorrents(ctx)
 	if err != nil {
@@ -244,19 +242,27 @@ func (m *Manager) GetTorrentsFresh(ctx context.Context) ([]*models.Torrent, erro
 // 单台时 ID 不编码、也没有跨服务器歧义，但界面上的归属列不应因为「只启用了一台」
 // 就整列空白：用户停用另一台排障时，列表会突然失去服务器标识。若这台在服务器
 // 列表里有条目就照实填，纯粹靠 .env 连接的部署（列表为空）则保持零值、列显示占位。
-func (m *Manager) tagSingle(list []*models.Torrent) {
+func (m *Manager) tagSingle(list []*models.Torrent) []*models.Torrent {
 	idx := m.activeIndex()
 	if idx < 0 {
-		return
+		return list
 	}
 	t := m.targetAt(idx)
+	// 与 tagTorrents 同样复制元素：这份列表是驱动自己的 TTL 缓存，就地改写会
+	// 把归属字段留在缓存里，跨聚合/单服务器两种视图互相污染
+	out := make([]*models.Torrent, 0, len(list))
 	for _, item := range list {
-		// 与 tagTorrents 同理：每颗各种自己的一份地址，不共用指针
+		if item == nil {
+			continue
+		}
+		cp := *item
 		owner := idx
-		item.ServerIndex = &owner
-		item.ServerName = t.Label()
-		item.Kind = t.Kind.String()
+		cp.ServerIndex = &owner
+		cp.ServerName = t.Label()
+		cp.Kind = t.Kind.String()
+		out = append(out, &cp)
 	}
+	return out
 }
 
 // GetTorrentDetail 种子详情（按 ID 路由到所属服务器）。

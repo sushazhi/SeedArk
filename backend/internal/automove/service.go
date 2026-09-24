@@ -104,6 +104,12 @@ func (s *Service) Tick(ctx context.Context) error {
 // 不会发生二次搬移；而不清理则标记会随种子的增删在状态文件里无限堆积。
 // 列表为空（异常态）时跳过，避免把全部标记一次性抹掉。
 func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
+	// 聚合拉取对失败的成员只记日志后跳过（GetTorrents 仍返回 err==nil），
+	// 这轮的 live 集合是不全的：按它清理会把那台的移动标记当成「种子已删」抹掉，
+	// 而标记没了下轮就会按规则再搬一次
+	if len(s.manager.AggregateErrors()) > 0 {
+		return
+	}
 	live := make(map[string]struct{}, len(torrents))
 	for _, t := range torrents {
 		if t != nil && t.HashString != "" {

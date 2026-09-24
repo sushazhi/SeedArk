@@ -199,6 +199,11 @@ func (h *Handler) deleteServer(c *gin.Context) {
 			h.hub.Bump()
 		}
 	}
+	// 聚合成员必须按删除后的列表重建：members 以服务器索引为键，删掉一台会让后面
+	// 所有条目的索引整体前移，不刷新就仍会去拉已被删除那台的种子（归属名还是它的），
+	// 且对这些种子 ID 的写操作会路由到那台已删除的下载器上。
+	// 放在 Reconfigure 之后：Reconfigure 会清空 members，先同步等于白做。
+	h.SyncAggregateTargets()
 	out := gin.H{"deleted": true}
 	if len(warnings) > 0 {
 		out["warning"] = strings.Join(warnings, "；")

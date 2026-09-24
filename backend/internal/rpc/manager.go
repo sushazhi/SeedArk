@@ -119,9 +119,17 @@ func (m *Manager) Reconfigure(cred Credentials) error {
 	m.mu.Lock()
 	m.client = c
 	m.cred = cred
-	// 凭据变了，缓存的成员实例整体作废（下次聚合时按新目标重建）
+	// 凭据变了，缓存的成员实例整体作废（下次聚合时按新目标重建），
+	// 各成员的历史拉取错误也随之作废，否则界面上会挂着已删除服务器的报错
 	m.members = map[int]*member{}
+	m.lastErr = map[int]string{}
 	m.mu.Unlock()
+	// 成员实例没了，聚合索引也必须一起清：只留着索引会让 AggregateEnabled() 仍为真、
+	// 而每个成员都判「未就绪」——聚合列表因此一片空白且不报错（见 AggregateTorrents）。
+	// 各调用方随后都会 SyncAggregateTargets 按新状态把它重建回来。
+	m.aggMu.Lock()
+	m.aggIndex = nil
+	m.aggMu.Unlock()
 	return nil
 }
 
@@ -311,9 +319,9 @@ func (m *Manager) AggregateTorrents(ctx context.Context) ([]*models.Torrent, err
 		go func(i, idx int, b driver.Backend) {
 			defer wg.Done()
 			list, err := b.GetTorrentsFresh(ctx)
-			// 就地改写 ID 与归属：列表仅本协程持有，无需加锁
-			m.tagTorrents(list, idx, idx == activeIdx)
-			results[i] = result{idx: idx, torrents: list, err: err}
+			// 打标返回的是复制后的新切片（驱动那份列表同时是它的 TTL 缓存，不能改）；
+			// 结果切片只归本协程持有，无需加锁
+			results[i] = result{idx: idx, torrents: m.tagTorrents(list, idx, idx == activeIdx), err: err}
 		}(i, idx, mb.backend)
 	}
 	wg.Wait()
@@ -359,23 +367,33 @@ func sameBackend(t Target, c Credentials) bool {
 // 活动服务器的种子 ID 不编码（保持原始值），其余成员编码；无论哪种情况都必须
 // 写上归属字段，否则合并列表里无法区分哪个是 TR、哪个是 QB（活动服务器恰恰是
 // 唯一「ID 看起来正常」的那台，光看 ID 反而更容易认错）。
-func (m *Manager) tagTorrents(list []*models.Torrent, idx int, active bool) {
+func (m *Manager) tagTorrents(list []*models.Torrent, idx int, active bool) []*models.Torrent {
 	t := m.targetAt(idx)
 	name := t.Name
 	if name == "" {
 		name = fmt.Sprintf("服务器 %d", idx+1)
 	}
+	out := make([]*models.Torrent, 0, len(list))
 	for _, item := range list {
-		if !active {
-			item.ID = EncodeID(idx, item.ID)
+		if item == nil {
+			continue
 		}
-		// 每次取一份新地址：直接写 &idx 会让所有种子共享同一个指针，
-		// 之后改一台的归属（如重命名后刷新名字）会串改整批种子
+		// 复制一份再改，绝不就地改写：这台驱动返回的切片同时是它的 TTL 列表缓存
+		// （见 rpc/client.go 的 getTorrents 与 listCache「共享只读」约定）。就地写入
+		// 编码后的 ID 会留在缓存里，等这台成为活动服务器且聚合被关闭时，缓存会把
+		// 编码 ID 当原始 ID 交出去，写操作随即被路由到别的下载器上。
+		cp := *item
+		if !active {
+			cp.ID = EncodeID(idx, cp.ID)
+		}
+		// 每颗种子取自己的一份地址：共用 &idx 会让后续改一台的归属串改整批种子
 		owner := idx
-		item.ServerIndex = &owner
-		item.ServerName = name
-		item.Kind = t.Kind.String()
+		cp.ServerIndex = &owner
+		cp.ServerName = name
+		cp.Kind = t.Kind.String()
+		out = append(out, &cp)
 	}
+	return out
 }
 
 // targetAt 取某台服务器的聚合目标（不存在时返回零值，调用方按需兜底）
