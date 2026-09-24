@@ -147,7 +147,10 @@ func (h *Handler) serverFreeSpace(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "无效的服务器索引")
 		return
 	}
-	b, err := h.memberBackend(idx)
+	// 全程用同一份状态快照：校验索引与随后取服务器名必须基于同一份列表，
+	// 中途重新取快照会在并发删服务器时把 idx 落到新列表范围外
+	st := h.state.Get()
+	b, err := h.memberBackendIn(idx, st)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, errServerNotFound) {
@@ -175,12 +178,11 @@ func (h *Handler) serverFreeSpace(c *gin.Context) {
 		return
 	}
 	if total <= 0 {
-		st := h.state.Get()
 		total = st.DiskTotal(idx)
 	}
 	respond(c, gin.H{
 		"index":     idx,
-		"name":      h.state.Get().Servers[idx].Name,
+		"name":      st.Servers[idx].Name,
 		"path":      path,
 		"freeSpace": free,
 		"totalSize": total,
@@ -362,11 +364,17 @@ func sameCred(cred rpc.Credentials, s state.Server) bool {
 // 其余取聚合成员实例——成员只在「2 台以上启用」时才建立，
 // 所以单台部署的索引会落到上面的活动客户端分支。
 func (h *Handler) memberBackend(idx int) (driver.Backend, error) {
-	st := h.state.Get()
+	return h.memberBackendIn(idx, h.state.Get())
+}
+
+// memberBackendIn 同 memberBackend，但由调用方传入状态快照：响应里还要用到
+// 服务器名与「是否活动」，各读一次状态会在并发增删服务器时拼出不一致的应答
+// （名字来自已被删掉的那台、active 算到另一台上）。
+func (h *Handler) memberBackendIn(idx int, st state.State) (driver.Backend, error) {
 	if idx < 0 || idx >= len(st.Servers) {
 		return nil, errServerNotFound
 	}
-	if idx == h.activeServerIndex() {
+	if idx == h.activeServerIndexIn(st) {
 		return h.rpc.Client(), nil
 	}
 	if b, ok := h.rpc.BackendAt(idx); ok {
@@ -389,7 +397,11 @@ func (h *Handler) memberBackend(idx int) (driver.Backend, error) {
 // 界面据此判断某个标签是不是「就是现在连着的那台」：状态索引与实际连接可能
 // 不同步（切换时写盘失败等），所以必须由服务端给出，不能按索引猜。
 func (h *Handler) activeServerIndex() int {
-	st := h.state.Get()
+	return h.activeServerIndexIn(h.state.Get())
+}
+
+// activeServerIndexIn 同 activeServerIndex，但用调用方给的状态快照匹配
+func (h *Handler) activeServerIndexIn(st state.State) int {
 	cred := h.rpc.Credentials()
 	for i, s := range st.Servers {
 		if s.URL != "" && sameCred(cred, s) {
@@ -409,7 +421,7 @@ func (h *Handler) getServerSession(c *gin.Context) {
 		return
 	}
 	st := h.state.Get()
-	b, err := h.memberBackend(idx)
+	b, err := h.memberBackendIn(idx, st)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, errServerNotFound) {
@@ -434,7 +446,7 @@ func (h *Handler) getServerSession(c *gin.Context) {
 	respond(c, gin.H{
 		"index":   idx,
 		"name":    st.Servers[idx].Name,
-		"active":  idx == h.activeServerIndex(),
+		"active":  idx == h.activeServerIndexIn(st),
 		"session": sess,
 	})
 }

@@ -132,8 +132,11 @@ export const sessionApi = {
     request<{ index: number; name: string; path: string; freeSpace: number; totalSize: number }>(
       client.get(`/servers/${index}/free-space`),
     ),
-  // 带宽组（Transmission 4.x）：列出 / 创建或更新
+  // 带宽组（Transmission 4.x）：列出 / 创建或更新。
+  // groupsAt 是按服务器读：「其他属性」编辑的种子可能属于聚合里的另一台，
+  // 组列表必须来自它自己那台，不能用活动连接的
   groups: () => request<BandwidthGroup[]>(client.get('/session/groups')),
+  groupsAt: (index: number) => request<BandwidthGroup[]>(client.get(`/servers/${index}/groups`)),
   saveGroup: (g: Partial<BandwidthGroup> & { name: string }) =>
     request<{ saved: boolean }>(client.put('/session/groups', g)),
 }

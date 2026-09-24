@@ -30,7 +30,7 @@ import { sessionApi, torrentApi } from '@/api/torrent'
 import { useTorrentActions } from '@/hooks/useTorrentActions'
 import { usePlatform } from '@/platform'
 import { useAppStore } from '@/stores/appStore'
-import type { Torrent } from '@/types'
+import type { DownloaderCaps, Torrent } from '@/types'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { TagInput } from '@/components/TagInput'
@@ -566,8 +566,13 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
   const { can, pickFolder } = usePlatform()
   // 全库已有标签（供编辑标签时下拉选择，对齐 .ref-transmission-web 的 labelsOptions）
   const allTorrents = useAppStore((s) => s.torrents)
-  // 当前下载器能力自述：不支持的项在限速弹窗里整项隐藏
-  const caps = useAppStore((s) => s.session?.caps)
+  // 活动连接的能力自述：单服务器 / .env 直连时种子没有归属，用它判断
+  const activeCaps = useAppStore((s) => s.session?.caps)
+  // 种子所属服务器的能力自述（聚合视图下各台可能是不同下载器，见下方 caps 取值）
+  const [torrentCaps, setTorrentCaps] = useState<DownloaderCaps | null>(null)
+  // 弹窗里的能力判断必须按「这颗种子属于哪台」：活动连接是 Transmission 时，
+  // 用它的能力判断会把带宽组交互（含空数组）发给 qBittorrent 种子，清空其分类
+  const caps = torrentCaps ?? activeCaps
   const allLabels = useMemo(
     () => Array.from(new Set(allTorrents.flatMap((x) => x.labels ?? []))).sort((a, b) => a.localeCompare(b, 'zh')),
     [allTorrents],
@@ -587,7 +592,8 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
   const [ulEnabled, setUlEnabled] = useState(false)
   const [ulLimit, setUlLimit] = useState<number | null>(null)
   const [peerLimit, setPeerLimit] = useState<number | null>(null)
-  const [seedIdleEnabled, setSeedIdleEnabled] = useState(false)
+  // 空闲做种三态：0 跟随全局 / 1 种子级 / 2 不限（与「分享率」同一口径）
+  const [seedIdleMode, setSeedIdleMode] = useState(0)
   const [seedIdleLimit, setSeedIdleLimit] = useState<number | null>(null)
   // 带宽组（Transmission 4.x）：该种子归属的组 + 全库可用组列表
   const [torrentGroups, setTorrentGroups] = useState<string[]>([])
@@ -617,6 +623,10 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
     } else if (mode === 'rename') {
       setRenameName(torrent.name)
     } else if (mode === 'other') {
+      // 上一次打开留下的组列表/能力必须清掉：否则换一颗别台的种子打开时，
+      // 会先按上一台的能力渲染出带宽组行
+      setAllGroups([])
+      setTorrentCaps(null)
       setPriority(torrent.bandwidthPriority ?? 0)
       setSequential(torrent.sequentialDownload || false)
       setHonor(torrent.honorsSessionLimits || false)
@@ -627,7 +637,7 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
       setUlEnabled(torrent.uploadLimited || false)
       setUlLimit(torrent.uploadLimit ?? null)
       setPeerLimit(torrent.peerLimit || null)
-      setSeedIdleEnabled((torrent.seedIdleLimit ?? 0) > 0)
+      setSeedIdleMode(torrent.seedIdleMode ?? 0)
       setSeedIdleLimit(torrent.seedIdleLimit || null)
       setTorrentGroups(torrent.groups ?? [])
       // 列表不含 sequentialDownload / groups 的完整口径，拉取详情补全
@@ -636,10 +646,22 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
         setSequential(d.sequentialDownload || false)
         if (d.groups) setTorrentGroups(d.groups)
       }).catch(() => {})
-      // 带宽组列表（Transmission 4.x；旧版本返回失败时静默隐藏该区块）
-      if (useAppStore.getState().session?.caps?.bandwidthGroups !== false) {
-        sessionApi.groups().then((gs) => { if (!cancelled) setAllGroups(gs.map((g) => g.name)) }).catch(() => {})
-      }
+      // 能力与带宽组列表都按种子所属服务器取：活动连接可能是另一种下载器，
+      // 拿它的能力判断会把 Transmission 的组（或空数组）写到 qBittorrent 种子上。
+      // 归属未知（单服务器 / .env 直连）时才用活动连接那份。
+      const idx = torrent.serverIndex
+      const owner = idx == null
+        ? Promise.resolve(useAppStore.getState().session?.caps)
+        : sessionApi.getAt(idx).then((res) => res.session?.caps).catch(() => undefined)
+      owner.then((c) => {
+        if (cancelled) return
+        setTorrentCaps(c ?? null)
+        // 能力未知或明确不支持时一律不拉组列表：宁可不显示该区块，
+        // 也不能把另一台的组名当成本种子的归属
+        if (c?.bandwidthGroups !== true) return
+        const list = idx == null ? sessionApi.groups() : sessionApi.groupsAt(idx)
+        list.then((gs) => { if (!cancelled) setAllGroups(gs.map((g) => g.name)) }).catch(() => {})
+      })
     }
     return () => { cancelled = true }
   }, [target, t])
@@ -675,10 +697,10 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
         body.uploadLimited = ulEnabled
         if (ulEnabled && ulLimit != null) body.uploadLimit = ulLimit
         if (peerLimit != null && peerLimit >= 0) body.peerLimit = peerLimit
-        body.seedIdleMode = seedIdleEnabled ? 1 : 0
-        if (seedIdleEnabled && seedIdleLimit != null) body.seedIdleLimit = seedIdleLimit
-        // 仅在带宽组列表可用（Transmission 4.x）时才提交组归属：
-        // 旧版本或拉取失败时发送空数组会意外清空已有归属
+        body.seedIdleMode = seedIdleMode
+        if (seedIdleMode === 1 && seedIdleLimit != null) body.seedIdleLimit = seedIdleLimit
+        // 仅在带宽组列表可用（该种子所属服务器支持且有组）时才提交组归属：
+        // 发空数组会清空已有归属，而 qBittorrent 侧「组」落到分类上，等于清分类
         if (allGroups.length > 0) body.groups = torrentGroups
         await torrentApi.update(torrent.id, body)
       }
@@ -855,8 +877,19 @@ export function EditModals({ target, onClose }: { target: EditTarget | null; onC
               <div className={row}>
                 <span className={label}>{t('limits.seedIdle')}</span>
                 <div className="flex items-center gap-2">
-                  <NumInput value={seedIdleLimit} min={0} disabled={!seedIdleEnabled} placeholder="min" onChange={(v) => setSeedIdleLimit(v ?? null)} />
-                  <Switch checked={seedIdleEnabled} onCheckedChange={setSeedIdleEnabled} />
+                  {/* 三态与「分享率」一致：qBittorrent / Transmission 都用 -1 表示不限、
+                      -2 表示跟随全局，二态开关会把「不限」静默改成「跟随全局」 */}
+                  <Select value={String(seedIdleMode)} onValueChange={(v) => setSeedIdleMode(Number(v))}>
+                    <SelectTrigger className="h-8 w-28 text-footnote">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass-panel-solid">
+                      <SelectItem value="0">{t('limits.ratioGlobal')}</SelectItem>
+                      <SelectItem value="1">{t('limits.ratioTorrent')}</SelectItem>
+                      <SelectItem value="2">{t('limits.ratioUnlimited')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <NumInput value={seedIdleLimit} min={0} disabled={seedIdleMode !== 1} placeholder="min" onChange={(v) => setSeedIdleLimit(v ?? null)} />
                 </div>
               </div>
               <div className="text-footnote text-gray-400">{t('limits.tip')}</div>

@@ -77,6 +77,7 @@ func newMemberFixtureWith(t *testing.T, primaryIdx int) *memberFixture {
 	r.GET("/api/servers/:index/session", h.getServerSession)
 	r.PUT("/api/servers/:index/session", h.setServerSession)
 	r.GET("/api/servers/:index/free-space", h.serverFreeSpace)
+	r.GET("/api/servers/:index/groups", h.serverGroups)
 	return &memberFixture{handler: h, engine: r, mocks: mocks}
 }
 
@@ -394,5 +395,27 @@ func mockSetPref(t *testing.T, base, prefsJSON string) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("写入 mock 偏好状态码 = %d", resp.StatusCode)
+	}
+}
+
+// 按服务器读带宽组：qBittorrent 没有带宽组概念，必须明确回「不支持」，
+// 不能悄悄返回活动连接那一台的数据（界面据此决定是否渲染带宽组区块）
+func TestServerGroups(t *testing.T) {
+	f := newMemberFixture(t)
+	cases := []struct {
+		path string
+		want int
+	}{
+		{"/api/servers/0/groups", http.StatusNotImplemented}, // 活动那台：qB 不支持
+		{"/api/servers/1/groups", http.StatusNotImplemented}, // 聚合成员：同样按它自己的驱动判断
+		{"/api/servers/2/groups", http.StatusBadRequest},     // 未启用的成员：给出不可用原因
+		{"/api/servers/9/groups", http.StatusNotFound},       // 越界索引
+		{"/api/servers/x/groups", http.StatusBadRequest},     // 非数字索引
+	}
+	for _, tc := range cases {
+		code, resp := f.doJSON(t, "GET", tc.path, "")
+		if code != tc.want {
+			t.Errorf("GET %s 状态码 = %d, 期望 %d（响应 %v）", tc.path, code, tc.want, resp)
+		}
 	}
 }

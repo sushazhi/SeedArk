@@ -246,6 +246,8 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		api.PUT("/servers/:index/session", h.setServerSession)
 		// 指定服务器的磁盘余量（聚合视图下侧栏逐台显示）
 		api.GET("/servers/:index/free-space", h.serverFreeSpace)
+		// 指定服务器的带宽组（「其他属性」按种子所属服务器读组列表）
+		api.GET("/servers/:index/groups", h.serverGroups)
 		// 自动文件管理
 		api.GET("/automove", h.listAutoMoveRules)
 		api.POST("/automove", h.saveAutoMoveRule)
