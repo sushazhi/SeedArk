@@ -218,8 +218,18 @@ func (c *Client) SetSession(ctx context.Context, patch driver.SessionPatch) erro
 	if patch.SeedQueueSize != nil {
 		put("max_active_uploads", *patch.SeedQueueSize)
 	}
+	// qBittorrent 只有一个队列总开关，下载/做种两路共用（读取侧把它同时映射给
+	// DownloadQueueEnabled 与 SeedQueueEnabled，见 GetSession）。原先恒写 true，
+	// 用户在界面上关掉任一队列都关不掉总开关；按补丁里给出的值写回。
 	if patch.DownloadQueueEnabled != nil || patch.SeedQueueEnabled != nil {
-		put("queueing_enabled", true)
+		enabled := false
+		if patch.DownloadQueueEnabled != nil && *patch.DownloadQueueEnabled {
+			enabled = true
+		}
+		if patch.SeedQueueEnabled != nil && *patch.SeedQueueEnabled {
+			enabled = true
+		}
+		put("queueing_enabled", enabled)
 	}
 	if patch.SeedRatioLimit != nil {
 		put("max_ratio", *patch.SeedRatioLimit)

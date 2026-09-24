@@ -109,6 +109,17 @@ func (c *Client) mapTorrent(t torrentInfo) *models.Torrent {
 	default:
 		out.SeedRatioMode = 0
 	}
+	// 空闲做种模式同口径回读（inactive_seeding_time_limit 是原始值，
+	// max_inactive_seeding_time 是套用分类/全局后的生效值）：
+	// 只读生效值会让面板把「不限」（-1）显示成关闭再按「跟随全局」（-2）写回
+	switch {
+	case t.InactiveSeedingTimeLimit >= 0:
+		out.SeedIdleMode = 1
+	case t.InactiveSeedingTimeLimit == -1:
+		out.SeedIdleMode = 2
+	default:
+		out.SeedIdleMode = 0
+	}
 	if t.Tracker != "" {
 		out.TrackerStats = []models.TrackerStat{{
 			ID:           0,

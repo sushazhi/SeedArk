@@ -362,11 +362,13 @@ var qbSchema = []driver.SettingsSection{
 			// 下限取官方输入框的 -1（按官方输入框范围收录，不额外解释取值语义）
 			rng(fi("max_active_checking_torrents", "最大活跃检查种子数", "Max active checking torrents", ""), -1, 10000),
 			fb("queueing_enabled", "种子排队", "Torrent Queueing"),
-			hint(rng(fi("max_active_downloads", "最大同时下载数", "Maximum active downloads", ""), 0, 10000),
+			// 官方输入框下限是 -1（不限制），提示与校验边界必须一致，
+			// 否则照提示填 -1 会被写入校验拒成 400
+			hint(rng(fi("max_active_downloads", "最大同时下载数", "Maximum active downloads", ""), -1, 10000),
 				"-1 表示不限制", "-1 means unlimited"),
-			hint(rng(fi("max_active_uploads", "最大同时做种数", "Maximum active uploads", ""), 0, 10000),
+			hint(rng(fi("max_active_uploads", "最大同时做种数", "Maximum active uploads", ""), -1, 10000),
 				"-1 表示不限制", "-1 means unlimited"),
-			hint(rng(fi("max_active_torrents", "最大同时活动种子数", "Maximum active torrents", ""), 0, 10000),
+			hint(rng(fi("max_active_torrents", "最大同时活动种子数", "Maximum active torrents", ""), -1, 10000),
 				"-1 表示不限制", "-1 means unlimited"),
 			fb("dont_count_slow_torrents", "慢速种子不计入限制内", "Do not count slow torrents in these limits"),
 			scale(fi("slow_torrent_dl_rate_threshold", "下载速率阈值", "Download rate threshold", "KiB/s"), 1024),

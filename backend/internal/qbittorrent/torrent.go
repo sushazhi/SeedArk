@@ -20,61 +20,62 @@ import (
 
 // torrentInfo /api/v2/torrents/info 的单条记录（Web API v2，qBittorrent 5.x）
 type torrentInfo struct {
-	AddedOn                int64   `json:"added_on"`
-	AmountLeft             int64   `json:"amount_left"`
-	AutoTMM                bool    `json:"auto_tmm"`
-	Availability           float64 `json:"availability"`
-	Category               string  `json:"category"`
-	Comment                string  `json:"comment"`
-	Completed              int64   `json:"completed"`
-	CompletionOn           int64   `json:"completion_on"`
-	ContentPath            string  `json:"content_path"`
-	CreatedBy              string  `json:"created_by"`
-	DlLimit                int64   `json:"dl_limit"`
-	DlSpeed                int64   `json:"dlspeed"`
-	DownloadPath           string  `json:"download_path"`
-	Downloaded             int64   `json:"downloaded"`
-	DownloadedSession      int64   `json:"downloaded_session"`
-	ETA                    int64   `json:"eta"`
-	FirstLastPiecePrio     bool    `json:"f_l_piece_prio"`
-	ForceStart             bool    `json:"force_start"`
-	Hash                   string  `json:"hash"`
-	HasMetadata            bool    `json:"has_metadata"`
-	InfohashV1             string  `json:"infohash_v1"`
-	InfohashV2             string  `json:"infohash_v2"`
-	LastActivity           int64   `json:"last_activity"`
-	MagnetURI              string  `json:"magnet_uri"`
-	MaxInactiveSeedingTime int64   `json:"max_inactive_seeding_time"`
-	MaxRatio               float64 `json:"max_ratio"`
-	MaxSeedingTime         int64   `json:"max_seeding_time"`
-	Name                   string  `json:"name"`
-	NumComplete            int64   `json:"num_complete"`
-	NumIncomplete          int64   `json:"num_incomplete"`
-	NumLeechs              int64   `json:"num_leechs"`
-	NumSeeds               int64   `json:"num_seeds"`
-	Private                bool    `json:"private"`
-	Priority               int64   `json:"priority"`
-	Progress               float64 `json:"progress"`
-	Ratio                  float64 `json:"ratio"`
-	RatioLimit             float64 `json:"ratio_limit"`
-	Reannounce             int64   `json:"reannounce"`
-	SavePath               string  `json:"save_path"`
-	SeedingTime            int64   `json:"seeding_time"`
-	SeedingTimeLimit       int64   `json:"seeding_time_limit"`
-	SeenComplete           int64   `json:"seen_complete"`
-	SequentialDownload     bool    `json:"seq_dl"`
-	Size                   int64   `json:"size"`
-	State                  string  `json:"state"`
-	SuperSeeding           bool    `json:"super_seeding"`
-	Tags                   string  `json:"tags"`
-	TimeActive             int64   `json:"time_active"`
-	TotalSize              int64   `json:"total_size"`
-	Tracker                string  `json:"tracker"`
-	TrackersCount          int64   `json:"trackers_count"`
-	UpLimit                int64   `json:"up_limit"`
-	Uploaded               int64   `json:"uploaded"`
-	UploadedSession        int64   `json:"uploaded_session"`
-	UpSpeed                int64   `json:"upspeed"`
+	AddedOn                  int64   `json:"added_on"`
+	AmountLeft               int64   `json:"amount_left"`
+	AutoTMM                  bool    `json:"auto_tmm"`
+	Availability             float64 `json:"availability"`
+	Category                 string  `json:"category"`
+	Comment                  string  `json:"comment"`
+	Completed                int64   `json:"completed"`
+	CompletionOn             int64   `json:"completion_on"`
+	ContentPath              string  `json:"content_path"`
+	CreatedBy                string  `json:"created_by"`
+	DlLimit                  int64   `json:"dl_limit"`
+	DlSpeed                  int64   `json:"dlspeed"`
+	DownloadPath             string  `json:"download_path"`
+	Downloaded               int64   `json:"downloaded"`
+	DownloadedSession        int64   `json:"downloaded_session"`
+	ETA                      int64   `json:"eta"`
+	FirstLastPiecePrio       bool    `json:"f_l_piece_prio"`
+	ForceStart               bool    `json:"force_start"`
+	Hash                     string  `json:"hash"`
+	HasMetadata              bool    `json:"has_metadata"`
+	InactiveSeedingTimeLimit int64   `json:"inactive_seeding_time_limit"`
+	InfohashV1               string  `json:"infohash_v1"`
+	InfohashV2               string  `json:"infohash_v2"`
+	LastActivity             int64   `json:"last_activity"`
+	MagnetURI                string  `json:"magnet_uri"`
+	MaxInactiveSeedingTime   int64   `json:"max_inactive_seeding_time"`
+	MaxRatio                 float64 `json:"max_ratio"`
+	MaxSeedingTime           int64   `json:"max_seeding_time"`
+	Name                     string  `json:"name"`
+	NumComplete              int64   `json:"num_complete"`
+	NumIncomplete            int64   `json:"num_incomplete"`
+	NumLeechs                int64   `json:"num_leechs"`
+	NumSeeds                 int64   `json:"num_seeds"`
+	Private                  bool    `json:"private"`
+	Priority                 int64   `json:"priority"`
+	Progress                 float64 `json:"progress"`
+	Ratio                    float64 `json:"ratio"`
+	RatioLimit               float64 `json:"ratio_limit"`
+	Reannounce               int64   `json:"reannounce"`
+	SavePath                 string  `json:"save_path"`
+	SeedingTime              int64   `json:"seeding_time"`
+	SeedingTimeLimit         int64   `json:"seeding_time_limit"`
+	SeenComplete             int64   `json:"seen_complete"`
+	SequentialDownload       bool    `json:"seq_dl"`
+	Size                     int64   `json:"size"`
+	State                    string  `json:"state"`
+	SuperSeeding             bool    `json:"super_seeding"`
+	Tags                     string  `json:"tags"`
+	TimeActive               int64   `json:"time_active"`
+	TotalSize                int64   `json:"total_size"`
+	Tracker                  string  `json:"tracker"`
+	TrackersCount            int64   `json:"trackers_count"`
+	UpLimit                  int64   `json:"up_limit"`
+	Uploaded                 int64   `json:"uploaded"`
+	UploadedSession          int64   `json:"uploaded_session"`
+	UpSpeed                  int64   `json:"upspeed"`
 }
 
 // torrentProperties /api/v2/torrents/properties
@@ -387,15 +388,36 @@ func (c *Client) AddTorrentByFile(ctx context.Context, data []byte, downloadDir 
 	}
 	// Web API 2.15+（qBittorrent 5.2）返回 JSON 带 added_torrent_ids；
 	// 旧版本只回 "Ok."，此时用文件内容自行算出 infohash 定位刚添加的种子
-	if hash := addedHash(resp); hash != "" {
-		c.syncIDs([]string{hash})
-		return c.IDFor(hash), nil
+	hash := addedHash(resp)
+	if hash == "" {
+		hash = infoHashFromTorrent(data)
 	}
-	if hash := infoHashFromTorrent(data); hash != "" {
-		c.syncIDs([]string{hash})
-		return c.IDFor(hash), nil
+	if hash == "" {
+		return 0, fmt.Errorf("添加成功但未返回种子标识")
 	}
-	return 0, fmt.Errorf("添加成功但未返回种子标识")
+	// 文件勾选：torrents/add 没有文件选择参数（Transmission 那边是 add 原生的
+	// files_wanted/files_unwanted），只能在添加完成后立刻按索引改优先级
+	if err := c.applyFileSelection(ctx, hash, filesWanted, filesUnwanted); err != nil {
+		return 0, err
+	}
+	c.syncIDs([]string{hash})
+	return c.IDFor(hash), nil
+}
+
+// applyFileSelection 落文件勾选：unwanted 置 0（不下载），wanted 置 1（正常）。
+// 两边都显式下发，好让「全部重选」与「只勾几个」走同一条路径。
+func (c *Client) applyFileSelection(ctx context.Context, hash string, wanted, unwanted []int64) error {
+	if len(unwanted) > 0 {
+		if err := c.setFilePriority(ctx, hash, unwanted, 0); err != nil {
+			return fmt.Errorf("种子已添加，但设置文件勾选失败: %w", err)
+		}
+	}
+	if len(wanted) > 0 {
+		if err := c.setFilePriority(ctx, hash, wanted, 1); err != nil {
+			return fmt.Errorf("种子已添加，但设置文件勾选失败: %w", err)
+		}
+	}
+	return nil
 }
 
 // AddTorrentByURL 以 http(s) 链接 / 磁力链接添加
@@ -668,10 +690,13 @@ func (c *Client) SetTorrent(ctx context.Context, ids []int64, patch driver.Torre
 			}
 		}
 	}
+	// qBittorrent 的文件优先级只有 0=不下载 / 1=正常 / 2=高 / 7=最大，
+	// 没有「低于正常」这一档：0 已被 filesUnwanted 占用（语义是不下载，而非慢下），
+	// 所以 low 退化为 1。原先把 low 映射成 2 会把用户选的「低」做成「高」。
 	if len(patch.PriorityHigh) > 0 {
 		hash := c.HashFor(ids[0])
 		if hash != "" {
-			if err := c.setFilePriority(ctx, hash, patch.PriorityHigh, 7); err != nil {
+			if err := c.setFilePriority(ctx, hash, patch.PriorityHigh, 2); err != nil {
 				return err
 			}
 		}
@@ -687,7 +712,7 @@ func (c *Client) SetTorrent(ctx context.Context, ids []int64, patch driver.Torre
 	if len(patch.PriorityLow) > 0 {
 		hash := c.HashFor(ids[0])
 		if hash != "" {
-			if err := c.setFilePriority(ctx, hash, patch.PriorityLow, 2); err != nil {
+			if err := c.setFilePriority(ctx, hash, patch.PriorityLow, 1); err != nil {
 				return err
 			}
 		}
@@ -1161,40 +1186,106 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// infoHashFromTorrent 从 .torrent 内容计算 v1 infohash。
+// infoHashFromTorrent 从 .torrent 内容计算 v1 infohash（info 字典原始字节的 SHA-1）。
 // 旧版 qBittorrent 的 /torrents/add 不回传 hash，靠它定位刚添加的种子。
 func infoHashFromTorrent(data []byte) string {
-	// info 字典在 .torrent 中一定以 "4:infod" 开头（键名 + 字典起始符），
-	// 加上 'd' 可以避免命中文件列表里恰好出现的同名字符串
-	idx := strings.Index(string(data), "4:infod")
-	if idx < 0 {
+	start, end, ok := bencDictValue(data, "info")
+	if !ok {
 		return ""
 	}
-	raw := data[idx+len("4:info"):]
-	end := bencodeDictEnd(raw)
-	if end < 0 {
-		return ""
-	}
-	sum := sha1.Sum(raw[:end])
+	sum := sha1.Sum(data[start:end])
 	return fmt.Sprintf("%x", sum)
 }
 
-// bencodeDictEnd 找到与起始 'd' 配对的 'e'（只处理嵌套字典与列表）
-func bencodeDictEnd(raw []byte) int {
-	if len(raw) == 0 || raw[0] != 'd' {
-		return -1
+// bencDictValue 在顶层字典里按键取出对应值的字节区间 [start,end)。
+//
+// 必须按长度前缀逐 token 走。此前数 d/l/e 深度的写法把 announce URL、"length"
+// 这类键名里的字母也当成结构符，会在第一个 'e' 处提前收束，算出一个不属于任何
+// 种子的 infohash——调用方拿它去校验/删除，操作就发到了错误的种子上。
+func bencDictValue(b []byte, want string) (int, int, bool) {
+	if len(b) == 0 || b[0] != 'd' {
+		return 0, 0, false
 	}
-	depth := 0
-	for i := 0; i < len(raw); i++ {
-		switch raw[i] {
-		case 'd', 'l':
-			depth++
-		case 'e':
-			depth--
-			if depth == 0 {
-				return i + 1
-			}
+	i := 1
+	for i < len(b) && b[i] != 'e' {
+		key, next, ok := bencBytes(b, i)
+		if !ok {
+			return 0, 0, false
 		}
+		i = next
+		end, ok := bencSkip(b, i)
+		if !ok {
+			return 0, 0, false
+		}
+		if string(key) == want {
+			return i, end, true
+		}
+		i = end
 	}
-	return -1
+	return 0, 0, false
+}
+
+// bencSkip 返回 b[i] 处那个值的结束位置（不含）；格式非法时 ok=false
+func bencSkip(b []byte, i int) (int, bool) {
+	if i >= len(b) {
+		return 0, false
+	}
+	switch c := b[i]; {
+	case c == 'i': // 整数 i<digits>e（允许负号，bencode 规范含 i-1e）
+		j := i + 1
+		if j < len(b) && b[j] == '-' {
+			j++
+		}
+		digits := j
+		for j < len(b) && b[j] >= '0' && b[j] <= '9' {
+			j++
+		}
+		if j == digits || j >= len(b) || b[j] != 'e' {
+			return 0, false
+		}
+		return j + 1, true
+	case c == 'd' || c == 'l': // 字典（键值成对）/ 列表（值序列），以 e 收尾
+		inner := i + 1
+		for inner < len(b) && b[inner] != 'e' {
+			if c == 'd' {
+				next, ok := bencSkip(b, inner) // 键本身也是字符串
+				if !ok {
+					return 0, false
+				}
+				inner = next
+			}
+			next, ok := bencSkip(b, inner)
+			if !ok {
+				return 0, false
+			}
+			inner = next
+		}
+		if inner >= len(b) {
+			return 0, false
+		}
+		return inner + 1, true
+	case c >= '0' && c <= '9': // 长度前缀字符串
+		_, next, ok := bencBytes(b, i)
+		if !ok {
+			return 0, false
+		}
+		return next, true
+	}
+	return 0, false
+}
+
+// bencBytes 读一个长度前缀字符串，返回内容与结束位置
+func bencBytes(b []byte, i int) ([]byte, int, bool) {
+	j := i
+	for j < len(b) && b[j] >= '0' && b[j] <= '9' {
+		j++
+	}
+	if j == i || j >= len(b) || b[j] != ':' {
+		return nil, 0, false
+	}
+	n, err := strconv.Atoi(string(b[i:j]))
+	if err != nil || n < 0 || j+1+n > len(b) {
+		return nil, 0, false
+	}
+	return b[j+1 : j+1+n], j + 1 + n, true
 }

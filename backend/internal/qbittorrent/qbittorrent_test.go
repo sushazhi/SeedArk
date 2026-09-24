@@ -364,15 +364,61 @@ func TestNormalizeKind(t *testing.T) {
 // TestInfoHashFromTorrent 从 .torrent 二进制里定位 info 字典并算 sha1。
 // 这是「添加种子后回查 ID」的兜底路径，算错就会把操作发到错误的种子上。
 func TestInfoHashFromTorrent(t *testing.T) {
-	// d8:announce... 后面接 4:infod6:lengthi1e4:name1:a12:piece lengthi1e6:pieces1:xee
-	raw := []byte("d8:announce20:http://t.example/a4:infod6:lengthi1e4:name1:a12:piece lengthi1e6:pieces1:xeee")
-	got := infoHashFromTorrent(raw)
-	if len(got) != 40 {
-		t.Errorf("infohash 应为 40 位十六进制，得到 %q（%d 位）", got, len(got))
+	// 夹具按 bencode 规范构造，info 之前故意放了两处坑：comment 里含字面量
+	// "4:infod6:lengthi1ee"（骗过按字符串查找的写法），键名与 URL 里的 l/e/d
+	// 字母（骗过数 d/l/e 深度的写法）。期望值取自 info 字典原始字节的 sha1。
+	raw := "d8:announce40:http://tracker.example/announce?listed=17:comment24:trap 4:infod6:lengthi1ee5:nodesld1:a2:deeli7eee4:infod6:lengthi1048576e4:name22:seedark-测试 delelte12:piece lengthi262144e6:pieces20:0123456789abcdefghije8:url-listl22:http://dl.example/fileee"
+	const want = "e3dac9b98cea8fd717ac1940a9a832528995f1e3"
+	if got := infoHashFromTorrent([]byte(raw)); got != want {
+		t.Errorf("infohash = %q，期望 %q", got, want)
 	}
 	// 不含 info 字典时应返回空串（调用方据此回退到列表查询）
 	if h := infoHashFromTorrent([]byte("d8:announce3:fooe")); h != "" {
 		t.Errorf("缺少 info 字典时应返回空串，得到 %q", h)
+	}
+	// 截断的输入不能被当成合法字典
+	if h := infoHashFromTorrent([]byte("d4:infod6:lengthi1e")); h != "" {
+		t.Errorf("info 字典不完整时应返回空串，得到 %q", h)
+	}
+	// 负数整数是合法 bencode（i-1e）：跳不过去就会连 info 字典都找不到。
+	// 与「同结构但该整数为正」的对照串比对，免去手算 sha1
+	neg := "d8:announce3:foo3:tagi-1e4:infod6:lengthi1048576e4:name1:aee"
+	pos := "d8:announce3:foo3:tagi1e4:infod6:lengthi1048576e4:name1:aee"
+	if got := infoHashFromTorrent([]byte(neg)); got == "" {
+		t.Error("含负整数（i-1e）的种子应能算出 infohash，得到空串")
+	} else if want := infoHashFromTorrent([]byte(pos)); got != want {
+		t.Errorf("负整数不应影响定位 info：infohash = %q，期望 %q", got, want)
+	}
+}
+
+// TestMapTorrentSeedIdleMode 空闲做种三态回读。
+// inactive_seeding_time_limit 是原始值（-2 跟随 / -1 不限 / >=0 分钟），
+// max_inactive_seeding_time 是套用分类/全局后的生效值；模式只能看原始值，
+// 否则「不限」会被界面显示成「跟随全局」，保存后静默改变做种行为。
+func TestMapTorrentSeedIdleMode(t *testing.T) {
+	cases := []struct {
+		raw   int64
+		want  int64
+		limit int64
+	}{
+		{-2, 0, -2}, // 跟随全局
+		{-1, 2, -1}, // 不限
+		{60, 1, 60}, // 种子级
+	}
+	for _, tc := range cases {
+		var c Client
+		out := c.mapTorrent(torrentInfo{
+			Hash:                     "0123456789abcdef0123456789abcdef01234567",
+			State:                    "uploading",
+			InactiveSeedingTimeLimit: tc.raw,
+			MaxInactiveSeedingTime:   tc.limit,
+		})
+		if out.SeedIdleMode != tc.want {
+			t.Errorf("原始值 %d：SeedIdleMode = %d，期望 %d", tc.raw, out.SeedIdleMode, tc.want)
+		}
+		if out.SeedIdleLimit != tc.limit {
+			t.Errorf("原始值 %d：SeedIdleLimit = %d，期望 %d", tc.raw, out.SeedIdleLimit, tc.limit)
+		}
 	}
 }
 
