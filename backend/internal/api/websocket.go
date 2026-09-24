@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -48,7 +47,6 @@ type Hub struct {
 	mu          sync.RWMutex
 	curTorrents []*models.Torrent // 最近一轮种子快照（新客户端接入时全量补发）
 	prevByID    map[int64][]byte  // 上一轮每个种子的 JSON 字节，作为增量 diff 的基准
-	lastDigest  [sha256.Size]byte // 最近一轮种子数据的摘要，用于快速去重
 	clients     map[*wsClient]struct{}
 	clientCount atomic.Int64
 	register    chan *wsClient
@@ -125,9 +123,14 @@ func (h *Hub) run() {
 				select {
 				case client.send <- data:
 				default:
-					// 发送缓冲区满，判定客户端过慢，断开
+					// 发送缓冲区满，判定客户端过慢，断开。
+					// 计数必须在这里一起减掉：该 client 已从 map 移除，随后它的写协程
+					// 走到 unregister 分支会被「不在 map 里」挡住而不再递减，漏掉这一步
+					// clientCount 就永久大于真实值——pollLoop 从此不再停轮询（页面全关
+					// 也照轮不误），首个客户端接入的 Bump 补拉也永远触发不了。
 					delete(h.clients, client)
 					close(client.send)
+					h.clientCount.Add(-1)
 				}
 			}
 		}
@@ -278,12 +281,9 @@ func (h *Hub) pollLocked() {
 		}
 	}
 
-	// 快速去重：整体摘要未变则不广播（与逐种子比较结论一致，但 O(1) 比对）
-	digest := sha256.Sum256(joinBodies(bodies))
 	h.mu.Lock()
 	h.curTorrents = torrents
 	h.prevByID = byID
-	h.lastDigest = digest
 	h.mu.Unlock()
 	h.broadcast <- data
 }
