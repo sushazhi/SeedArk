@@ -570,8 +570,6 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     }).catch(() => {})
     sessionApi.status().then((s) => { if (!cancelled) setStatus(s) }).catch(() => { if (!cancelled) setStatus(null) })
     setPortOpen(null)
-    setBlocklistUrl(sessionRef.current?.blocklistUrl ?? '')
-    setBlocklistEnabled(sessionRef.current?.blocklistEnabled ?? false)
     // 加载多服务器列表（后端持久化）
     serverApi.list().then((d) => {
       if (cancelled) return
@@ -581,6 +579,20 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     }).catch(() => { if (!cancelled) setServersLoaded(true) })
     return () => { cancelled = true }
   }, [open])
+
+  // 黑名单两项是草稿态输入，得等按索引读回的会话到位再播种。
+  // 原先挂在 [open] 那一次里读 sessionRef，可 targetSession 是随后异步到达的：
+  // 首次打开时这里是 null，已配置的地址被显示成空框；用户点一下「立即更新」，
+  // updateBlocklist 的「先回写再触发」就把空地址当成新值写了回去。
+  const blocklistSeed = `${target?.key ?? ''}|${session?.blocklistUrl ?? ''}|${session?.blocklistEnabled ? 1 : 0}`
+  useEffect(() => {
+    if (!open) return
+    setBlocklistUrl(sessionRef.current?.blocklistUrl ?? '')
+    setBlocklistEnabled(sessionRef.current?.blocklistEnabled ?? false)
+    // 依赖用指纹：整份 session 会随任何一次 patchSession 变化，那样会把用户
+    // 正在输入的地址冲掉
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, blocklistSeed])
 
   // 只提交「连接配置」这一栏：其余设置项都是即时保存，没有统一的提交动作。
   // 保存后留在弹窗里（后端不回读密码，本地清空即可），并刷新一次连接状态
@@ -1211,25 +1223,29 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                     <Row label={t('session.scriptAdded')} hint={t('session.scriptAddedHint')}>
                       <Switch checked={session.scriptTorrentAddedEnabled} onCheckedChange={(v) => patchSession({ scriptTorrentAddedEnabled: v })} />
                     </Row>
-                    <Input defaultValue={session.scriptTorrentAddedFilename} placeholder={t('session.scriptHint')} className="h-8 text-footnote" onBlur={(e) => patchSession({ scriptTorrentAddedFilename: e.target.value })} />
+                    {/* defaultValue 是非受控的：只在挂载时取一次值。切换服务器标签不会换 pane、
+                        也就不会重挂载，不带上 target.key 就会把上一台的脚本路径显示成这台的，
+                        用户点进去再移出（blur 即提交）等于把上一台的配置写进这一台 */}
+                    <Input key={`scr-added-${target?.key ?? ''}`} defaultValue={session.scriptTorrentAddedFilename} placeholder={t('session.scriptHint')} className="h-8 text-footnote" onBlur={(e) => patchSession({ scriptTorrentAddedFilename: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Row label={t('session.scriptDone')} hint={t('session.scriptDoneHint')}>
                       <Switch checked={session.scriptTorrentDoneEnabled} onCheckedChange={(v) => patchSession({ scriptTorrentDoneEnabled: v })} />
                     </Row>
-                    <Input defaultValue={session.scriptTorrentDoneFilename} placeholder={t('session.scriptHint')} className="h-8 text-footnote" onBlur={(e) => patchSession({ scriptTorrentDoneFilename: e.target.value })} />
+                    <Input key={`scr-done-${target?.key ?? ''}`} defaultValue={session.scriptTorrentDoneFilename} placeholder={t('session.scriptHint')} className="h-8 text-footnote" onBlur={(e) => patchSession({ scriptTorrentDoneFilename: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Row label={t('session.scriptDoneSeeding')} hint={t('session.scriptDoneSeedingHint')}>
                       <Switch checked={session.scriptTorrentDoneSeedingEnabled} onCheckedChange={(v) => patchSession({ scriptTorrentDoneSeedingEnabled: v })} />
                     </Row>
-                    <Input defaultValue={session.scriptTorrentDoneSeedingFilename} placeholder={t('session.scriptHint')} className="h-8 text-footnote" onBlur={(e) => patchSession({ scriptTorrentDoneSeedingFilename: e.target.value })} />
+                    <Input key={`scr-done-seeding-${target?.key ?? ''}`} defaultValue={session.scriptTorrentDoneSeedingFilename} placeholder={t('session.scriptHint')} className="h-8 text-footnote" onBlur={(e) => patchSession({ scriptTorrentDoneSeedingFilename: e.target.value })} />
                   </div>
                 </>
               )}
               <div className="space-y-1 pt-1">
                 <span className="text-body text-gray-600 dark:text-gray-300">{t('session.defaultTrackers')}</span>
                 <textarea
+                  key={`trackers-${target?.key ?? ''}`}
                   rows={3}
                   autoCapitalize="off"
                   autoCorrect="off"

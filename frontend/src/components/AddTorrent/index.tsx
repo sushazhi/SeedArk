@@ -49,6 +49,8 @@ export function AddTorrent({ open, onClose, initialFiles, initialText }: {
   const { t } = useTranslation()
   const { can, pickFiles, pickFolder } = usePlatform()
   const session = useAppStore((s) => s.session)
+  // 当前下载器是否接受单种带宽优先级（qBittorrent 无此概念，见驱动 Capabilities）
+  const canBandwidthPriority = session?.caps?.perTorrentLimits !== false
 
   const [tab, setTab] = useState<'file' | 'url'>('file')
   const [files, setFiles] = useState<File[]>([])
@@ -475,18 +477,22 @@ export function AddTorrent({ open, onClose, initialFiles, initialText }: {
               {dirHistory.map((d) => <option key={d} value={d} />)}
             </datalist>
             <ClearDirHistory count={dirHistory.length} onClear={() => setDirHistory([])} />
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid gap-2 ${canBandwidthPriority ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TagInput value={labels} onChange={setLabels} placeholder={t('addTorrent.labels')} />
-              <Select value={String(priority)} onValueChange={(v) => setPriority(Number(v))}>
-                <SelectTrigger className="h-9 text-footnote">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="glass-panel-solid">
-                  <SelectItem value="1">{t('action.priorityHigh')}</SelectItem>
-                  <SelectItem value="0">{t('action.priorityNormal')}</SelectItem>
-                  <SelectItem value="-1">{t('action.priorityLow')}</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* 带宽优先级是 Transmission 的单种属性（能力自述里归在 perTorrentLimits）：
+                  qBittorrent 没有该概念，传过去会被驱动静默丢弃，界面上就别给这个入口 */}
+              {canBandwidthPriority && (
+                <Select value={String(priority)} onValueChange={(v) => setPriority(Number(v))}>
+                  <SelectTrigger className="h-9 text-footnote">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel-solid">
+                    <SelectItem value="1">{t('action.priorityHigh')}</SelectItem>
+                    <SelectItem value="0">{t('action.priorityNormal')}</SelectItem>
+                    <SelectItem value="-1">{t('action.priorityLow')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <span className="text-body text-gray-600 dark:text-gray-300">{t('addTorrent.paused')}</span>

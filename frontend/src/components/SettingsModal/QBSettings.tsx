@@ -119,7 +119,10 @@ function QBField({ field, lang, value, changed, onChange }: QBFieldProps) {
               min={field.min}
               max={field.max}
               step={field.type === 'float' ? 0.1 : 1}
-              onChange={(v) => onChange(v == null ? null : v)}
+              // 原样透传：清空输入框时 NumInput 给的是 undefined，
+              // 由 QBFields 的草稿写入处解释成「撤销这项改动」。
+              // 之前在这里塌成 null 提交，会被驱动的取值校验拒成 400
+              onChange={onChange}
             />
             {field.unit && <span className="text-caption1 text-gray-400 w-16">{field.unit}</span>}
           </div>
@@ -348,7 +351,14 @@ export function QBFields({ sec, lang, values, draft, setDraft }: {
       lang={lang}
       value={f.key in draft ? draft[f.key] : values[f.key]}
       changed={f.key in draft}
-      onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+      onChange={(v) => setDraft((d) => {
+        const next = { ...d }
+        // undefined = 数字框被清空：把这项改动从草稿里撤掉，字段回落到服务端取值。
+        // 提交 null/undefined 都会被驱动的按类型校验拒成 400，没有"清空"这个语义
+        if (v === undefined) delete next[f.key]
+        else next[f.key] = v
+        return next
+      })}
     />
   )
 
