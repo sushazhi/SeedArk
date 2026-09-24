@@ -262,8 +262,12 @@ type updateHandler struct {
 
 func newUpdateHandler(dataDir string) *updateHandler {
 	if strings.TrimSpace(dataDir) == "" {
-		// 未配置数据目录时退回用户主目录，绝不回落系统临时目录（见 fpkPath 注释）
+		// 未配置数据目录时退回用户主目录（与默认数据目录同址），
+		// 绝不回落系统临时目录（见 fpkPath 注释）
 		dataDir = "."
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			dataDir = filepath.Join(home, ".seedark")
+		}
 	}
 	return &updateHandler{svc: newUpdateService(), dir: dataDir}
 }

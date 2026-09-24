@@ -75,12 +75,29 @@ func SaveLocalSettings(dataDir string, s LocalSettings) error {
 	// 原子写入 + 0600：文件含下载器密码，且进程中断不能留下半截文件
 	// （半截文件会让下次启动的配置解析失败，界面也读不回原值）
 	path := filepath.Join(dataDir, localConfigName)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(content.String()), 0o600); err != nil {
+	// 临时文件名必须唯一：界面保存与 MCP 保存可能同时发生，固定名字会让两个
+	// 写入者往同一个文件里交错写，rename 之后就是一份拼在一起的坏配置
+	tmp, err := os.CreateTemp(dataDir, "."+localConfigName+".tmp*")
+	if err != nil {
 		return fmt.Errorf("保存配置失败: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	tmpName := tmp.Name()
+	if _, err := tmp.Write([]byte(content.String())); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("保存配置失败: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("保存配置失败: %w", err)
+	}
+	// CreateTemp 已是 0600，显式设一次防 umask 之外的改动
+	if err := os.Chmod(tmpName, 0o600); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("保存配置失败: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("保存配置失败: %w", err)
 	}
 	return nil
