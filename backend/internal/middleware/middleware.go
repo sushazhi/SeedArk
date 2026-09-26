@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sushazhi/seedark/backend/internal/models"
 	"github.com/sushazhi/seedark/backend/internal/platform"
 )
 
-// respondForbidden 拒绝跨站/未授权写操作
-func respondForbidden(c *gin.Context, status int, msg string) {
-	c.AbortWithStatusJSON(status, gin.H{"code": 1, "message": msg})
+// respondForbidden 拒绝跨站/未授权写操作。带稳定错误码，供界面出对应语言的提示
+func respondForbidden(c *gin.Context, status int, code, msg string) {
+	c.AbortWithStatusJSON(status, gin.H{"code": 1, "message": msg, "errorCode": code})
 }
 
 // BodyLimit 限制请求体大小。gin 的 c.FormFile / ShouldBindJSON 会解析整个请求体
@@ -67,7 +68,7 @@ func SameOriginWriteGuard(p platform.Platform) gin.HandlerFunc {
 		// 若不放开，网关改写的 Host / 缺失的 X-Forwarded-Host 会让所有写请求误判跨域而 403。
 		if pol.AllowEmbedding {
 			if site := c.GetHeader("Sec-Fetch-Site"); site == "cross-site" {
-				respondForbidden(c, http.StatusForbidden, "跨站请求已被拒绝（Sec-Fetch-Site: cross-site）")
+				respondForbidden(c, http.StatusForbidden, models.ErrCodeCrossSiteBlocked, "跨站请求已被拒绝（Sec-Fetch-Site: cross-site）")
 				return
 			}
 			c.Next()
@@ -79,12 +80,12 @@ func SameOriginWriteGuard(p platform.Platform) gin.HandlerFunc {
 			case "", "same-origin", "none":
 				c.Next()
 			default:
-				respondForbidden(c, http.StatusForbidden, "跨站请求已被拒绝（Sec-Fetch-Site: "+site+"）")
+				respondForbidden(c, http.StatusForbidden, models.ErrCodeCrossSiteBlocked, "跨站请求已被拒绝（Sec-Fetch-Site: "+site+"）")
 			}
 			return
 		}
 		if !pol.IsSameSiteOrigin(c.Request, origin) {
-			respondForbidden(c, http.StatusForbidden, "跨站请求已被拒绝（Origin 与当前服务不一致）")
+			respondForbidden(c, http.StatusForbidden, models.ErrCodeCrossSiteBlocked, "跨站请求已被拒绝（Origin 与当前服务不一致）")
 			return
 		}
 		c.Next()
@@ -131,7 +132,7 @@ func dynamicAuthWith(getToken func() string, allowQuery bool) gin.HandlerFunc {
 			got = c.Query("token")
 		}
 		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			respondForbidden(c, http.StatusUnauthorized, "未授权：缺少或错误的访问令牌")
+			respondForbidden(c, http.StatusUnauthorized, models.ErrCodeUnauthorized, "未授权：缺少或错误的访问令牌")
 			return
 		}
 		c.Next()

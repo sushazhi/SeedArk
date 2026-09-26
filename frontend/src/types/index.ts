@@ -305,6 +305,8 @@ export interface SessionStatsDetails {
 export interface ApiResponse<T = unknown> {
   code: number
   message: string
+  /** 稳定的机器可读错误码（见 utils/errors.ts 的码表）；界面按它出当前语言 */
+  errorCode?: string
   data: T
 }
 
@@ -488,6 +490,8 @@ export interface SeedPolicyResult {
   deleted: number
   previewed: number
   failed: number
+  /** 已处理标记未能写入磁盘（重启后可能重复执行动作） */
+  persistFailed?: boolean
 }
 
 // 分组限速规则：命中站点 / 标签 / 名称的一组种子共享总速度上限，
@@ -515,4 +519,6 @@ export interface SpeedPolicyResult {
   applied: number
   released: number
   failed: number
+  /** 接管记录未能写入磁盘（重启后可能重复下发或漏释放） */
+  persistFailed?: boolean
 }

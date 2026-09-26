@@ -5,6 +5,9 @@ type ApiResponse struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+	// ErrorCode 稳定的机器可读错误码（见 errcode.go）。界面按它选择文案语言，
+	// Message 只作日志与兜底：英文界面下直接展示中文 Message 会串语言
+	ErrorCode string `json:"errorCode,omitempty"`
 }
 
 // OK 构造成功响应
@@ -15,6 +18,11 @@ func OK(data interface{}) ApiResponse {
 // Error 构造失败响应
 func Error(msg string) ApiResponse {
 	return ApiResponse{Code: 1, Message: msg}
+}
+
+// ErrorWithCode 构造带错误码的失败响应
+func ErrorWithCode(code, msg string) ApiResponse {
+	return ApiResponse{Code: 1, Message: msg, ErrorCode: code}
 }
 
 // Torrent 种子数据（与前端 TS 类型对齐）

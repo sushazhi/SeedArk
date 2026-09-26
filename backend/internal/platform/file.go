@@ -49,6 +49,32 @@ func (f *fileAccess) AllowReadDir(path string) (string, error) {
 	return resolved, nil
 }
 
+// ErrFileTooLarge 目标文件超出调用方给定的大小上限
+var ErrFileTooLarge = errors.New("文件超过大小上限")
+
+// MaxTorrentFileSize 「按路径添加种子」的 .torrent 体积上限（10MB）。
+// 与 REST 上传分支共用同一个值：同一类文件走哪个入口不该有不同上限
+const MaxTorrentFileSize = 10 << 20
+
+// ReadFileCapped 走白名单校验后读取文件，并限制体积。
+// 「按路径添加种子」的 REST 与 MCP 两个入口共用，避免白名单与体积两份口径各自演化；
+// 上限的必要性：路径由宿主文件选择器给出，选错一个大文件会整份读进内存
+// （HTTP 请求体上限管不到从磁盘读的文件）。
+func ReadFileCapped(fa FileAccess, path string, maxSize int64) ([]byte, error) {
+	target, err := fa.AllowRead(path)
+	if err != nil {
+		return nil, err
+	}
+	fi, err := os.Stat(target)
+	if err != nil {
+		return nil, err
+	}
+	if fi.Size() > maxSize {
+		return nil, ErrFileTooLarge
+	}
+	return os.ReadFile(target)
+}
+
 // resolve 公共校验：启用开关、非法字符、路径穿越、符号链接解析、白名单比对
 func (f *fileAccess) resolve(path string) (string, os.FileInfo, error) {
 	if !f.enabled {

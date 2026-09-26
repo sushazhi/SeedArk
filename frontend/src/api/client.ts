@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { ApiResponse } from '@/types'
+import i18n from '@/i18n'
 import { APP_BASE } from '@/platform/appBase'
 import { getMessage } from '@/utils/messageHolder'
 import { translateApiError } from '@/utils/errors'
@@ -32,8 +33,8 @@ client.interceptors.response.use(
     }
     const raw =
       error.response?.data?.message ||
-      (error.code === 'ECONNABORTED' ? '请求超时' : '网络错误，请检查服务是否运行')
-    getMessage()?.error(translateApiError(raw))
+      (error.code === 'ECONNABORTED' ? i18n.t('errors.requestTimeout') : i18n.t('errors.networkError'))
+    getMessage()?.error(translateApiError(raw, error.response?.data?.errorCode))
     return Promise.reject(error)
   },
 )
@@ -47,14 +48,14 @@ export async function request<T>(promise: Promise<{ data: ApiResponse<T> }>): Pr
   if (typeof payload !== 'object' || payload === null) {
     const raw = typeof payload === 'string' ? payload.trim() : ''
     const msg = /invalid\s+token/i.test(raw)
-      ? '宿主网关登录态已失效，请重新登录后重开本应用'
-      : '服务返回了非预期内容，请检查服务是否正常运行'
+      ? i18n.t('errors.gatewayTokenInvalid')
+      : i18n.t('errors.unexpectedResponse')
     getMessage()?.error(msg)
     throw new Error(msg)
   }
   const body = payload as ApiResponse<T>
   if (body.code !== 0) {
-    const msg = translateApiError(body.message || '请求失败')
+    const msg = translateApiError(body.message || i18n.t('errors.requestFailed'), body.errorCode)
     getMessage()?.error(msg)
     throw new Error(msg)
   }

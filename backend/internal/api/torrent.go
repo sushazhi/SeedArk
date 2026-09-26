@@ -7,17 +7,18 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/platform"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
-// maxTorrentFileSize 上传种子文件大小上限（10MB）
-const maxTorrentFileSize = 10 << 20
+// maxTorrentFileSize 种子文件大小上限（10MB），上传与「按路径读取」共用一个值
+const maxTorrentFileSize = platform.MaxTorrentFileSize
 
 // getIDParam 解析路径中的 :id
 func getIDParam(c *gin.Context) (int64, bool) {
@@ -106,7 +107,7 @@ func (h *Handler) addTorrent(c *gin.Context) {
 	// 方式一：multipart 文件上传
 	if fileHeader, err := c.FormFile("file"); err == nil {
 		if fileHeader.Size > maxTorrentFileSize {
-			respondError(c, http.StatusBadRequest, "种子文件过大（上限 10MB）")
+			respondErrorCode(c, http.StatusBadRequest, models.ErrCodeTorrentTooLarge, "种子文件过大（上限 10MB）")
 			return
 		}
 		f, err := fileHeader.Open()
@@ -171,7 +172,11 @@ func (h *Handler) addTorrent(c *gin.Context) {
 		data, err := h.readTorrentFile(body.Path)
 		if err != nil {
 			slog.Warn("按路径添加种子被拒", "path", body.Path, "err", err)
-			respondError(c, http.StatusForbidden, "种子路径不可用")
+			if errors.Is(err, platform.ErrFileTooLarge) {
+				respondErrorCode(c, http.StatusBadRequest, models.ErrCodeTorrentTooLarge, "种子文件过大（上限 10MB）")
+				return
+			}
+			respondErrorCode(c, http.StatusForbidden, models.ErrCodePathNotAllowed, "种子路径不可用")
 			return
 		}
 		id, err := h.rpc.AddTorrentByFile(ctx, data, body.DownloadDir, body.Paused, body.Labels, body.BandwidthPriority, nil, nil)
@@ -229,13 +234,9 @@ func validSeedIdleLimit(limit *int64) bool {
 // readTorrentFile 按宿主机路径读取种子内容（如 fnOS 文件选择器返回的路径）。
 // 是否允许读取、允许哪些目录由宿主平台的 FileAccess 策略决定：
 // 通用部署按 TORRENT_PATH_ROOTS 白名单限制，避免该接口沦为任意文件读取入口。
+// 白名单与体积上限的实现在 platform.ReadFileCapped，与 MCP 入口共用
 func (h *Handler) readTorrentFile(path string) ([]byte, error) {
-	target, err := h.plat.FileAccess().AllowRead(path)
-	if err != nil {
-		return nil, err
-	}
-	// 读校验后解析出的真实路径，避免「按软链路径校验通过、却读到软链指向的敏感文件」
-	return os.ReadFile(target)
+	return platform.ReadFileCapped(h.plat.FileAccess(), path, maxTorrentFileSize)
 }
 
 // addTorrentBatch 批量添加多个URL/磁力链接。

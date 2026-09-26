@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"reflect"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sushazhi/seedark/backend/internal/driver"
 	"github.com/sushazhi/seedark/backend/internal/models"
+	"github.com/sushazhi/seedark/backend/internal/platform"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
@@ -378,6 +378,9 @@ func (s *Server) addTorrent(ctx context.Context, _ *mcp.CallToolRequest, in addT
 		data, readErr := s.readTorrentFile(in.Path)
 		if readErr != nil {
 			slog.Warn("MCP 按路径添加种子被拒", "path", in.Path, "err", readErr)
+			if errors.Is(readErr, platform.ErrFileTooLarge) {
+				return nil, nil, errors.New("种子文件过大（上限 10MB）")
+			}
 			return nil, nil, errors.New("种子路径不可用")
 		}
 		id, err = s.manager.AddTorrentByFile(ctx, data, in.DownloadDir, paused, in.Labels, nil, nil, nil)
@@ -403,13 +406,9 @@ func (s *Server) addTorrent(ctx context.Context, _ *mcp.CallToolRequest, in addT
 	return nil, out, nil
 }
 
-// readTorrentFile 按宿主机路径读取种子内容，白名单口径与 REST 的按路径添加一致
+// readTorrentFile 按宿主机路径读取种子内容，白名单与体积口径同 REST 的按路径添加
 func (s *Server) readTorrentFile(path string) ([]byte, error) {
-	target, err := s.plat.FileAccess().AllowRead(path)
-	if err != nil {
-		return nil, err
-	}
-	return os.ReadFile(target)
+	return platform.ReadFileCapped(s.plat.FileAccess(), path, platform.MaxTorrentFileSize)
 }
 
 // ---- start / stop / remove ----

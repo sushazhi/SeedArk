@@ -1,26 +1,49 @@
-// 后端/Transmission 错误消息 → 中文提示文案映射
+// 接口错误 → 当前语言提示文案。
+// 两条路：后端能自行判定的错误带稳定 errorCode，直接查码表；其余（尤其是下载器
+// 回传的英文原文）按模式表兜底翻译，都没命中就原样显示，避免吞掉未知错误。
+// 码表须与 backend/internal/models/errcode.go 保持一致。
+import i18n from '@/i18n'
 
+const CODE_KEYS: Record<string, string> = {
+  unauthorized: 'errors.unauthorized',
+  cross_site_blocked: 'errors.crossSiteBlocked',
+  server_unreachable: 'errors.serverUnreachable',
+  unsupported: 'errors.unsupported',
+  invalid_argument: 'errors.invalidArgument',
+  path_not_allowed: 'errors.pathNotAllowed',
+  torrent_too_large: 'errors.torrentTooLarge',
+}
+
+// 顺序敏感：具体规则在前，宽泛规则在后
 const ERROR_PATTERNS: Array<[RegExp, string]> = [
-  [/permission denied|directory is not writable|not writable|无法写入|不可写/i, '目录不可写，请检查权限'],
-  [/no space left|not enough space|disk full|空间不足/i, '磁盘空间不足'],
-  [/duplicate torrent|already exists|重复添加/i, '种子已存在，请勿重复添加'],
-  [/invalid.*torrent|bad torrent|无效的种子|metadata.*invalid/i, '种子文件无效或元数据损坏'],
-  [/timeout|timed out|超时/i, '请求超时，请稍后重试'],
-  [/connection refused|connect.*failed|无法连接/i, '无法连接到服务端'],
-  [/not found|找不到|不存在/i, '资源不存在或已被删除'],
-  [/unauthorized|401|未授权/i, '认证失败，请检查用户名密码'],
-  [/torrent.*removed|种子已删除/i, '种子已被删除'],
-  [/verif|recheck/i, '校验失败，请重新校验'],
-  [/invalid.*url|bad url/i, 'URL 无效'],
-  [/invalid.*magnet/i, '磁力链接无效'],
-  [/too many|limit/i, '超出数量限制'],
+  [/permission denied|directory is not writable|not writable|无法写入|不可写/i, 'errors.dirNotWritable'],
+  [/no space left|not enough space|disk full|空间不足/i, 'errors.noSpace'],
+  [/duplicate torrent|already exists|重复添加/i, 'errors.duplicateTorrent'],
+  [/invalid.*torrent|bad torrent|无效的种子|metadata.*invalid/i, 'errors.invalidTorrent'],
+  [/timeout|timed out|超时/i, 'errors.requestTimeout'],
+  [/connection refused|connect.*failed|无法连接/i, 'errors.connectFailed'],
+  [/not found|找不到|不存在/i, 'errors.notFound'],
+  [/unauthorized|401|未授权/i, 'errors.authFailed'],
+  [/torrent.*removed|种子已删除/i, 'errors.torrentRemoved'],
+  [/verif|recheck/i, 'errors.verifyFailed'],
+  [/invalid.*url|bad url/i, 'errors.invalidUrl'],
+  [/invalid.*magnet/i, 'errors.invalidMagnet'],
+  [/too many|limit/i, 'errors.tooMany'],
 ]
 
-// 将服务端错误消息翻译为更友好的中文提示（无法识别时返回原样）
-export function translateApiError(msg: string): string {
+/**
+ * 把接口错误翻译成当前语言的友好提示。
+ * @param msg 服务端 message（可能是中文，也可能是下载器的英文原文）
+ * @param code 服务端 errorCode；未提供或本端不认识时退回模式表
+ */
+export function translateApiError(msg: string, code?: string): string {
+  if (code) {
+    const key = CODE_KEYS[code]
+    if (key) return i18n.t(key)
+  }
   if (!msg) return msg
-  for (const [re, text] of ERROR_PATTERNS) {
-    if (re.test(msg)) return text
+  for (const [re, key] of ERROR_PATTERNS) {
+    if (re.test(msg)) return i18n.t(key)
   }
   return msg
 }

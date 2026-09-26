@@ -293,17 +293,23 @@ func respondError(c *gin.Context, status int, msg string) {
 	c.JSON(status, models.Error(rpc.SanitizeClientMsg(msg)))
 }
 
+// respondErrorCode 带稳定错误码的失败响应（高频且后端可自行判定的错误）。
+// 界面优先按 code 出当前语言，英文界面因此不再弹中文 Message
+func respondErrorCode(c *gin.Context, status int, code, msg string) {
+	c.JSON(status, models.ErrorWithCode(code, rpc.SanitizeClientMsg(msg)))
+}
+
 // respondBackendError 下载器调用失败的统一响应。
 // 「该下载器不支持此能力」是能力差异，不是上游故障：用 501 并给出说明，
 // 让界面能据此隐藏入口，而不是弹一个看起来像连接断开的红色错误。
 // 「提交的参数不合法」（如偏好键名拼错、取值越界）同理，用 400 直说。
 func respondBackendError(c *gin.Context, action string, err error) {
 	if errors.Is(err, driver.ErrUnsupported) {
-		c.JSON(http.StatusNotImplemented, models.Error(rpc.SanitizeClientMsg(action+"："+err.Error())))
+		respondErrorCode(c, http.StatusNotImplemented, models.ErrCodeUnsupported, action+"："+err.Error())
 		return
 	}
 	if errors.Is(err, driver.ErrInvalid) {
-		respondError(c, http.StatusBadRequest, action+"："+err.Error())
+		respondErrorCode(c, http.StatusBadRequest, models.ErrCodeInvalidArgument, action+"："+err.Error())
 		return
 	}
 	respondError(c, http.StatusBadGateway, action+": "+err.Error())
