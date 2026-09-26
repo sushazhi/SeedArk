@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,17 +215,25 @@ type Store struct {
 	data *State
 }
 
-// Load 加载状态文件，不存在时创建默认空状态
+// Load 加载状态文件，不存在时创建默认空状态。
+// 文件损坏时不拒绝启动：改名留档后按默认状态继续，用户可自行修好 JSON 再改回原名。
+// 直接退出会让 NAS 上整个面板下线，而损坏多半只是磁盘写入中断或手改出错。
 func Load(path string) (*Store, error) {
 	s := &Store{path: path}
 	if data, err := os.ReadFile(path); err == nil {
 		var st State
 		if err := json.Unmarshal(data, &st); err != nil {
-			return nil, err
+			backup := corruptBackupPath(path)
+			if rerr := os.Rename(path, backup); rerr != nil {
+				slog.Error("状态文件解析失败，且改名留档失败，已改用默认状态", "file", path, "err", err, "renameErr", rerr)
+			} else {
+				slog.Error("状态文件解析失败，已改名留档并改用默认状态", "file", path, "backup", backup, "err", err)
+			}
+		} else {
+			st.normalize()
+			s.data = &st
+			return s, nil
 		}
-		st.normalize()
-		s.data = &st
-		return s, nil
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -238,6 +247,16 @@ func Load(path string) (*Store, error) {
 	}
 	_ = s.save()
 	return s, nil
+}
+
+// corruptBackupPath 损坏状态文件的留档名。已有留档时追加时间戳，
+// 不覆盖上一次的损坏文件——那里面可能有用户还想抢救的配置
+func corruptBackupPath(path string) string {
+	backup := path + ".corrupt"
+	if _, err := os.Stat(backup); err == nil {
+		backup = backup + "." + time.Now().Format("20060102150405")
+	}
+	return backup
 }
 
 // normalize 补齐反序列化后可能缺失的映射表，并把下线动作降级到安全一侧
@@ -289,6 +308,17 @@ func (s *Store) Update(fn func(*State)) error {
 	defer s.mu.Unlock()
 	fn(s.data)
 	return s.save()
+}
+
+// PersistUpdate 与 Update 相同，但把落盘失败记入日志并返回 false。
+// 供后台引擎使用：它们没有可回显错误的响应，静默吞掉失败会让「内存已改、
+// 文件未改」一直不被发现（磁盘满 / 只读时重启后表现为重复执行或状态回退）
+func (s *Store) PersistUpdate(fn func(*State), what string) bool {
+	if err := s.Update(fn); err != nil {
+		slog.Warn(what, "err", err)
+		return false
+	}
+	return true
 }
 
 func (s *Store) save() error {

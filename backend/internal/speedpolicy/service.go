@@ -55,11 +55,12 @@ func New(manager *rpc.Manager, store *state.Store) *Service {
 
 // Result 一轮限速计算的统计，供「立即执行」接口回显
 type Result struct {
-	Enabled  bool `json:"enabled"`  // 引擎开关且存在启用规则
-	Matched  int  `json:"matched"`  // 引擎需要接管的种子数（含已一致无需下发的）
-	Applied  int  `json:"applied"`  // 实际新下发 / 变更限速的种子数
-	Released int  `json:"released"` // 释放了引擎先前限速的种子数
-	Failed   int  `json:"failed"`   // 下发失败的种子数
+	Enabled       bool `json:"enabled"`       // 引擎开关且存在启用规则
+	Matched       int  `json:"matched"`       // 引擎需要接管的种子数（含已一致无需下发的）
+	Applied       int  `json:"applied"`       // 实际新下发 / 变更限速的种子数
+	Released      int  `json:"released"`      // 释放了引擎先前限速的种子数
+	Failed        int  `json:"failed"`        // 下发失败的种子数
+	PersistFailed bool `json:"persistFailed"` // 接管表未能写入磁盘（重启后可能重复下发或漏释放）
 }
 
 // Run 后台循环
@@ -93,15 +94,20 @@ func (s *Service) Tick(ctx context.Context) (*Result, error) {
 	// 这里仍走 releaseAll，把此前（如切换下载器前）写入的限速还原干净。
 	if !s.manager.Capabilities().HonorsSessionLimits {
 		st := s.store.Get()
-		s.releaseAll(ctx, &st)
-		return &Result{}, nil
+		res := &Result{}
+		if !s.releaseAll(ctx, &st) {
+			res.PersistFailed = true
+		}
+		return res, nil
 	}
 	st := s.store.Get()
 	rules := enabledRules(st.SpeedPolicyRules)
 	res := &Result{Enabled: st.SpeedPolicyGuard.Enforce && len(rules) > 0}
 	if !res.Enabled {
 		// 引擎关闭或没有任何启用规则：把此前引擎写入的限速全部还原，不再接管
-		s.releaseAll(ctx, &st)
+		if !s.releaseAll(ctx, &st) {
+			res.PersistFailed = true
+		}
 		return res, nil
 	}
 	torrents, err := s.manager.GetTorrents(ctx)
@@ -346,9 +352,11 @@ func (s *Service) sync(ctx context.Context, torrents []*rpc.Torrent, desired map
 
 	// 仅在有实质变化时落盘，避免每 10s 空写一次状态文件
 	if len(setBucket)+len(relBucket) > 0 || !reflect.DeepEqual(newApplied, st.SpeedPolicyApplied) {
-		_ = s.store.Update(func(st2 *state.State) {
+		if !s.store.PersistUpdate(func(st2 *state.State) {
 			st2.SpeedPolicyApplied = newApplied
-		})
+		}, "组内限速：接管记录未能写入状态文件，重启后可能重复下发或漏释放") {
+			res.PersistFailed = true
+		}
 	}
 	if res.Applied+res.Released > 0 {
 		slog.Info("组内总限速执行完成", "matched", res.Matched, "applied", res.Applied,
@@ -376,14 +384,15 @@ func clearApplied(m map[int64]state.SpeedApplied, id int64, dir string) {
 
 // releaseAll 引擎关闭或无启用规则时，把引擎上轮写入的限速全部还原。
 // 只释放能确认仍是引擎写入值的种子；释放失败的记录保留，下轮重试。
-func (s *Service) releaseAll(ctx context.Context, st *state.State) {
+// 返回 false 表示接管表未能落盘，调用方据此标记本轮降级。
+func (s *Service) releaseAll(ctx context.Context, st *state.State) (persisted bool) {
 	if len(st.SpeedPolicyApplied) == 0 {
-		return
+		return true
 	}
 	torrents, err := s.manager.GetTorrents(ctx)
 	if err != nil {
 		slog.Warn("组内限速：关闭还原时获取种子列表失败，下轮重试", "err", err)
-		return
+		return true
 	}
 	byID := make(map[int64]*rpc.Torrent, len(torrents))
 	for _, t := range torrents {
@@ -408,8 +417,8 @@ func (s *Service) releaseAll(ctx context.Context, st *state.State) {
 		}
 	}
 	if len(relBucket) == 0 {
-		_ = s.store.Update(func(st2 *state.State) { st2.SpeedPolicyApplied = map[int64]state.SpeedApplied{} })
-		return
+		return s.store.PersistUpdate(func(st2 *state.State) { st2.SpeedPolicyApplied = map[int64]state.SpeedApplied{} },
+			"组内限速：接管记录未能写入状态文件，重启后可能重复下发或漏释放")
 	}
 	// 还原失败的 id 保留接管记录，下轮再试
 	kept := map[int64]state.SpeedApplied{}
@@ -423,10 +432,12 @@ func (s *Service) releaseAll(ctx context.Context, st *state.State) {
 			continue
 		}
 	}
-	_ = s.store.Update(func(st2 *state.State) { st2.SpeedPolicyApplied = kept })
+	persisted = s.store.PersistUpdate(func(st2 *state.State) { st2.SpeedPolicyApplied = kept },
+		"组内限速：接管记录未能写入状态文件，重启后可能重复下发或漏释放")
 	if len(kept) == 0 {
 		slog.Info("组内限速引擎已关闭，已还原全部下发限速")
 	}
+	return persisted
 }
 
 // sites 返回站点名映射（含 60s 缓存；无站点条件时不发起 RPC）

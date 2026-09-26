@@ -197,6 +197,7 @@ export function SeedPolicyManager({ open, onClose }: { open: boolean; onClose: (
     try {
       const res = await seedPolicyApi.run()
       toast.success(summary(res.result))
+      if (res.result.persistFailed) toast.warning(t('seedPolicy.persistFailed'))
       await load()
     } catch {
       // 拦截器已提示

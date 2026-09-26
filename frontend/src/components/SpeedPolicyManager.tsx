@@ -132,6 +132,7 @@ export function SpeedPolicyManager({ open, onClose, preset }: {
       const res = await speedPolicyApi.run()
       setLastRun(res.result)
       toast.success(runSummary(res.result))
+      if (res.result.persistFailed) toast.warning(t('speedPolicy.persistFailed'))
       await load()
     } catch {
       // 拦截器已提示

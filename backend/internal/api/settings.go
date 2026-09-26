@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sushazhi/seedark/backend/internal/config"
 	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
@@ -160,7 +161,7 @@ func (h *Handler) updateSettings(c *gin.Context) {
 			return
 		}
 		if _, err := probe.Ping(c.Request.Context()); err != nil {
-			respondError(c, http.StatusBadGateway, "无法连接"+cred.Type.Label()+": "+err.Error())
+			respondErrorCode(c, http.StatusBadGateway, models.ErrCodeServerUnreachable, "无法连接"+cred.Type.Label()+": "+err.Error())
 			return
 		}
 
@@ -192,6 +193,9 @@ func (h *Handler) updateSettings(c *gin.Context) {
 		MCPPort:           targetPort,
 	}
 	if err := config.SaveLocalSettings(h.dataDir, saved); err != nil {
+		// 内存连接已在上方热更新（Reconfigure 同时作废了聚合成员），
+		// 写盘失败也要把聚合成员建回来，不能因为整次保存报错就让聚合视图空掉
+		h.SyncAggregateTargets()
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -82,14 +82,16 @@ func (s *Service) Tick(ctx context.Context) error {
 		}
 		if tt.DownloadDir == rule.TargetDir {
 			// 已在目标目录，直接标记避免重复扫描
-			_ = s.store.Update(func(st2 *state.State) { st2.ProcessedMoves[tt.HashString] = strconv.FormatInt(state.NowUnix(), 10) })
+			s.store.PersistUpdate(func(st2 *state.State) { st2.ProcessedMoves[tt.HashString] = strconv.FormatInt(state.NowUnix(), 10) },
+				"自动文件管理：已处理标记未能写入状态文件，重启后会重新扫描该种子")
 			continue
 		}
 		if err := s.manager.SetTorrentLocation(ctx, tt.ID, rule.TargetDir, true); err != nil {
 			slog.Warn("自动文件管理：移动失败", "torrent", tt.Name, "to", rule.TargetDir, "err", err)
 			continue
 		}
-		_ = s.store.Update(func(st2 *state.State) { st2.ProcessedMoves[tt.HashString] = strconv.FormatInt(state.NowUnix(), 10) })
+		s.store.PersistUpdate(func(st2 *state.State) { st2.ProcessedMoves[tt.HashString] = strconv.FormatInt(state.NowUnix(), 10) },
+			"自动文件管理：已移动标记未能写入状态文件，重启后会重新扫描该种子")
 		moved++
 		slog.Info("自动文件管理：已移动", "torrent", tt.Name, "to", rule.TargetDir, "rule", rule.Name)
 	}
@@ -130,9 +132,9 @@ func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
 		return
 	}
 	removed := 0
-	_ = s.store.Update(func(st2 *state.State) {
+	s.store.PersistUpdate(func(st2 *state.State) {
 		removed = state.PruneHashMap(st2.ProcessedMoves, live, func(k string) (string, bool) { return k, true })
-	})
+	}, "自动文件管理：标记清理未能写入状态文件，标记会在状态文件里继续堆积")
 	if removed > 0 {
 		slog.Info("自动文件管理：清理已删除种子的标记", "count", removed)
 	}

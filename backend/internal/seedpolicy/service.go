@@ -35,11 +35,12 @@ func New(manager *rpc.Manager, store *state.Store) *Service {
 
 // Result 一轮执行的统计，供「立即执行」接口回显
 type Result struct {
-	Matched   int `json:"matched"`
-	Paused    int `json:"paused"`
-	Deleted   int `json:"deleted"`
-	Previewed int `json:"previewed"`
-	Failed    int `json:"failed"`
+	Matched       int  `json:"matched"`
+	Paused        int  `json:"paused"`
+	Deleted       int  `json:"deleted"`
+	Previewed     int  `json:"previewed"`
+	Failed        int  `json:"failed"`
+	PersistFailed bool `json:"persistFailed"` // 已处理标记未能写入磁盘（重启后可能重复执行动作）
 }
 
 // planItem 一条已达标且通过保护栏的种子及其待执行动作
@@ -88,13 +89,17 @@ func (s *Service) Tick(ctx context.Context) (*Result, error) {
 	// 只取一次状态快照，供保护栏判断与预览落盘复用，避免对同一份状态多次 JSON 深拷贝
 	st := s.store.Get()
 	// 预览路径不写状态，清理已删除种子的已处理标记只能在这里做
-	s.pruneProcessed(&st, torrents)
+	if !s.pruneProcessed(&st, torrents) {
+		result.PersistFailed = true
+	}
 	if len(plan) == 0 {
 		return result, nil
 	}
 	if !st.SeedPolicyGuard.Enforce {
 		result.Previewed = len(plan)
-		s.persistPreview(plan, &st)
+		if !s.persistPreview(plan, &st) {
+			result.PersistFailed = true
+		}
 		return result, nil
 	}
 	s.execute(ctx, plan, result)
@@ -169,11 +174,12 @@ func (s *Service) plan(ctx context.Context) ([]planItem, []*rpc.Torrent, error) 
 // 标记只对仍存在的种子有意义：种子被删除后标记再无读者，不清会在状态文件里
 // 随增删无限堆积（每次落盘都要重写全表）。暂停类种子的标记仍在 live 集合中，
 // 不受影响。列表为空（异常态）时不清理，避免把全部标记一次性抹掉。
-func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
+// 返回 false 表示清理结果未能落盘（标记继续堆积，不影响判定正确性）。
+func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) bool {
 	// 聚合拉取对失败的成员只记日志后跳过（AggregateTorrents 仍返回 err==nil），
 	// 这轮的 live 集合是不全的：按它清理会把那台的标记当成「种子已删」抹掉
 	if len(s.manager.AggregateErrors()) > 0 {
-		return
+		return true
 	}
 	live := make(map[string]struct{}, len(torrents))
 	for _, t := range torrents {
@@ -182,7 +188,7 @@ func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
 		}
 	}
 	if len(live) == 0 {
-		return
+		return true
 	}
 	stale := false
 	for k := range st.ProcessedPolicy {
@@ -194,15 +200,16 @@ func (s *Service) pruneProcessed(st *state.State, torrents []*rpc.Torrent) {
 		}
 	}
 	if !stale {
-		return
+		return true
 	}
 	removed := 0
-	_ = s.store.Update(func(st2 *state.State) {
+	persisted := s.store.PersistUpdate(func(st2 *state.State) {
 		removed = state.PruneHashMap(st2.ProcessedPolicy, live, state.PolicyKeyHash)
-	})
+	}, "做种策略：已删除种子的标记清理未能写入状态文件")
 	if removed > 0 {
 		slog.Info("做种策略：清理已删除种子的已处理标记", "count", removed)
 	}
+	return persisted
 }
 
 func enabledRules(all []state.SeedPolicyRule) []*state.SeedPolicyRule {
@@ -342,17 +349,20 @@ func (s *Service) execute(ctx context.Context, plan []planItem, result *Result) 
 		} else {
 			result.Deleted += len(items)
 		}
-		s.record(items, false)
+		if !s.record(items, false) {
+			result.PersistFailed = true
+		}
 	}
 	if result.Paused+result.Deleted > 0 {
 		slog.Info("做种策略执行完成", "paused", result.Paused, "deleted", result.Deleted)
 	}
 }
 
-// record 写入已处理标记与执行记录
-func (s *Service) record(items []planItem, dryRun bool) {
+// record 写入已处理标记与执行记录。返回 false 表示落盘失败：
+// 标记丢失会让重启后的下一轮把已处置的种子当成未处理，重复执行动作
+func (s *Service) record(items []planItem, dryRun bool) bool {
 	if len(items) == 0 {
-		return
+		return true
 	}
 	now := state.NowUnix()
 	logs := make([]state.SeedPolicyLog, 0, len(items))
@@ -370,18 +380,19 @@ func (s *Service) record(items []planItem, dryRun bool) {
 		slog.Info("做种策略", "rule", it.rule.Name, "action", it.rule.Action, "torrent", it.torrent.Name,
 			"site", it.site, "reason", reasonText(it.reason), "dryRun", dryRun)
 	}
-	_ = s.store.Update(func(st *state.State) {
+	return s.store.PersistUpdate(func(st *state.State) {
 		for _, it := range items {
 			st.ProcessedPolicy[state.PolicyKey(it.rule.ID, it.torrent.HashString)] = strconv.FormatInt(now, 10)
 		}
 		st.SeedPolicyLogs = appendLogs(st.SeedPolicyLogs, logs, dryRun)
-	})
+	}, "做种策略：已处理标记与执行记录未能写入状态文件，重启后可能重复执行动作")
 }
 
 // persistPreview 预览只刷新待办清单，不落已处理标记。
 // 未开启自动执行时每分钟都会评估一轮，清单未变则不写盘。
 // st 为调用方已取的状态快照，复用其 SeedPolicyLogs 避免再次深拷贝。
-func (s *Service) persistPreview(plan []planItem, st *state.State) {
+// 返回 false 表示待办清单未能落盘。
+func (s *Service) persistPreview(plan []planItem, st *state.State) bool {
 	now := state.NowUnix()
 	logs := make([]state.SeedPolicyLog, 0, len(plan))
 	for _, it := range plan {
@@ -396,11 +407,11 @@ func (s *Service) persistPreview(plan []planItem, st *state.State) {
 		})
 	}
 	if previewEqual(st.SeedPolicyLogs, logs) {
-		return
+		return true
 	}
-	_ = s.store.Update(func(st *state.State) {
+	return s.store.PersistUpdate(func(st *state.State) {
 		st.SeedPolicyLogs = appendLogs(st.SeedPolicyLogs, logs, true)
-	})
+	}, "做种策略：待办清单未能写入状态文件")
 }
 
 // previewEqual 比对待办清单是否变化，忽略写入时间

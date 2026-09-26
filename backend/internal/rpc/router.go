@@ -491,10 +491,17 @@ func (m *Manager) eachIDs(ctx context.Context, ids []int64, fn func(driver.Backe
 
 // memberBackends 当前参与聚合的后端实例（有序）
 func (m *Manager) memberBackends() []driver.Backend {
+	// aggIndex 归 aggMu 管（见 SetTargets/Reconfigure），members 归 mu 管：
+	// 先拷索引再取成员，避免在同一临界区里跨两把锁
+	m.aggMu.RLock()
+	index := make([]int, len(m.aggIndex))
+	copy(index, m.aggIndex)
+	m.aggMu.RUnlock()
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]driver.Backend, 0, len(m.members))
-	for _, idx := range m.aggIndex {
+	out := make([]driver.Backend, 0, len(index))
+	for _, idx := range index {
 		if mb, ok := m.members[idx]; ok && mb.backend != nil {
 			out = append(out, mb.backend)
 		}

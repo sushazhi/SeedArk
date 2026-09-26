@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sushazhi/seedark/backend/internal/config"
 	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/models"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 	"github.com/sushazhi/seedark/backend/internal/state"
 )
@@ -247,7 +248,10 @@ func (h *Handler) switchServer(c *gin.Context) {
 	version, err := h.rpc.Ping(c.Request.Context())
 	if err != nil {
 		_ = h.rpc.Reconfigure(old)
-		respondError(c, http.StatusBadGateway, "无法连接该服务器，已回滚: "+err.Error())
+		// Reconfigure 会把聚合成员整批作废，回滚后必须按当前配置重建：
+		// 否则后续列表只剩活动一台的种子，直到下次触发热更新才恢复
+		h.SyncAggregateTargets()
+		respondErrorCode(c, http.StatusBadGateway, models.ErrCodeServerUnreachable, "无法连接该服务器，已回滚: "+err.Error())
 		return
 	}
 	// 持久化：内存已切换成功，写盘失败不回滚连接，但必须显式告知用户重启后会回滚
