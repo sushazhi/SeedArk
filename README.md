@@ -12,7 +12,7 @@
 [![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=flat-square&logo=pwa&logoColor=white)]()
 [![fnOS](https://img.shields.io/badge/Optimized%20for-fnOS-FF6B35?style=flat-square)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![Release](https://img.shields.io/badge/release-v0.1.2-blue?style=flat-square)](../../releases)
+[![Release](https://img.shields.io/badge/release-v0.1.3-blue?style=flat-square)](../../releases)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-jianhuayanyu%2Fseedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/r/jianhuayanyu/seedark)
 [![GHCR](https://img.shields.io/badge/GHCR-seedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/sushazhi/seedark/pkgs/container/seedark)
 [![在线预览](https://img.shields.io/badge/在线预览-Demo-8A2BE2?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQTEwIDEwIDAgMSAwIDIyIDEyIDEwIDEwIDAgMCAwIDEyIDJ6bTAgMmE4IDggMCAxIDEgOCA4IDggOCAwIDEgLTggOHptLTEtMTJ2NGw0LTQtNC00eiIvPjwvc3ZnPg==)](https://sushazhi.github.io/seedark/)
@@ -125,7 +125,7 @@ API_TOKEN=change-me docker compose up -d
 |:--|:--|
 | 镜像 | `jianhuayanyu/seedark`（Docker Hub，推荐）／`ghcr.io/sushazhi/seedark`（GHCR） |
 | 架构 | `linux/amd64`、`linux/arm64` |
-| 标签 | `v0.1.2`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
+| 标签 | `v0.1.3`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
 | 数据卷 | `/data`（即 `SA_DATA_DIR`，存放 `sa-state.json` 与界面保存的连接配置） |
 | 健康检查 | `GET /` 每 30s |
 
