@@ -90,6 +90,13 @@ export interface MenuItem {
   children?: MenuItem[]
 }
 
+// 菜单内容：数组，或「打开时才构建」的工厂。
+// 列表里每行都预先建好整份菜单（含图标元素）在千级列表下是纯浪费，
+// 工厂形式只在弹层真正打开时求值一次
+export type MenuItems = MenuItem[] | (() => MenuItem[])
+
+const resolveItems = (items: MenuItems): MenuItem[] => (typeof items === 'function' ? items() : items)
+
 // 图标配色，对齐 .ref-transmission-web 的 rowMenu 视觉
 const primaryIcon = (el: ReactNode) => <span className="text-primary">{el}</span>
 const errorIcon = (el: ReactNode) => <span className="text-red-500">{el}</span>
@@ -390,7 +397,7 @@ const LONG_PRESS_MS = 500
 const LONG_PRESS_SLACK = 10
 
 function ContextMenuAnchor({ items, onClick, children }: {
-  items: MenuItem[]
+  items: MenuItems
   onClick: (key: string) => void
   children: ReactNode
 }) {
@@ -456,7 +463,7 @@ function ContextMenuAnchor({ items, onClick, children }: {
       {open && createPortal(
         <FloatingContextMenu
           pos={pos}
-          items={items}
+          items={resolveItems(items)}
           onPick={(key) => { setOpen(false); onClick(key) }}
           onClose={() => setOpen(false)}
         />,
@@ -474,7 +481,7 @@ export function TorrentMenuDropdown({
   children,
   align = 'end',
 }: {
-  items: MenuItem[]
+  items: MenuItems
   onClick: (key: string) => void
   trigger?: 'click' | 'contextMenu'
   children: ReactNode
@@ -496,7 +503,7 @@ export function TorrentMenuDropdown({
       {/* 高度由基类的 --radix-dropdown-menu-content-available-height 约束，不再叠 vh 上限 */}
       <DropdownMenuContent className="glass-panel-strong min-w-44 overflow-y-auto" align={align} sideOffset={4}>
         {/* 选中后显式关闭：renderItems 内对 onSelect 调用了 preventDefault（Radix 会因此不自动关闭） */}
-        {renderItems(items, (key) => { setOpen(false); onClick(key) })}
+        {renderItems(resolveItems(items), (key) => { setOpen(false); onClick(key) })}
       </DropdownMenuContent>
     </DropdownMenu>
   )

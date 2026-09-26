@@ -309,22 +309,6 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
     }
   }
 
-  // 初始化排序：从 localStorage 恢复
-  useEffect(() => {
-    const stored = localStorage.getItem('tm_sort')
-    if (stored) {
-      try {
-        const s = JSON.parse(stored) as { field: string; order: 'asc' | 'desc' }
-        setSortField(s.field)
-        setSortOrder(s.order)
-      } catch {}
-    }
-  }, [])
-  // 持久化排序状态
-  useEffect(() => {
-    localStorage.setItem('tm_sort', JSON.stringify({ field: sortField, order: sortOrder }))
-  }, [sortField, sortOrder])
-
   // 排序已统一在 useFilter（多级排序）中完成，这里直接使用过滤+排序后的列表
   const sortedTorrents = torrents
 
@@ -534,14 +518,13 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
             // 虚拟滚动位置可能在本帧数据收缩后短暂越界（列表刚被过滤/删除），
             // 此时跳过本项渲染，下一帧 virtualizer 会自行修正
             if (!torrent) return null
-            const menuItems = buildTorrentMenu(menuCtx, torrent)
             return (
               <div
                 key={torrent.id}
                 className="absolute top-0 left-0 w-full"
                 style={{ height: vi.size, transform: `translateY(${vi.start}px)` }}
               >
-                <TorrentMenuDropdown items={menuItems} onClick={handleMenuClick(torrent)} trigger="contextMenu" align="start">
+                <TorrentMenuDropdown items={() => buildTorrentMenu(menuCtx, torrent)} onClick={handleMenuClick(torrent)} trigger="contextMenu" align="start">
                   <div
                     title={torrent.error > 0 ? (translateError(torrent.errorString, t) || torrent.name) : torrent.name}
                     draggable={canReorder}
