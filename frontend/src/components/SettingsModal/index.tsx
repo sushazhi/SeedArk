@@ -1420,24 +1420,27 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                 autoComplete="new-password"
               />
             </div>
-            {/* 磁盘总容量：下载器报不出总容量时（qBittorrent 只有剩余空间）手填，
-                侧栏的占比环据此恢复；留空表示未知 */}
-            <div className="flex items-center gap-2">
-              <span className="text-footnote text-gray-500 shrink-0">{t('session.multiServer.diskTotal')}</span>
-              <NumInput
-                aria-label={t('session.multiServer.diskTotal')}
-                value={server.diskTotal ? Math.round(server.diskTotal / GIB) : undefined}
-                min={0}
-                step={1}
-                className="h-8 text-footnote w-28"
-                onChange={(v) => {
-                  const s = [...servers]
-                  s[idx] = { ...s[idx], diskTotal: v && v > 0 ? Math.round(v * GIB) : 0 }
-                  saveServers(s)
-                }}
-              />
-              <span className="text-caption1 text-gray-400 min-w-0">{t('session.multiServer.diskTotalUnit')}</span>
-            </div>
+            {/* 磁盘总容量：只有报不出总容量的下载器才需要手填（qBittorrent 只有
+                剩余空间），侧栏的占比环据此恢复；报得出的（Transmission）不显示 */}
+            {downloaderMeta(server.type).manualDiskTotal && (
+              <div className="flex items-center gap-2">
+                <span className="text-footnote text-gray-500 shrink-0">{t('session.multiServer.diskTotal')}</span>
+                <NumInput
+                  aria-label={t('session.multiServer.diskTotal')}
+                  // 回显取两位小数：按整数回显会把刚填的 1.5 抹成 2，边输入边被改
+                  value={server.diskTotal ? Number((server.diskTotal / GIB).toFixed(2)) : undefined}
+                  min={0}
+                  step="any"
+                  className="h-8 text-footnote w-20"
+                  onChange={(v) => {
+                    const s = [...servers]
+                    s[idx] = { ...s[idx], diskTotal: v && v > 0 ? Math.round(v * GIB) : 0 }
+                    saveServers(s)
+                  }}
+                />
+                <span className="text-caption1 text-gray-400 min-w-0 truncate">{t('session.multiServer.diskTotalUnit')}</span>
+              </div>
+            )}
           </div>
         ))}
         <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => saveServers([...servers, { name: '', type: 'transmission', url: defaultUrlFor('transmission'), user: '', pass: '', hasPass: false, enabled: true }])}>

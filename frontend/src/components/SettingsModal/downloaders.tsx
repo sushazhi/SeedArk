@@ -41,6 +41,12 @@ export interface DownloaderMeta {
    * 这是**当前实现**的过渡标记：等 Transmission 也提供 schema 后即可去掉。
    */
   schemaDriven: boolean
+  /**
+   * 是否要手填磁盘总容量。「多服务器管理」据此决定显不显示该输入项：
+   * 只有自己报不出总容量的下载器才需要（qBittorrent 的 free_space_on_disk
+   * 只有剩余空间），报得出的（Transmission 的 free-space 带 total）填了也不会用。
+   */
+  manualDiskTotal: boolean
 }
 
 export const DOWNLOADERS: Record<DownloaderKind, DownloaderMeta> = {
@@ -49,12 +55,14 @@ export const DOWNLOADERS: Record<DownloaderKind, DownloaderMeta> = {
     label: 'Transmission',
     short: 'TR',
     schemaDriven: false,
+    manualDiskTotal: false,
   },
   qbittorrent: {
     defaultUrl: 'http://localhost:8080',
     label: 'qBittorrent',
     short: 'QB',
     schemaDriven: true,
+    manualDiskTotal: true,
   },
 }
 

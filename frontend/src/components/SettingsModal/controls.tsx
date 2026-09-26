@@ -41,7 +41,8 @@ export interface NumInputProps {
   value?: number | null
   min?: number
   max?: number
-  step?: number
+  // 'any' 供不限定小数位的字段（如磁盘容量按 GB 填）；数字则按该步长校验
+  step?: number | 'any'
   disabled?: boolean
   className?: string
   'aria-label'?: string
