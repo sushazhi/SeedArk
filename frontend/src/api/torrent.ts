@@ -178,7 +178,7 @@ export const speedPolicyApi = {
   run: () => request<{ result: SpeedPolicyResult; at: number }>(client.post('/speedpolicy/run')),
 }
 
-// 检查更新（飞牛部署：后端查 GitHub Releases，gh-proxy 回退下载 fpk 更新包）
+// 检查更新（飞牛部署：后端查 GitHub Releases，更新包先直连、失败再走 gh 代理回退）
 export interface UpdateCheckResult {
   currentVersion: string
   latestVersion: string

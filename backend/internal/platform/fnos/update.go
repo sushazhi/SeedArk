@@ -23,12 +23,12 @@ import (
 	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
-// fnOS 应用更新：GitHub Release 检测最新版 + gh-proxy 回退下载 fpk 包
+// fnOS 应用更新：GitHub Release 检测最新版，下载 fpk 包先直连、失败再走 gh 代理回退
 const (
 	updateRepo        = "sushazhi/fnos-transmission"
 	updateAPIBase     = "https://api.github.com"
-	updateProxyMain   = "https://gh-proxy.com/"
-	updateProxyBackup = "https://gh-proxy.org/"
+	updateProxyMain   = "https://gh.dpik.top/"
+	updateProxyBackup = "https://v4.gh-proxy.org/"
 	updateCheckTTL    = 5 * time.Minute
 	fpkMaxSize        = 100 << 20 // 100 MB
 	downloadTimeout   = 3 * time.Minute
@@ -406,7 +406,25 @@ func (u *updateHandler) download(c *gin.Context) {
 	c.FileAttachment(path, name)
 }
 
-// performUpdate 依次走主代理/备用代理/直连下载 fpk，落盘并校验
+// downloadSource 更新包的一个下载来源
+type downloadSource struct {
+	url    string
+	direct bool // 直连 GitHub：元数据与文件同源，摘要缺失时才允许作为可信来源
+	msg    string
+}
+
+// downloadSources 按尝试顺序给出下载来源：先直连 GitHub，失败再依次走主/备用 gh 代理。
+// 直连排在最前——不经中转、且文件与元数据同源；代理链路只作为兜底
+// （GitHub 的 release 资源域名常被墙，直连不通时才需要它们）。
+func downloadSources(fpURL string) []downloadSource {
+	return []downloadSource{
+		{fpURL, true, "正在下载更新包..."},
+		{updateProxyMain + fpURL, false, "直连下载失败，切换代理 gh.dpik.top..."},
+		{updateProxyBackup + fpURL, false, "代理下载失败，切换备用代理 v4.gh-proxy.org..."},
+	}
+}
+
+// performUpdate 依次走直连/主代理/备用代理下载 fpk，落盘并校验
 func (u *updateHandler) performUpdate(info *releaseInfo) {
 	svc := u.svc
 	set := func(progress int, message string) {
@@ -431,16 +449,7 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 		fail(err.Error())
 		return
 	}
-	type source struct {
-		url    string
-		direct bool // 直连 GitHub：元数据与文件同源，摘要缺失时才允许作为可信来源
-		msg    string
-	}
-	sources := []source{
-		{updateProxyMain + info.FPKURL, false, "正在下载更新包..."},
-		{updateProxyBackup + info.FPKURL, false, "主代理下载失败，切换备用代理..."},
-		{info.FPKURL, true, "备用代理下载失败，尝试直连..."},
-	}
+	sources := downloadSources(info.FPKURL)
 	lastErr := ""
 	for _, s := range sources {
 		set(10, s.msg)
