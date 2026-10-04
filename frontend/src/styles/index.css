@@ -38,6 +38,10 @@
   --color-gray-900: #2c2c2e;
   --color-gray-950: #1d1d1f;
 
+  /* 轨道底色（进度条轨道 / 磁盘余量环与占位盘）：此前三处各写一遍近似色，
+     深浅两套主题各一份，这里收成一个 token */
+  --color-track: rgba(120, 130, 160, 0.14);
+
   --color-background: #eef1fb;
   --color-foreground: #1d1d1f;
   --color-card: rgba(255, 255, 255, 0.6);
@@ -151,7 +155,11 @@
   --color-status-downloading: var(--color-primary);
   --color-status-queued-seed: #af52de;
   --color-status-seeding: #34c759;
-  --color-status-isolated: #ff9500;
+  /* 隔离（站点不可达、种子被保护性挂起）此前与「校验中」同为 #ff9500，两个不同状态
+     在 11px 圆点/胶囊上完全分不出来。色相环上已被下载（蓝）、做种（绿）、等待做种（紫）、
+     错误（红）占满，再塞一个新色相只会制造新的近似对；这里改走同族更深更闷的一档——
+     比校验更重（隔离是需要用户处理的），且与 #ff9500 的明度差一眼可辨 */
+  --color-status-isolated: #b45309;
   --color-status-error: var(--color-red-500);
 
   /* 弹层进出场。Tailwind v4 核心不含 tailwindcss-animate 的 animate-in / fade-in-0
@@ -341,6 +349,7 @@
   --color-border: #3a3a3c;
   --color-input: #3a3a3c;
   --color-ring: #007aff;
+  --color-track: rgba(255, 255, 255, 0.12);
 }
 
 /* ===================== Base ===================== */
@@ -611,10 +620,7 @@ html[data-wallpaper='on'].dark .tm-shell::before {
   height: 6px;
   border-radius: 9999px;
   overflow: hidden;
-  background: rgba(120, 130, 160, 0.14);
-}
-.dark .tm-progress-track {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--color-track);
 }
 .tm-progress-fill {
   width: 100%;
@@ -908,6 +914,14 @@ html[data-a11y-glass='reduce'].dark .glass-section {
   );
 }
 
+/* 键盘焦点（行与卡片可 Tab 定位）：用 outline 而不是 ring —— .tm-row-selected 的
+   box-shadow（左缘选中标条）是不分层规则，会盖掉 Tailwind 的 ring，
+   导致选中行拿到焦点时焦点框整块消失 */
+.tm-row-focusable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
 /* 侧栏导航：滑动玻璃胶囊指示器（对齐 adaptable sidebar 规范） */
 .tm-nav-rail {
   position: absolute;
@@ -1062,6 +1076,17 @@ html[data-a11y-glass='reduce'].dark .glass-section {
     position: absolute;
     inset: -10px;
   }
+  /* 开关：36×20 是设置页最小的命中目标，而下面 .tm-dialog 的 40px 外扩又把它排除在外。
+     同样用透明 ::after 把它补到 48×32（整行高）。纵向只扩 6px——设置行是紧挨着的，
+     再往外就压到邻行控件上，点邻行会误切这一行 */
+  [role='switch'] {
+    position: relative;
+  }
+  [role='switch']::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
   /* 菜单行 py-1.5 只有约 28px，触屏需要放大命中区。
      种子菜单有 17 项，44pt 会顶满整个手机屏、看着格外松散，
      取 40px 与弹窗按钮同档：仍远高于单行文字，但一屏能多放两三行 */
@@ -1174,13 +1199,36 @@ html[data-a11y-contrast='more'] {
   --glass-border-light: rgba(0, 0, 0, 0.32);
   --glass-border-dark: rgba(255, 255, 255, 0.42);
 }
+html[data-a11y-contrast='more'] .text-gray-300,
 html[data-a11y-contrast='more'] .text-gray-400,
 html[data-a11y-contrast='more'] .text-gray-500 {
   color: var(--color-gray-700) !important;
 }
+html[data-a11y-contrast='more'].dark .text-gray-300,
 html[data-a11y-contrast='more'].dark .text-gray-400,
 html[data-a11y-contrast='more'].dark .text-gray-500 {
   color: var(--color-gray-200) !important;
+}
+/* 占位符走浏览器默认灰，不跟上面的类名规则，单独提一档 */
+html[data-a11y-contrast='more'] input::placeholder,
+html[data-a11y-contrast='more'] textarea::placeholder {
+  color: var(--color-gray-600) !important;
+  opacity: 1;
+}
+html[data-a11y-contrast='more'].dark input::placeholder,
+html[data-a11y-contrast='more'].dark textarea::placeholder {
+  color: var(--color-gray-400) !important;
+  opacity: 1;
+}
+/* 减弱玻璃时半透明输入面也回落实底；用次级面料档而非面板档，
+   否则会和已实心化的面板同色、边界消失。bg-white/60 多为 hover 态不在此列 */
+html[data-a11y-glass='reduce'] [data-search-input],
+html[data-a11y-glass='reduce'] .bg-white\/50 {
+  background-color: var(--color-gray-100);
+}
+html[data-a11y-glass='reduce'].dark [data-search-input],
+html[data-a11y-glass='reduce'].dark .bg-white\/50 {
+  background-color: #3a3a3c;
 }
 html[data-a11y-motion='reduce'] {
   --ease-spring: ease-out;

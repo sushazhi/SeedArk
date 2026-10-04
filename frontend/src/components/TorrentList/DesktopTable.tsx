@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, ArrowDownWideNarrow, ArrowUpNarrowWide, RotateCcw } from 'lucide-react'
+import { AlertCircle, ArrowDownWideNarrow, ArrowUpNarrowWide, Columns3, RotateCcw } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { torrentApi } from '@/api/torrent'
@@ -427,10 +427,8 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
 
   const menuCtx = { actions, t: (k: string) => t(k), onOpenDetail, canRevealPath: can('fs.revealPath'), onEdit: (mode: EditMode, tt: Torrent) => setEditTarget({ torrent: tt, mode }), onOpenBatchClean }
 
-  if (sortedTorrents.length === 0) {
-    return <EmptyList />
-  }
-
+  // 空结果不再提前 return 掉整个表格：表头留着，列入口（右键 / 右端按钮）才不至于
+  // 跟着消失——筛选条件会被持久化，空列表恰恰是最需要改列配置的时候
   // 所有列统一固定宽度（名称列默认 320），行尾占位吸收剩余空间
   // 拖拽中的宽度只在本地预览态里，这里优先读它，表头与单元格才会实时跟手
   const colWidth = (col: ColumnConfig) =>
@@ -451,17 +449,28 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ paddingTop: 'var(--pad-top)' }}>
-      {/* 表头 */}
+    // 虚拟化后 DOM 里只有一屏行，读屏会把「已渲染行数」当成总行数，
+    // 故显式给出总行数（含表头占 1 行）与总列数
+    <div
+      role="grid"
+      aria-rowcount={sortedTorrents.length + 1}
+      aria-colcount={visibleColumns.length + (showCheckboxes ? 1 : 0)}
+      className="flex flex-col h-full"
+      style={{ paddingTop: 'var(--pad-top)' }}
+    >
+      {/* 表头（右端常驻列入口，故外层相对定位、表头自身留出它的宽度） */}
+      <div className="relative shrink-0">
       <div
         ref={headerRef}
+        role="row"
+        aria-rowindex={1}
         onContextMenu={(e) => {
           e.preventDefault()
           setColMenuPos({ x: e.clientX, y: e.clientY })
         }}
-        className="tm-dock glass-panel flex items-center px-3 h-9 text-footnote font-semibold tracking-wide text-gray-500 dark:text-gray-400 shrink-0 overflow-hidden"
+        className="tm-dock glass-panel flex items-center pl-3 pr-10 h-9 text-footnote font-semibold tracking-wide text-gray-500 dark:text-gray-400 overflow-hidden"
       >
-        {showCheckboxes && <div className="w-8 shrink-0" />}
+        {showCheckboxes && <div role="columnheader" className="w-8 shrink-0" />}
         {visibleColumns.map((col) => {
           const isSortable = true
           return (
@@ -469,6 +478,9 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
               key={col.key}
               data-col-cell
               data-col-key={col.key}
+              role="columnheader"
+              // 排序状态必须暴露给读屏：图标只对看得见的人有效（aria-sort 只允许出现在 columnheader 上）
+              aria-sort={sortField === col.key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
               onMouseDown={(e) => startColDrag(e, col)}
               className={cn(
                 // 表头对齐方式必须跟随该列的数据对齐：数字列若表头居中而单元格右对齐，
@@ -509,9 +521,27 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
         })}
         <div className="flex-1 min-w-0" />
       </div>
+        {/* 列管理入口：此前只有「右键表头」一条路，触屏与触控板用户基本发现不了，
+            空列表时更是连表头都没有。常驻在表头右端，菜单与右键共用一份 */}
+        <button
+          type="button"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            setColMenuPos({ x: r.right, y: r.bottom + 4 })
+          }}
+          aria-haspopup="menu"
+          aria-expanded={!!colMenuPos}
+          aria-label={t('columns.manage')}
+          title={t('columns.manage')}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 flex items-center justify-center h-6 w-6 rounded-md text-gray-500 dark:text-gray-400 bg-white/70 dark:bg-white/10 backdrop-blur transition-colors hover:text-primary hover:bg-primary/10"
+        >
+          <Columns3 className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {/* 虚拟滚动区 */}
-      <div ref={parentRef} onScroll={syncHeaderScroll} className="tm-scroll tm-scroll--notch flex-1">
+      <div ref={parentRef} onScroll={syncHeaderScroll} role="rowgroup" className="tm-scroll tm-scroll--notch flex-1">
+        {sortedTorrents.length === 0 && <EmptyList />}
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((vi) => {
             const torrent = sortedTorrents[vi.index]
@@ -526,6 +556,28 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
               >
                 <TorrentMenuDropdown items={() => buildTorrentMenu(menuCtx, torrent)} onClick={handleMenuClick(torrent)} trigger="contextMenu" align="start">
                   <div
+                    role="row"
+                    aria-rowindex={vi.index + 2}
+                    aria-selected={selectedIds.includes(torrent.id)}
+                    // 行此前完全键盘不可达：只有鼠标能定位到某一行。Tab 到行上，
+                    // Enter 开详情、空格切选中；行内已有按钮/复选框时让它们自己处理按键。
+                    // 必须吃掉冒泡：全局快捷键（useKeyboardShortcuts）也绑了 Space 做
+                    // 暂停/恢复，它会在行内切换选中之后接着对该行执行暂停/恢复，
+                    // 而动作成功后会 clearSelection()，刚选中的行立刻又被取消选中
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onOpenDetail(torrent)
+                      } else if (e.key === ' ') {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        toggleSelect(torrent.id)
+                        setSelectAnchor(torrent.id)
+                      }
+                    }}
                     title={torrent.error > 0 ? (translateError(torrent.errorString, t) || torrent.name) : torrent.name}
                     draggable={canReorder}
                     onDragStart={(e) => {
@@ -554,7 +606,7 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
                     }}
                     onClick={(e) => handleSelect(torrent, e)}
                     className={cn(
-                      'tm-nav-item flex items-center px-3 h-full border-b border-gray-100/60 dark:border-white/[0.04] text-body cursor-default select-none',
+                      'tm-nav-item tm-row-focusable flex items-center px-3 h-full border-b border-gray-100/60 dark:border-white/[0.04] text-body cursor-default select-none',
                       selectedIds.includes(torrent.id) && 'tm-row-selected',
                       'hover:bg-gray-100/50 dark:hover:bg-white/[0.04]',
                       // 拖拽中：源行淡出并标记，落点行上缘画出插入位（与表头列拖拽同一套语言）
@@ -564,12 +616,12 @@ export function DesktopTable({ torrents, onOpenDetail, onOpenBatchClean }: {
                     onDoubleClick={() => onOpenDetail(torrent)}
                   >
                     {showCheckboxes && (
-                      <div className="shrink-0 w-8 h-8 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                      <div role="gridcell" className="shrink-0 w-8 h-8 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selectedIds.includes(torrent.id)} onCheckedChange={() => { toggleSelect(torrent.id); setSelectAnchor(torrent.id) }} />
                       </div>
                     )}
                     {visibleColumns.map((col) => (
-                      <div key={col.key} className={cn('px-2 truncate', NUMERIC_COLS.has(col.key) && 'text-right')} style={headerStyle(col)}>
+                      <div role="gridcell" key={col.key} className={cn('px-2 truncate', NUMERIC_COLS.has(col.key) && 'text-right')} style={headerStyle(col)}>
                         <Cell torrent={torrent} col={col} />
                       </div>
                     ))}

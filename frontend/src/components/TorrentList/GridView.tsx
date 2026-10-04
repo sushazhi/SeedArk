@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useAppStore } from '@/stores/appStore'
 import { formatBytes, formatDuration, formatRatio, formatSpeed } from '@/utils/format'
+import { translateError } from '@/utils/errorText'
 import { tagColor } from '@/utils/tagColor'
 import { statusColor, statusPulses } from '@/utils/status'
 import type { EditMode, EditTarget, MenuCtx } from '@/components/TorrentMenu'
@@ -48,6 +49,8 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
   const [removeIds, setRemoveIds] = useState<number[] | null>(null)
   const [trackerOpen, setTrackerOpen] = useState(false)
+  // 卡片错误原因的就地展开：同一时刻只展开一张卡（长列表里不该出现多个展开块改变行高）
+  const [errorOpenId, setErrorOpenId] = useState<number | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const lastClickRef = useRef<{ id: number; t: number }>({ id: -1, t: 0 })
 
@@ -160,6 +163,7 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
   return (
     <div
       ref={listRef}
+      role="list"
       className="tm-scroll h-full"
       style={{ paddingLeft: 'calc(var(--safe-left) + 0.75rem)', paddingRight: 'calc(var(--safe-right) + 0.75rem)' }}
     >
@@ -173,6 +177,8 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
           const pct = torrent.percentDone
           const dot = { color: statusColor(torrent), pulse: statusPulses(torrent) }
           const labels = torrent.labels ?? []
+          const errorReason = torrent.error > 0 ? translateError(torrent.errorString, t) : ''
+          const errorOpen = errorOpenId === torrent.id
           const eta = torrent.eta > 0 ? `${t('card.remaining')} ${formatEtaShort(torrent.eta)}` : ''
           // 已下载大小 = 种子文件里实际持有的字节（含未校验部分）；只下载了一部分就只显示这部分
           const downloadedSize = formatBytes(Math.min(torrent.haveValid + torrent.haveUnchecked, torrent.totalSize))
@@ -193,11 +199,32 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
             >
               <TorrentMenuDropdown items={() => buildTorrentMenu(menuCtx, torrent)} onClick={handleMenuClick(torrent)} trigger="contextMenu" align="start">
                 <div
+                  role="listitem"
+                  // 虚拟化只挂一屏卡片，读屏会把渲染数当总数，这里给出真实序号与总数
+                  aria-posinset={vi.index + 1}
+                  aria-setsize={torrents.length}
+                  // 与表格行同一套键盘语言：Tab 定位到卡片，Enter 开详情、空格切选中；
+                  // 卡片内已有按钮/复选框时交给它们自己处理按键。
+                  // 吃掉冒泡的理由同行：全局 Space 是暂停/恢复，且动作成功后会清空选中
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onOpenDetail(torrent)
+                    } else if (e.key === ' ') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleSelect(torrent.id)
+                      setSelectAnchor(torrent.id)
+                    }
+                  }}
                   onClick={(e) => handleSelect(torrent, e)}
                   onDoubleClick={() => onOpenDetail(torrent)}
                   data-selected={selected || undefined}
                   className={cn(
-                    'glass-card tm-card flex items-start gap-3.5 px-3 py-2 cursor-default select-none group',
+                    'glass-card tm-card tm-row-focusable flex items-start gap-3.5 px-3 py-2 cursor-default select-none group',
                     selected && 'z-[1]',
                   )}
                 >
@@ -205,7 +232,24 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
                     {/* 名称 + 标签 + 选择 */}
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-body min-w-0 truncate text-gray-800 dark:text-gray-100" title={torrent.name}>
-                        {torrent.error > 0 && <span className="text-red-500 mr-1">!</span>}
+                        {torrent.error > 0 && (
+                        // 「!」此前只是个 span：触屏上没有 hover，读不到原因；读屏也看不见。
+                        // 现在是个可点的小按钮，点开在卡片内就地展开原因（不跳详情、不自动消失）
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setErrorOpenId((cur) => (cur === torrent.id ? null : torrent.id))
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          aria-expanded={errorOpen}
+                          aria-label={t('detail.error')}
+                          title={errorReason || t('detail.error')}
+                          className="tm-hug shrink-0 inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500/15 text-red-500 text-caption1 font-bold leading-none"
+                        >
+                          !
+                        </button>
+                      )}
                         {torrent.name}
                       </span>
                       {labels.length > 0 && (
@@ -256,6 +300,10 @@ export function GridView({ torrents, onOpenDetail, isMobile, onOpenBatchClean }:
                         </TorrentMenuDropdown>
                       </span>
                     </div>
+
+                    {errorOpen && errorReason && (
+                      <p className="mt-1 text-caption1 text-red-500 break-words">{errorReason}</p>
+                    )}
 
                     {/* 大小 + 进度条（scaleX 驱动）+ 状态点；移动端标签靠右挤同一行。
                         进度条给保底宽度，标签再长也先截断标签，避免条被挤成一条缝 */}

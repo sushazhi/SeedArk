@@ -17,6 +17,7 @@ export default {
     connected: 'Connected',
     connecting: 'Connecting',
     disconnected: 'Disconnected',
+    disconnectedHint: 'Cannot reach the downloader, so there is no torrent list to show. Check the address and credentials, or switch to another server',
     passwordless: 'Host SSO',
     settings: 'Settings',
     failed: 'failed',
@@ -184,6 +185,7 @@ export default {
     hashString: 'Hash',
     server: 'Downloader',
     reset: 'Reset Columns',
+    manage: 'Columns and order',
   },
   labels: {
     modeSet: 'Set',

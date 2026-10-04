@@ -19,6 +19,7 @@ import { SeedPolicyManager } from '@/components/SeedPolicyManager'
 import { QBFields, QBSaveBar, useQBDraft } from './QBSettings'
 import { NumInput, PaneNav, Row, ScrollArea, Section, SmallSelect } from './controls'
 import { usePlatform } from '@/platform'
+import { useEnsureSemanticPaths, useSemanticPath } from '@/hooks/useSemanticPath'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useAppStore } from '@/stores/appStore'
 import { toast } from '@/lib/toast'
@@ -134,9 +135,12 @@ function DirInput({ field, session, onCommit, 'aria-label': ariaLabel }: {
 }) {
   const { t } = useTranslation()
   const { can, pickFolder } = usePlatform()
+  const sem = useSemanticPath()
   const serverValue = session?.[field] ?? ''
   const [draft, setDraft] = useState(serverValue)
   const [editing, setEditing] = useState(false)
+  // 语义转换按「已提交值」注册：编辑中的半成品路径转不出展示名，逐键请求只是白跑
+  useEnsureSemanticPaths([serverValue])
 
   // 外部值变化（切换服务器/刷新）且当前未在编辑时同步
   useEffect(() => {
@@ -159,33 +163,40 @@ function DirInput({ field, session, onCommit, 'aria-label': ariaLabel }: {
     await commit(p)
   }
 
+  const semantic = sem(draft)
+
   return (
     // w-full：窄屏换行到标签下方后占满整行；桌面保持半宽
-    <div className="flex items-center gap-1.5 w-full md:w-1/2">
-      <Input
-        aria-label={ariaLabel}
-        value={draft}
-        onFocus={() => setEditing(true)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => void commit(draft)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); void commit(draft) }
-          if (e.key === 'Escape') { setDraft(serverValue); setEditing(false) }
-        }}
-        className="h-8 text-footnote flex-1 min-w-0"
-      />
-      {can('fs.pickFolder') && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          title={t('action.selectDir')}
-          onClick={() => void pick()}
-          className="h-8 shrink-0 gap-1 px-2"
-        >
-          <FolderOpen className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{t('action.selectDir')}</span>
-        </Button>
+    <div className="w-full md:w-1/2 min-w-0 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 w-full">
+        <Input
+          aria-label={ariaLabel}
+          value={draft}
+          onFocus={() => setEditing(true)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void commit(draft)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); void commit(draft) }
+            if (e.key === 'Escape') { setDraft(serverValue); setEditing(false) }
+          }}
+          className="h-8 text-footnote flex-1 min-w-0"
+        />
+        {can('fs.pickFolder') && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            title={t('action.selectDir')}
+            onClick={() => void pick()}
+            className="h-8 shrink-0 gap-1 px-2"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('action.selectDir')}</span>
+          </Button>
+        )}
+      </div>
+      {semantic && semantic !== draft && (
+        <p className="text-caption1 text-gray-400 truncate" title={semantic}>→ {semantic}</p>
       )}
     </div>
   )

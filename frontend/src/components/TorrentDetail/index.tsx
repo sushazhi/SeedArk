@@ -889,7 +889,7 @@ export function TorrentDetail({ torrent, onClose, onOpenChange, isMobile }: { to
         </TabsContent>
 
         <TabsContent value="history" className="pt-2">
-          <SpeedHistory />
+          <SpeedHistory torrentId={detail.id} />
         </TabsContent>
       </Tabs>
     </div>

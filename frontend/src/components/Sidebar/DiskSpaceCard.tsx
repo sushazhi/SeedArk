@@ -47,7 +47,7 @@ export function DiskSpaceCard({ disk, ringSize = 58 }: { disk: DiskSpaces; ringS
     <div className="shrink-0 glass-subcard rounded-tile px-3 py-2.5 flex items-center gap-3">
       {total > 0 ? (
         <svg width={ringSize} height={ringSize} viewBox="0 0 58 58" className="-rotate-90 shrink-0">
-          <circle cx="29" cy="29" r={RING_R} stroke="rgba(120,130,160,0.16)" strokeWidth="6.5" fill="none" />
+          <circle cx="29" cy="29" r={RING_R} strokeWidth="6.5" fill="none" style={{ stroke: 'var(--color-track)' }} />
           <circle
             cx="29" cy="29" r={RING_R}
             strokeWidth="6.5" fill="none" strokeLinecap="round"
@@ -59,7 +59,7 @@ export function DiskSpaceCard({ disk, ringSize = 58 }: { disk: DiskSpaces; ringS
         // 总量未知：占比无从谈起，用一个中性圆盘代替环，避免「永远空心」
         <div
           className="rounded-full grid place-items-center shrink-0"
-          style={{ width: ringSize, height: ringSize, background: 'rgba(120,130,160,0.12)' }}
+          style={{ width: ringSize, height: ringSize, background: 'var(--color-track)' }}
         >
           <HardDrive className="w-6 h-6 text-gray-400" />
         </div>

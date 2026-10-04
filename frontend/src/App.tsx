@@ -14,6 +14,7 @@ import { SpeedPolicyManager } from '@/components/SpeedPolicyManager'
 import { StatusBar } from '@/components/StatusBar'
 import { TorrentDetail } from '@/components/TorrentDetail'
 import { TorrentList } from '@/components/TorrentList'
+import { DisconnectedList } from '@/components/TorrentList/EmptyList'
 import { BatchCleanDialog } from '@/components/ToolsDialogs'
 import { useFilter } from '@/hooks/useFilter'
 import { useGlassChrome } from '@/hooks/useGlassChrome'
@@ -363,7 +364,13 @@ export default function App() {
             </div>
           </div>
         )}
-        <TorrentList torrents={filtered} isMobile={isMobile} onOpenDetail={setDetailTorrent} onOpenBatchClean={() => setCleanOpen(true)} />
+        {wsStatus === 'disconnected' && torrents.length === 0 ? (
+          // 断线且库中无数据：列表空态会谎称「还没有添加任何任务」（首次连不上时库本来就是空的），
+          // 这里改说真实状态并给出下一步
+          <DisconnectedList onOpenSettings={() => setSettingsOpen(true)} />
+        ) : (
+          <TorrentList torrents={filtered} isMobile={isMobile} onOpenDetail={setDetailTorrent} onOpenBatchClean={() => setCleanOpen(true)} />
+        )}
       </div>
 
       {/* 侧栏：顶边与顶栏齐平，其内容同样穿过玻璃 */}

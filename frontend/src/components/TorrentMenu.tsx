@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowDown,
@@ -28,6 +28,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { sessionApi, torrentApi } from '@/api/torrent'
 import { useTorrentActions } from '@/hooks/useTorrentActions'
+import { useDismissOnOutside, useFloatingMenuPosition } from '@/hooks/useFloatingMenuPosition'
 import { usePlatform } from '@/platform'
 import { useAppStore } from '@/stores/appStore'
 import type { DownloaderCaps, Torrent } from '@/types'
@@ -200,50 +201,10 @@ export function FloatingContextMenu({ pos, items, onPick, onClose }: {
   onPick: (key: string) => void
   onClose: () => void
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [style, setStyle] = useState<CSSProperties>({ left: pos.x, top: pos.y })
-
-  // 初次渲染后按实际尺寸翻转，避免超出视口
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    // iOS 键盘弹出时 innerHeight 不变、visualViewport 才反映可见区域
-    const vw = window.visualViewport?.width ?? window.innerWidth
-    const vh = window.visualViewport?.height ?? window.innerHeight
-    const M = 8
-    const flipX = pos.x + rect.width > vw - M ? pos.x - rect.width : pos.x
-    const flipY = pos.y + rect.height > vh - M ? pos.y - rect.height : pos.y
-    // 两侧都做夹取：手机上长按落点常贴着屏幕右缘，只翻转不夹取仍会溢出
-    setStyle({
-      left: Math.min(Math.max(M, flipX), Math.max(M, vw - rect.width - M)),
-      top: Math.min(Math.max(M, flipY), Math.max(M, vh - rect.height - M)),
-      // 入场缩放从长按落点长出：未翻转的方向取贴近落点的一侧为原点
-      transformOrigin: `${flipX === pos.x ? 'left' : 'right'} ${flipY === pos.y ? 'top' : 'bottom'}`,
-    })
-  }, [pos])
-
-  useEffect(() => {
-    const close = () => onClose()
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    // 滚动/触屏滑动仅当发生在菜单外部时关闭，菜单内部滚动不受影响
-    const onWheel = (e: WheelEvent | TouchEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
-    }
-    // pointerdown 同时覆盖鼠标与手指：mousedown 在触屏上迟到，会让菜单关不掉
-    window.addEventListener('pointerdown', close)
-    window.addEventListener('wheel', onWheel, { passive: true })
-    window.addEventListener('touchmove', onWheel, { passive: true })
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('blur', close)
-    return () => {
-      window.removeEventListener('pointerdown', close)
-      window.removeEventListener('wheel', onWheel)
-      window.removeEventListener('touchmove', onWheel)
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('blur', close)
-    }
-  }, [onClose])
+  // 翻转 + 双向夹取 + 视口尺寸统一走 useFloatingMenuPosition：
+  // 这里此前又抄了一份，且只用 innerWidth/innerHeight（iOS 键盘弹出时不反映可见区）
+  const { ref, style } = useFloatingMenuPosition<HTMLDivElement>(pos)
+  useDismissOnOutside(ref, onClose)
 
   return (
     <div
@@ -363,19 +324,9 @@ function CtxSubMenu({ item, onPick }: { item: MenuItem; onPick: (key: string) =>
   )
 }
 
-// 子菜单位置：渲染后按实际尺寸翻转，避免超出视口
+// 子菜单位置：与主菜单同一套翻转 + 夹取（此前这里只夹取不翻转，且用 window.innerWidth/Height）
 function SubMenuPositioned({ pos, children }: { pos: { x: number; y: number }; children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [style, setStyle] = useState<CSSProperties>({ left: pos.x, top: pos.y })
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    const M = 8
-    const x = pos.x + rect.width > window.innerWidth - M ? Math.max(M, pos.x - rect.width) : pos.x
-    const y = pos.y + rect.height > window.innerHeight - M ? Math.max(M, window.innerHeight - rect.height - M) : pos.y
-    setStyle({ left: x, top: y })
-  }, [pos])
+  const { ref, style } = useFloatingMenuPosition<HTMLDivElement>(pos)
   return (
     <div
       ref={ref}

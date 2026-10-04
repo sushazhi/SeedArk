@@ -7,8 +7,10 @@ const MAX_POINTS = 60
 const W = 280
 const H = 90
 
-// 全局速度历史折线图（SVG 无依赖实现）
-export function SpeedHistory() {
+// 速度历史折线图（SVG 无依赖实现）。
+// 传了 torrentId 就只画那一颗：详情页此前直接 <SpeedHistory />，于是在单颗种子的
+// 「速度历史」里画的是全库总速度——曲线与页面上那两颗数字（该种子的上下行）对不上
+export function SpeedHistory({ torrentId }: { torrentId?: number }) {
   const { t } = useTranslation()
   const [points, setPoints] = useState<{ down: number; up: number }[]>([])
 
@@ -17,16 +19,25 @@ export function SpeedHistory() {
       const { torrents } = useAppStore.getState()
       let down = 0
       let up = 0
-      torrents.forEach((x) => {
-        down += x.rateDownload
-        up += x.rateUpload
-      })
+      if (torrentId == null) {
+        torrents.forEach((x) => {
+          down += x.rateDownload
+          up += x.rateUpload
+        })
+      } else {
+        // 从 store 现取：详情对象可能是打开那一刻的快照，速率得跟着列表刷新走
+        const one = torrents.find((x) => x.id === torrentId)
+        down = one?.rateDownload ?? 0
+        up = one?.rateUpload ?? 0
+      }
       setPoints((prev) => [...prev.slice(-(MAX_POINTS - 1)), { down, up }])
     }
+    // 换了种子就重新开始：留着上一颗的曲线会被当成这一颗的历史
+    setPoints([])
     push()
     const iv = window.setInterval(push, 2000)
     return () => window.clearInterval(iv)
-  }, [])
+  }, [torrentId])
 
   if (points.length < 2) {
     return <div className="text-footnote text-gray-400 py-6 text-center">{t('common.loading')}</div>

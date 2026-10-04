@@ -23,16 +23,26 @@ export function Row({ label, hint, children }: { label: string; hint?: string; c
     if (child.props['aria-label'] || child.props['aria-labelledby']) return child
     return cloneElement(child, { 'aria-label': label })
   })
+  // 行内唯一控件是开关/勾选框时整行可点：开关本体只有 36×20，是设置页最小的目标，
+  // 而标签此前是纯文本、不构成命中区。用 <label> 隐式关联（点标签即切换）。
+  // 只在「这一行就这一个布尔控件」时这么做：行里还有输入框/按钮时，label 会把点击
+  // 转交给第一个可标记控件，等于给了个误触另一个控件的入口
+  const singleToggle =
+    Children.count(children) === 1 &&
+    isValidElement<{ checked?: unknown; onCheckedChange?: unknown }>(children) &&
+    typeof children.props.checked === 'boolean' &&
+    typeof children.props.onCheckedChange === 'function'
+  const Tag = singleToggle ? 'label' : 'div'
   return (
     // flex-wrap：窄屏下右侧定宽控件放不下时整块掉到标签下方，
     // 否则标签被挤成一字一行的竖排，行高爆炸（WebView 真机曾出现）
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 py-1.5">
+    <Tag className={cn('flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 py-1.5', singleToggle && 'cursor-pointer')}>
       <div className="min-w-[10rem] max-w-full">
         <span className="text-body text-gray-600 dark:text-gray-300">{label}</span>
         {hint && <p className="text-caption1 text-gray-400 mt-0.5">{hint}</p>}
       </div>
       {labelled}
-    </div>
+    </Tag>
   )
 }
 

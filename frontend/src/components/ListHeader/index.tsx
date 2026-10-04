@@ -50,6 +50,11 @@ const SORT_OPTIONS = [
   { key: 'downloaded', label: 'filter.sort.downloaded' },
 ] as const
 
+// 排序按钮的提示语按 col.key 查文案：列头点击传的是 col.key（download / eta / tracker…），
+// 而 filter.sort.* 的键名与它们并不一一对应（dlSpeed / upSpeed / date），直接拼 key 会显示原文。
+// 先查排序菜单自己的映射（与下拉里看到的词一致），查不到再退回 columns.<key>（覆盖全部列）。
+const SORT_LABEL: Record<string, string> = Object.fromEntries(SORT_OPTIONS.map((o) => [o.key, o.label]))
+
 // 排序 / 视图切换 / 刷新 控制组（桌面端并入 TopBar，移动端留在 ListHeader）
 export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate }: { compact?: boolean; isMobile?: boolean; onOpenDashboard?: () => void; onOpenCreate?: () => void }) {
   const { t } = useTranslation()
@@ -63,6 +68,7 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
   const setTorrents = useAppStore((s) => s.setTorrents)
   const [sortOpen, setSortOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const sortHint = `${t('filter.sortBy')}: ${t(SORT_LABEL[sortField] ?? `columns.${sortField}`)}`
 
   const changeSort = (field: string) => {
     const nextAsc = sortField === field ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc'
@@ -101,7 +107,8 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
                 ? 'text-primary bg-primary/10'
                 : 'text-gray-500 dark:text-gray-400 hover:bg-white/60 dark:hover:bg-white/10',
             )}
-            title={`${t('filter.sortBy')}: ${t(`filter.sort.${sortField}`)}`}
+            title={sortHint}
+            aria-label={sortHint}
           >
             {sortField === 'name' ? (
               <ArrowUpDown className={iconSize} />
@@ -144,6 +151,7 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
             'flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/60 dark:hover:bg-white/10 transition-colors',
           )}
           title={viewMode === 'grid' ? t('dashboard.viewTable') : t('dashboard.viewGrid')}
+          aria-label={viewMode === 'grid' ? t('dashboard.viewTable') : t('dashboard.viewGrid')}
         >
           {viewMode === 'grid' ? <LayoutList className={iconSize} /> : <LayoutGrid className={iconSize} />}
         </button>
@@ -157,6 +165,7 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
           'flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/60 dark:hover:bg-white/10 transition-colors',
         )}
         title={t('common.refresh')}
+        aria-label={t('common.refresh')}
       >
         <RefreshCw className={cn(iconSize, refreshing && 'animate-spin')} />
       </button>
@@ -170,6 +179,7 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
             'flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/60 dark:hover:bg-white/10 transition-colors',
           )}
           title={t('createTorrent.title')}
+          aria-label={t('createTorrent.title')}
         >
           <FilePlus2 className={iconSize} />
         </button>
@@ -184,6 +194,7 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
             'flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/60 dark:hover:bg-white/10 transition-colors',
           )}
           title={t('dashboard.title')}
+          aria-label={t('dashboard.title')}
         >
           <BarChart3 className={iconSize} />
         </button>

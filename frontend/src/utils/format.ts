@@ -1,12 +1,27 @@
 import dayjs from 'dayjs'
 
+// 小数位随量级收缩，始终留 3~4 位有效数字：335.18 MB → 335 MB，9.40 GB 照旧两位小数。
+// 表格数值列是固定宽度，[1013.47 KB/s] 这种长串在小列里必被截断，而尾数小数位
+// 对"扫一眼比大小"没有贡献。
+function precisionFor(val: number): number {
+  if (val >= 100) return 0
+  if (val >= 10) return 1
+  return 2
+}
+
 // 格式化字节数为可读单位
-export function formatBytes(bytes: number, decimal = 2): string {
+export function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  const val = bytes / Math.pow(1024, i)
-  return `${i === 0 ? val.toFixed(0) : val.toFixed(decimal)} ${units[i]}`
+  let i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  let val = bytes / Math.pow(1024, i)
+  // 档位按未取整的值判定，四舍五入可能把显示值顶到 1024（1023.6 KB →「1024 KB」），
+  // 再进一档，保证显示值的单位是"装得下它的最小单位"
+  if (i > 0 && i < units.length - 1 && Math.round(val) >= 1024) {
+    i += 1
+    val = bytes / Math.pow(1024, i)
+  }
+  return `${i === 0 ? val.toFixed(0) : val.toFixed(precisionFor(val))} ${units[i]}`
 }
 
 // 格式化速度

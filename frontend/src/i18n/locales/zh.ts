@@ -17,6 +17,7 @@ export default {
     connected: '已连接',
     connecting: '连接中',
     disconnected: '已断开',
+    disconnectedHint: '连接不上下载器，暂时读不到种子列表。核对地址与凭据后重试，或先切换到另一台服务器',
     passwordless: '宿主统一认证',
     settings: '设置',
     failed: '失败',
@@ -184,6 +185,7 @@ export default {
     hashString: '哈希',
     server: '下载器',
     reset: '重置列',
+    manage: '列显示与顺序',
   },
   labels: {
     modeSet: '覆盖',

@@ -3,27 +3,35 @@ import { persist } from 'zustand/middleware'
 import type { ColumnConfig, FilterOptions, Session, SidebarCollapsed, SidebarMenuVisible, Torrent } from '@/types'
 
 // 默认列配置（label 为 i18n key）
+//
+// 宽度是「表头文字 + 排序图标 + 单元格内边距」与「典型数值长度」的较大者，
+// 不是拍脑袋的余额分配：4 字中文表头（下载速度/做种时间…）连图标与内边距就吃掉 82px，
+// 数值侧在 formatBytes 收敛到 3~4 位有效数字后 84px 才够用（1023 KB/s 这类最坏串要 88px）。
+// 速度两列额外给到 88px：68px 的最坏值串（1023 KB/s）贴着 84px 列的内容盒 68px 零余量，
+// 字体换一套就会溢出。Tracker 列给 110px 是为了放下 15 个字符内的常见站点域名
+// （private-hd.club ≈ 91px、open-mirror.net ≈ 94px），更长的域名仍会截断，但单元格带 title。
+// 默认 12 列合计 1190px，1600px 窗口（内容区 1276px，含勾选框列）不出现横向滚动。
 export const defaultColumns: ColumnConfig[] = [
-  { key: 'name', label: 'columns.name', visible: true, width: 320 },
-  { key: 'size', label: 'columns.size', visible: true, width: 100 },
-  { key: 'progress', label: 'columns.progress', visible: true, width: 160 },
-  { key: 'status', label: 'columns.status', visible: true, width: 110 },
-  { key: 'download', label: 'columns.download', visible: true, width: 100 },
-  { key: 'upload', label: 'columns.upload', visible: true, width: 100 },
-  { key: 'ratio', label: 'columns.ratio', visible: true, width: 80 },
-  { key: 'secondsSeeding', label: 'columns.secondsSeeding', visible: true, width: 90 },
-  { key: 'eta', label: 'columns.eta', visible: true, width: 90 },
-  { key: 'tracker', label: 'columns.tracker', visible: true, width: 150 },
+  { key: 'name', label: 'columns.name', visible: true, width: 240 },
+  { key: 'size', label: 'columns.size', visible: true, width: 80 },
+  { key: 'progress', label: 'columns.progress', visible: true, width: 104 },
+  { key: 'status', label: 'columns.status', visible: true, width: 84 },
+  { key: 'download', label: 'columns.download', visible: true, width: 88 },
+  { key: 'upload', label: 'columns.upload', visible: true, width: 88 },
+  { key: 'ratio', label: 'columns.ratio', visible: true, width: 72 },
+  { key: 'secondsSeeding', label: 'columns.secondsSeeding', visible: true, width: 84 },
+  { key: 'eta', label: 'columns.eta', visible: true, width: 84 },
+  { key: 'tracker', label: 'columns.tracker', visible: true, width: 110 },
   { key: 'peers', label: 'columns.peers', visible: false, width: 80 },
   { key: 'uploaded', label: 'columns.uploaded', visible: false, width: 100 },
   { key: 'downloaded', label: 'columns.downloaded', visible: false, width: 100 },
   { key: 'added', label: 'columns.added', visible: false, width: 130 },
   { key: 'doneDate', label: 'columns.doneDate', visible: false, width: 130 },
-  { key: 'label', label: 'columns.label', visible: true, width: 110 },
+  { key: 'label', label: 'columns.label', visible: true, width: 84 },
   { key: 'queuePosition', label: 'columns.queuePosition', visible: false, width: 60 },
   { key: 'error', label: 'columns.error', visible: false, width: 160 },
   // 附加列（默认隐藏，表头右键开启）
-  { key: 'priority', label: 'columns.priority', visible: true, width: 70 },
+  { key: 'priority', label: 'columns.priority', visible: true, width: 72 },
   { key: 'limits', label: 'columns.limits', visible: false, width: 110 },
   { key: 'fileCount', label: 'columns.fileCount', visible: false, width: 70 },
   { key: 'downloadDir', label: 'columns.downloadDir', visible: false, width: 180 },
@@ -32,6 +40,13 @@ export const defaultColumns: ColumnConfig[] = [
   // 聚合视图里由 useFilter 自动开启一次，见 appStore 的 ensureServerColumn
   { key: 'server', label: 'columns.server', visible: false, width: 140 },
 ]
+
+// v1 迁移用：收紧前的默认列宽。只重写"仍等于旧默认值"的列——
+// 用户自己拖过的列一律不碰，不能拿一次默认值调整覆盖用户的调整。
+const OLD_DEFAULT_WIDTHS: Record<string, number> = {
+  name: 320, size: 100, progress: 160, status: 110, download: 100, upload: 100,
+  ratio: 80, secondsSeeding: 90, eta: 90, tracker: 150, label: 110, priority: 70,
+}
 
 export const defaultFilters: FilterOptions = {
   status: ['all'],
@@ -372,7 +387,12 @@ export const useAppStore = create<AppState>()(
         // 补齐持久化列配置中缺失的新列（保留用户自定义顺序，新列追加到末尾）
         const persistedCols = p.columns ?? []
         const missing = defaultColumns.filter((dc) => !persistedCols.some((c) => c.key === dc.key))
-        const columns = missing.length ? [...persistedCols, ...missing] : persistedCols
+        const widthByKey = new Map(defaultColumns.map((c) => [c.key, c.width]))
+        // 旧默认列宽 → 新默认值：只改"用户从没拖过"的列（宽度仍等于旧默认值）。
+        // 新默认值与旧默认值不重合，因此这段重复执行不会二次改写
+        const columns = [...persistedCols, ...missing].map((c) =>
+          OLD_DEFAULT_WIDTHS[c.key] === c.width ? { ...c, width: widthByKey.get(c.key) ?? c.width } : c,
+        )
         return {
           ...current,
           ...p,
