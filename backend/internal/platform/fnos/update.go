@@ -432,24 +432,24 @@ type downloadSource struct {
 	display string
 }
 
-// downloadSources 按尝试顺序给出下载来源：加速镜像按 UpdateMirrors 顺序在前，直连 GitHub 兜底。
-// 实测直连 github.com 常被墙（可握手但返回 0 字节并超时），放最前只会让用户先白等一轮超时；
-// 镜像优先才能让「一键更新」在受限网络下直接可用。direct=true 只在最后一条来源上成立。
+// downloadSources 按尝试顺序给出下载来源：GitHub 直连在前，加速镜像按 UpdateMirrors 顺序兜底。
+// 直连不经第三方中转，且文件与 api.github.com 的元数据同源；直连被墙时由
+// directProbeTimeout 限时，超时即整体切到加速源，不会让用户白等整轮。
 func downloadSources(fpURL string) []downloadSource {
 	out := make([]downloadSource, 0, len(UpdateMirrors)+1)
+	out = append(out, downloadSource{
+		url:     fpURL,
+		direct:  true,
+		msg:     "正在从 GitHub 直连下载...",
+		display: "github.com",
+	})
 	for i, m := range UpdateMirrors {
-		msg := "正在下载更新包..."
+		msg := "直连未成功，切换加速源..."
 		if i > 0 {
 			msg = fmt.Sprintf("加速源切换中...（%d/%d）", i+1, len(UpdateMirrors))
 		}
 		out = append(out, downloadSource{url: m + fpURL, msg: msg, display: strings.TrimSuffix(strings.TrimPrefix(m, "https://"), "/")})
 	}
-	out = append(out, downloadSource{
-		url:     fpURL,
-		direct:  true,
-		msg:     "加速源均失败，尝试直连 GitHub...",
-		display: "github.com",
-	})
 	return out
 }
 
@@ -481,16 +481,9 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 		return
 	}
 	sources := downloadSources(info.FPKURL)
+	// 首个来源即直连 GitHub；分片会在探测成功的来源上轮转，直连卡住时由
+	// directStallLimit 限时改派加速源。
 	primary := sources[0]
-	if len(sources) > 1 {
-		// 首个来源只是「文件名」，分片会轮转到所有镜像，直连在最后兜底
-		primary = sources[len(sources)-1]
-		primary = downloadSource{
-			url:     info.FPKURL,
-			direct:  false,
-			display: strings.TrimSuffix(strings.TrimPrefix(sources[0].url, "https://"), "/"),
-		}
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
@@ -526,9 +519,10 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 	set(15, "正在校验更新包...")
 	if err := fetchFPK(ctx, info.FPKURL, dest, false, info, progress); err != nil {
 		slog.Warn("更新包下载失败", "url", info.FPKURL, "err", err)
-		// 兜底：分片/镜像全挂时，若直连可用则走一次直连顺序下载（摘要缺失时属可信来源）
+		// 兜底：直连与分片链路都失败时，再纯粹走一次直连顺序下载
+		// （直连文件与元数据同源，上游无摘要时仍属可信来源）
 		if ctx.Err() == nil {
-			set(20, "加速源均失败，尝试直连 GitHub...")
+			set(20, "加速源均失败，再试一次直连 GitHub...")
 			if derr := fetchFPK(ctx, info.FPKURL, dest, true, info, progress); derr == nil {
 				set(100, "下载完成")
 				return

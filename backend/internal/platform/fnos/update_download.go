@@ -78,6 +78,12 @@ const (
 	downloadQuietWindow = 200 * time.Millisecond
 	// downloadStallTimeout 单条连接的最长无进展时间（读超时）
 	downloadStallTimeout = 45 * time.Second
+	// directProbeTimeout 直连探测的时限：GitHub 资源域名被墙时常常是「能握手、
+	// 不回数据」，不设时限就会一直挂到整体超时。超时即放弃直连、整体切加速源。
+	directProbeTimeout = 3 * time.Second
+	// directStallLimit 直连下载的停顿上限：连上探测过、但下载阶段连续无进展超过
+	// 该时长即判定直连不稳，本次下载改用加速源。
+	directStallLimit = 5 * time.Second
 )
 
 // UpdateMirrors 自更新加速源（顺序即优先级）。
@@ -229,30 +235,42 @@ func updateClient() *http.Client {
 	}
 }
 
-// sourceSet 一次下载的候选来源（镜像前缀 + 直连兜底）
+// sourceSet 一次下载的候选来源（直连优先 + 镜像兜底）
 type sourceSet struct {
 	prefixes []string // 镜像前缀，按优先级
 	rawURL   string   // GitHub 原始地址（直连）
+	noDirect bool     // 跳过直连（上下文已判定直连不可用，或调用方明确只要镜像）
 }
 
-// urlFor 返回第 i 个候选地址：前 len(prefixes) 个是镜像，最后一个是直连。
-// 直连排在最后：实测直连常被墙，放最前只会让用户先白等一轮超时。
+// urlFor 返回第 i 个候选地址：第 0 个是直连，之后依次是镜像。
+// 直连优先：文件与 api.github.com 的元数据同源，不经第三方中转；
+// 直连被墙时由 probeDirectBudget 限时，超时即整体切到镜像，不会让用户干等。
 func (s sourceSet) urlFor(i int) string {
 	n := len(s.prefixes)
-	if n == 0 {
+	if n == 0 || s.noDirect {
+		if n == 0 {
+			return s.rawURL
+		}
+		if i < 0 {
+			i = 0
+		}
+		return s.prefixes[i%n] + s.rawURL
+	}
+	if i <= 0 {
 		return s.rawURL
 	}
-	if i < 0 {
-		i = 0
-	}
-	i %= n + 1
-	if i == n {
-		return s.rawURL
-	}
-	return s.prefixes[i] + s.rawURL
+	return s.prefixes[(i-1)%n] + s.rawURL
 }
 
-func (s sourceSet) count() int { return len(s.prefixes) + 1 }
+func (s sourceSet) count() int {
+	if s.noDirect || len(s.prefixes) == 0 {
+		if len(s.prefixes) == 0 {
+			return 1
+		}
+		return len(s.prefixes)
+	}
+	return len(s.prefixes) + 1
+}
 
 // label 来源的展示名（进度信息里用主机名，不泄露完整 URL）
 func (s sourceSet) label(i int) string {
@@ -275,10 +293,25 @@ type probeResult struct {
 
 // probeRemote 用 Range: bytes=0-0 探测文件总大小与 ETag（作为一致性基线）。
 // 依次尝试各候选来源；全部失败返回 error。
+// 直连（候选 0）只给 directProbeTimeout，超时即视为直连不可用，
+// 返回的 source 会落在镜像上，调用方据此决定后续是否还走直连。
 func probeRemote(ctx context.Context, client *http.Client, src sourceSet, userAgent string) (*probeResult, error) {
 	var lastErr error
 	for i := 0; i < src.count(); i++ {
-		size, etag, rangeOK, err := probeOne(ctx, client, src.urlFor(i), userAgent)
+		pctx := ctx
+		if i == 0 && src.usesDirect() {
+			var cancel context.CancelFunc
+			pctx, cancel = context.WithTimeout(ctx, directProbeTimeout)
+			size, etag, rangeOK, err := probeOne(pctx, client, src.urlFor(i), userAgent)
+			cancel()
+			if err != nil {
+				slog.Info("GitHub 直连探测未在时限内成功，改用加速源", "timeout", directProbeTimeout, "err", err)
+				lastErr = fmt.Errorf("%s: %w", src.label(i), err)
+				continue
+			}
+			return &probeResult{size: size, etag: etag, source: i, hasETag: strings.TrimSpace(etag) != "", rangeOK: rangeOK}, nil
+		}
+		size, etag, rangeOK, err := probeOne(pctx, client, src.urlFor(i), userAgent)
 		if err != nil {
 			lastErr = fmt.Errorf("%s: %w", src.label(i), err)
 			continue
@@ -290,6 +323,9 @@ func probeRemote(ctx context.Context, client *http.Client, src sourceSet, userAg
 	}
 	return nil, lastErr
 }
+
+// usesDirect 本次是否有直连候选（候选 0 为直连）
+func (s sourceSet) usesDirect() bool { return len(s.prefixes) > 0 && !s.noDirect }
 
 // probeOne 对单个地址做 Range 探测。
 // 206 + Content-Range 表示支持分片；200 表示服务器忽略 Range（不支持），
@@ -615,7 +651,16 @@ func parallelDownload(ctx context.Context, client *http.Client, dst *os.File, sr
 
 					// 每片独立 ctx：墙钟到点就 cancel，让这条连接立刻被放弃
 					// （否则慢镜像的 goroutine 会一直占着连接池，连带堵住其它分片）
-					chunkCtx, chunkCancel := context.WithTimeout(ctx, chunkDeadline(cr, attempt))
+					deadline := chunkDeadline(cr, attempt)
+					if si == 0 && src.usesDirect() {
+						// 直连：探测通过不代表下载能续。GitHub 资源域名常见「握手后
+						// 卡住不回包」，这类连接要么快要么根本不回数据，给它更短的
+						// 停顿上限，卡住即改派加速源，不让整个更新挂在这里。
+						if deadline > directStallLimit {
+							deadline = directStallLimit
+						}
+					}
+					chunkCtx, chunkCancel := context.WithTimeout(ctx, deadline)
 					liveConns.Add(1)
 					data, _, err := fetchRange(chunkCtx, client, url, cr, baseETag, updateUserAgent)
 					liveConns.Add(-1)
@@ -871,7 +916,8 @@ func sha256File(path string) (string, error) {
 
 // fetchFPK 下载更新包到 dest 并做完整校验（魔数 / 大小 / SHA-256），
 // 先写 dest+".part"，全部校验通过后 fsync + rename。
-// direct 表示本次唯一可用来源是 GitHub 直连（仅影响「上游无摘要」时的取舍）。
+// direct 表示本次只用 GitHub 直连、不走加速源（用于镜像全挂时的兜底重试）。
+// 常规调用（direct=false）是「直连优先、超时再走加速源」。
 //
 // 任何失败路径都会删除 .part 并把错误抛给调用方，调用方随即释放 updating 标志，
 // 因此用户点「一键更新」重试即可，不会被残留文件或卡住的标志挡住。

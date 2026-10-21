@@ -154,9 +154,36 @@ func testReleaseInfo(payload []byte) *releaseInfo {
 	}
 }
 
+// --- 直连超时 -------------------------------------------------------------
+
+// 直连「握手成功但不回数据」是 GitHub 资源域名被墙时的典型表现：
+// 探测必须在 directProbeTimeout 内放弃，随后落到加速源上，而不是挂到整体超时。
+func TestDirectProbeTimesOutAndFallsBackToMirror(t *testing.T) {
+	payload := fakePayload(1024)
+	hung := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // 不写任何响应，模拟连接被黑洞
+	}))
+	t.Cleanup(hung.Close)
+	mirror := newMirrorServer(t, payload)
+	src := sourceSet{prefixes: []string{mirror.URL + "/"}, rawURL: hung.URL + "/x.fpk"}
+
+	start := time.Now()
+	probe, err := probeRemote(context.Background(), updateClient(), src, updateUserAgent)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("直连超时后应落到镜像: %v", err)
+	}
+	if elapsed > directProbeTimeout+2*time.Second {
+		t.Fatalf("直连应被 directProbeTimeout 限时，实际耗时 %v", elapsed)
+	}
+	if probe.source != 1 {
+		t.Fatalf("探测应落在镜像（候选 1），实际 %d", probe.source)
+	}
+}
+
 // --- 镜像顺序 -------------------------------------------------------------
 
-// 下载顺序是用户可见行为：加速镜像按 UpdateMirrors 顺序在前，直连 GitHub 最后兜底。
+// 下载顺序是用户可见行为：GitHub 直连在前，加速镜像按 UpdateMirrors 顺序兜底。
 // 顺序或域名被改回去（例如又变成 gh.dpik.top 优先）时这条会立刻失败。
 func TestDownloadSourcesOrder(t *testing.T) {
 	const fp = "https://github.com/o/r/releases/download/v1/x-amd64.fpk"
@@ -164,17 +191,17 @@ func TestDownloadSourcesOrder(t *testing.T) {
 	if len(srcs) != len(UpdateMirrors)+1 {
 		t.Fatalf("来源数量应为 %d，实际 %d", len(UpdateMirrors)+1, len(srcs))
 	}
-	for i, m := range UpdateMirrors {
-		if want := m + fp; srcs[i].url != want {
-			t.Fatalf("第 %d 个来源应为镜像 %q，实际 %q", i+1, want, srcs[i].url)
-		}
-		if srcs[i].direct {
-			t.Fatalf("镜像来源不应标记为直连: %q", srcs[i].url)
-		}
+	first := srcs[0]
+	if first.url != fp || !first.direct {
+		t.Fatalf("首个来源应为 GitHub 直连，实际 %q direct=%v", first.url, first.direct)
 	}
-	last := srcs[len(srcs)-1]
-	if last.url != fp || !last.direct {
-		t.Fatalf("最后一个来源应为 GitHub 直连，实际 %q direct=%v", last.url, last.direct)
+	for i, m := range UpdateMirrors {
+		if want := m + fp; srcs[i+1].url != want {
+			t.Fatalf("第 %d 个来源应为镜像 %q，实际 %q", i+2, want, srcs[i+1].url)
+		}
+		if srcs[i+1].direct {
+			t.Fatalf("镜像来源不应标记为直连: %q", srcs[i+1].url)
+		}
 	}
 	// 全部提示语非空且互不重复，进度条上才能看出当前走的是哪条链路
 	seen := map[string]bool{}
@@ -391,7 +418,8 @@ func TestParallelDownloadFailoverOn500(t *testing.T) {
 	if err != nil {
 		t.Fatalf("探测应跳过 500 的镜像并成功: %v", err)
 	}
-	if probe.source != 1 {
+	// 候选 0 是直连（example.invalid 不可达），因此首个可用镜像落在 2
+	if probe.source != 2 {
 		t.Fatalf("探测应落在第 2 个镜像上，实际 %d", probe.source)
 	}
 	dest := filepath.Join(t.TempDir(), "out.part")
@@ -453,7 +481,8 @@ func TestParallelDownloadETagMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("探测失败: %v", err)
 	}
-	if probe.source != 0 {
+	// 候选 0 是直连（不可达），首个可用镜像落在 1
+	if probe.source != 1 {
 		t.Fatalf("探测应落在首个镜像，实际 %d", probe.source)
 	}
 	dest := filepath.Join(t.TempDir(), "out.part")
