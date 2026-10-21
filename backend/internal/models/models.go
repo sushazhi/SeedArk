@@ -384,6 +384,7 @@ type SettingsSection struct {
 const (
 	SettingIconBehavior   = "behavior"   // 常规行为 / 启动
 	SettingIconDownload   = "download"   // 下载行为与保存路径
+	SettingIconSeeding    = "seeding"    // 做种 / 分享率与做种时长
 	SettingIconConnect    = "connect"    // 连接 / 端口 / 代理
 	SettingIconSpeed      = "speed"      // 速率限制
 	SettingIconBitTorrent = "bittorrent" // BitTorrent 协议细节
@@ -395,6 +396,7 @@ const (
 	SettingIconPeers      = "peers"      // 连接数 / Peer
 	SettingIconScripts    = "scripts"    // 脚本钩子
 	SettingIconStorage    = "storage"    // 存储 / 缓存
+	SettingIconOther      = "other"      // 其他杂项（没有更贴切语义时的兜底节）
 )
 
 // SessionStats 会话统计（累计 / 当前）

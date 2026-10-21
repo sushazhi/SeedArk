@@ -2,12 +2,15 @@ import type { ReactNode } from 'react'
 import {
   Download,
   Gauge,
+  ListOrdered,
   Monitor,
   Network,
   Plug,
   Rss,
   SlidersHorizontal,
+  Sprout,
   Workflow,
+  Wrench,
 } from 'lucide-react'
 import type { DownloaderKind } from '@/types'
 
@@ -101,6 +104,7 @@ export function isOtherDefault(url: string, kind: DownloaderKind): boolean {
 const SECTION_ICONS: Record<string, ReactNode> = {
   behavior: <Workflow />,
   download: <Download />,
+  seeding: <Sprout />,
   connect: <Plug />,
   speed: <Gauge />,
   bittorrent: <Network />,
@@ -108,10 +112,11 @@ const SECTION_ICONS: Record<string, ReactNode> = {
   webui: <Monitor />,
   advanced: <SlidersHorizontal />,
   network: <Network />,
-  queue: <Workflow />,
+  queue: <ListOrdered />,
   peers: <Network />,
   scripts: <SlidersHorizontal />,
   storage: <Download />,
+  other: <Wrench />,
 }
 
 export const sectionIcon = (icon?: string): ReactNode =>

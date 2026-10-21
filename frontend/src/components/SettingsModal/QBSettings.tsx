@@ -13,6 +13,7 @@ import { usePlatform } from '@/platform'
 import { cn } from '@/lib/utils'
 import type { SettingsField, SettingsSection } from '@/types'
 import { Group, NumInput, Row, Section, SmallSelect } from './controls'
+import { sectionIcon } from './downloaders'
 
 // 一节里键太多时按「是否启用 / 是否危险 / 只读」自动分组。
 // 这不是 qBittorrent 专有知识，而是通用的信息分层：一屏十几个同权重的行，
@@ -317,7 +318,7 @@ export function QBSettings({ schema, values, onSave }: QBSettingsProps) {
         }}
       />
       {schema.map((sec) => (
-        <Section key={sec.key} id={`qb-${sec.key}`} title={lang === 'en' && sec.labelEn ? sec.labelEn : sec.label}>
+        <Section key={sec.key} id={`qb-${sec.key}`} title={lang === 'en' && sec.labelEn ? sec.labelEn : sec.label} icon={sectionIcon(sec.icon)}>
           <QBFields sec={sec} lang={lang} values={values} draft={draft} setDraft={setDraft} />
         </Section>
       ))}

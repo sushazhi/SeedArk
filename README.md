@@ -346,7 +346,7 @@ qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录�
 2. 想让设置面板自动成形，就实现 `SettingsSchema()`：分节配上语义图标名（`driver.SettingIcon*`，如 `speed` / `webui`），字段用 `driver.Field*` 类型
 3. 前端在 `DOWNLOADERS` 注册表加一条（默认地址、显示名、短标）
 
-**分节与字段的渲染完全由 schema 决定**：只要驱动给了 `schema`，界面就按自述的分节建导航、按 `icon` 取图标、按字段类型出控件，并自动获得草稿 + 吸顶保存条（未保存改动跨节保留）。没给 `schema` 的驱动（如 Transmission）自动回落到内置的通用会话表单，行为与改造前一致。
+**分节与字段的渲染完全由 schema 决定**：只要驱动给了 `schema`，界面就按自述的分节建导航、按 `icon` 取图标、按字段类型出控件，并自动获得草稿 + 吸顶保存条（未保存改动跨节保留）。没给 `schema` 的驱动（如 Transmission）自动回落到内置的通用会话表单，其分节同样按这套语义名取图标（`download` / `seeding` / `queue` / `speed` / `network` / `other`）。
 
 > 判据是**数据特征**（有没有 `schema`），不是下载器类型字符串——所以加第三、第四个下载器都不需要回前端加分支；只有出现全新的控件类型时才需要动渲染层。
 

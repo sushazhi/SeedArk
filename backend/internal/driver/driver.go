@@ -134,6 +134,7 @@ const (
 const (
 	SettingIconBehavior   = models.SettingIconBehavior
 	SettingIconDownload   = models.SettingIconDownload
+	SettingIconSeeding    = models.SettingIconSeeding
 	SettingIconConnect    = models.SettingIconConnect
 	SettingIconSpeed      = models.SettingIconSpeed
 	SettingIconBitTorrent = models.SettingIconBitTorrent
@@ -145,6 +146,7 @@ const (
 	SettingIconPeers      = models.SettingIconPeers
 	SettingIconScripts    = models.SettingIconScripts
 	SettingIconStorage    = models.SettingIconStorage
+	SettingIconOther      = models.SettingIconOther
 )
 
 // 自述的载体类型定义在 models：会话响应（models.Session.Schema）要原样带上
