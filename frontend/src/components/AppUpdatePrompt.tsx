@@ -192,6 +192,9 @@ export function AppUpdatePrompt() {
             <p className="mt-1 text-footnote text-gray-500 dark:text-gray-400">
               {updStatus?.progress ?? 0}% · {updStatus?.message}
             </p>
+            {/* 分片并发下载：进度文案由后端按「镜像 + x/y 切片」给出，
+                这里补充一条可操作提示，避免失败后用户不知道该做什么 */}
+            <p className="mt-1 text-caption1 text-gray-400 dark:text-gray-500">{t('session.updateRetryHint')}</p>
           </div>
         )}
         {failed && <p className="text-body text-red-500">{updStatus?.message || t('session.updateFailed')}</p>}

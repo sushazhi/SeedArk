@@ -363,7 +363,7 @@ function AboutSection({ transmissionVersion, framed = true }: { transmissionVers
   )
 
   // 移动端仍是可折叠分节；桌面端由左栏导航充当标题，直接给内容
-  return framed ? <Section id="about" title={t('session.about')}>{body}</Section> : <>{body}</>
+  return framed ? <Section id="about" title={t('session.about')} icon={<Info />}>{body}</Section> : <>{body}</>
 }
 
 // 反馈渠道行：与弹窗内子卡片同一套边框/底色，整行可点 + 外链图标收在行尾
@@ -968,6 +968,10 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {
           key: 'download',
           title: t('session.download'),
+          // 分节图标用**语义名**（见 downloaders.tsx 的 sectionIcon），
+          // 与驱动自述的 SettingsSection.Icon 同一套词汇表——
+          // 内置表单因此不必自建一张「节名 → 图形」的对照表
+          icon: 'download',
           children: (
             <div className="space-y-1">
               <Row label={t('session.downloadDir')}>
@@ -1005,6 +1009,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {
           key: 'seeding',
           title: t('session.seeding'),
+          icon: 'seeding',
           children: (
             <div className="space-y-1">
               {caps?.globalSeedRatio !== false && (
@@ -1024,6 +1029,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {
           key: 'queue',
           title: t('session.queue'),
+          icon: 'queue',
           children: (
             <div className="space-y-1">
               <Row label={t('session.downloadQueueEnabled')} hint={t('session.downloadQueueEnabledHint')}>
@@ -1054,6 +1060,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {
           key: 'bandwidth',
           title: t('session.bandwidth'),
+          icon: 'speed',
           children: (
             <div className="space-y-1">
               <Row label={t('session.speedLimitDown')} hint={t('session.speedLimitDownHint')}>
@@ -1145,6 +1152,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {
           key: 'network',
           title: t('session.network'),
+          icon: 'network',
           children: (
             <div className="space-y-1">
               <Row label={t('session.peerPort')} hint={t('session.peerPortHint')}>
@@ -1209,6 +1217,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {
           key: 'other',
           title: t('session.other'),
+          icon: 'other',
           children: (
             <div className="space-y-1">
               {caps?.blocklist !== false && (
@@ -1295,9 +1304,9 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   // 内置表单是即时保存的（没有改动条）。同样按数据判断而非按类型。
   const schemaDriven = schemaSections.length > 0
   // 移动端：套折叠分节；桌面端：裸内容（导航即标题）
-  const chrome = (id: string, title: string, body: ReactNode) =>
+  const chrome = (id: string, title: string, body: ReactNode, icon?: ReactNode) =>
     isMobile
-      ? <Section id={id} title={title}>{body}</Section>
+      ? <Section id={id} title={title} icon={icon}>{body}</Section>
       : <div className="space-y-1">{body}</div>
 
   const panes: PaneDef[] = [
@@ -1307,9 +1316,9 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
       icon: <Plug />,
       node: chrome('connection', t('session.connection'), targetActive ? connectionPane : (
         <p className="text-footnote text-gray-500">{t('session.targetConnHint')}</p>
-      )),
+      ), <Plug />),
     },
-    { id: 'ui', label: t('session.ui'), icon: <Palette />, node: chrome('ui', t('session.ui'), uiPane) },
+    { id: 'ui', label: t('session.ui'), icon: <Palette />, node: chrome('ui', t('session.ui'), uiPane, <Palette />) },
     // 下载器设置：连接的是哪个就显示哪个的自述面板。
     // qBittorrent 有上百个偏好键，由驱动自述分节后通用渲染；
     // Transmission 沿用内置表单（没连 qB 时行为与改造前一致）。
@@ -1338,7 +1347,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </div>
         ) : (
           <div className="px-1 text-footnote text-gray-400">{t('common.loading')}</div>
-        )),
+        ), <SlidersHorizontal />),
     }] : schemaDriven ? (
       // 驱动自述的每一节各做一个导航项：qBittorrent 上百个偏好键分十节，
       // 全塞进一个导航项等于没分。移动端没有导航，回到单列长滚动。
@@ -1346,23 +1355,27 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
       // 这段不认识任何具体下载器：节的 id、标题、图标全部来自 schema。
       schemaSections.map((sec) => {
         const label = lang === 'en' && sec.labelEn ? sec.labelEn : sec.label
+        const icon = sectionIcon(sec.icon)
         return {
           id: `dl-${sec.key}`,
           label,
           // 图标由驱动的语义名决定（见 downloaders.tsx 的 sectionIcon）
-          icon: sectionIcon(sec.icon),
+          icon,
           node: chrome(
             `dl-${sec.key}`,
             label,
             <QBFields sec={sec} lang={lang} values={session.prefs ?? {}} draft={qb.draft} setDraft={qb.setDraft} />,
+            icon,
           ),
         }
       })
     ) : sessionItems.map((item) => ({
       id: item.key,
       label: item.title,
-      icon: <SlidersHorizontal />,
-      node: chrome(item.key, item.title, item.children),
+      // 内置表单的每一节也按语义名取图标（与驱动自述同一条通路）。
+      // 此前这里硬编码同一个 SlidersHorizontal，六个分节图标全一样。
+      icon: sectionIcon(item.icon),
+      node: chrome(item.key, item.title, item.children, sectionIcon(item.icon)),
     }))),
     {
       id: 'multiServer',
@@ -1476,7 +1489,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             </div>
           </div>
         )}
-        </>),
+        </>, <Server />),
     },
     {
       id: 'automation',
@@ -1500,7 +1513,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <Button size="sm" variant="outline" className="w-full h-8 text-footnote" onClick={() => setOpenMcp(true)}>
             {t('session.mcp.title')}
           </Button>
-        </div>),
+        </div>, <Workflow />),
     },
     {
       id: 'about',

@@ -110,6 +110,41 @@ jobs:
             echo "has_notes=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # 自更新加速源清单：文件名固定为 update-mirrors.txt，每行一个 https 前缀。
+      # fpk 打包脚本（fnos-transmission/build.py）把它注入到 app/bin/update-mirrors.txt，
+      # seedark 启动时优先读它、否则回退内置 UpdateMirrors。
+      # 内容必须与 backend/internal/platform/fnos/update_download.go 的 UpdateMirrors
+      # 以及 fnos-transmission/tools/gh_mirror.py 的 MIRRORS 完全一致（顺序也一致）。
+      - name: 生成加速源清单 update-mirrors.txt
+        run: |
+          set -e
+          mkdir -p release
+          # 直接从未经格式化的 Go 源码里提取 UpdateMirrors，避免「常量改了、清单没改」：
+          # 清单与代码必须同一份事实来源，否则应用内更新会去连已淘汰的源。
+          python3 - <<'PY'
+          import re, pathlib
+          src = pathlib.Path("backend/internal/platform/fnos/update_download.go").read_text(encoding="utf-8")
+          m = re.search(r"var UpdateMirrors = \[\]string\{(.*?)\}", src, re.S)
+          if not m:
+              raise SystemExit("update_download.go 中未找到 UpdateMirrors")
+          mirrors = re.findall(r'"(https?://[^"]+)"', m.group(1))
+          if not mirrors:
+              raise SystemExit("UpdateMirrors 为空")
+          bad = [u for u in mirrors if not u.endswith("/")]
+          if bad:
+              raise SystemExit("镜像前缀必须以 / 结尾: %r" % bad)
+          if any("gh.dpik.top" in u for u in mirrors):
+              raise SystemExit("UpdateMirrors 仍含已淘汰的 gh.dpik.top")
+          out = ["# fnOS 应用更新加速源（每行一个前缀，镜像地址 + GitHub 资源地址即为下载地址）",
+                 "# 顺序即优先级；由 backend/internal/platform/fnos/update_download.go 的 UpdateMirrors 生成"]
+          out += mirrors
+          pathlib.Path("release/update-mirrors.txt").write_text("\n".join(out) + "\n", encoding="utf-8")
+          print("\n".join(out))
+          PY
+          test -s release/update-mirrors.txt
+          echo "release/update-mirrors.txt:"
+          cat release/update-mirrors.txt
+
       - name: 创建 GitHub Release 并上传产物
         uses: softprops/action-gh-release@v3
         with:
@@ -118,3 +153,4 @@ jobs:
           files: |
             release/seedark-*.tar.gz
             release/checksums-*-sha256.txt
+            release/update-mirrors.txt

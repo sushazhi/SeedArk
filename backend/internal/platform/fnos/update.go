@@ -1,13 +1,11 @@
 package fnos
 
 import (
-	"crypto/sha256"
-	"crypto/tls"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -23,17 +21,18 @@ import (
 	"github.com/sushazhi/seedark/backend/internal/models"
 )
 
-// fnOS 应用更新：GitHub Release 检测最新版，下载 fpk 包先直连、失败再走 gh 代理回退
+// fnOS 应用更新：GitHub Release 检测最新版，下载 fpk 包走「多镜像 Range 分片并发」，
+// 镜像不可用/不支持 Range 时回退单流顺序下载。加速源列表见 UpdateMirrors（update_download.go）。
 const (
 	updateRepo        = "sushazhi/fnos-transmission"
 	updateAPIBase     = "https://api.github.com"
-	updateProxyMain   = "https://gh.dpik.top/"
-	updateProxyBackup = "https://v4.gh-proxy.org/"
 	updateCheckTTL    = 5 * time.Minute
 	fpkMaxSize        = 100 << 20 // 100 MB
 	downloadTimeout   = 3 * time.Minute
 	defaultAppVersion = "1.0.0"
 	sha256HexLen      = 64 // SHA-256 的十六进制表示长度
+	// updateUserAgent 下载请求的 UA：部分镜像会过滤非常规 UA（空 UA 直接 403）
+	updateUserAgent = "Mozilla/5.0 (compatible; SeedArk-updater)"
 )
 
 var (
@@ -151,8 +150,10 @@ type githubRelease struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
 		Size               int64  `json:"size"`
-		// Digest 由 GitHub 侧计算（形如 "sha256:<hex>"），是走代理下载时唯一的完整性依据
+		// Digest 由 GitHub 侧计算（形如 "sha256:<hex>"），是走代理下载时唯一的完整性依据。
+		// 注意 GitHub 早期资产只有 md5，需要兜底。
 		Digest string `json:"digest"`
+		MD5    string `json:"md5"`
 	} `json:"assets"`
 }
 
@@ -165,6 +166,7 @@ type releaseInfo struct {
 	FPKName     string
 	FPKSize     int64
 	FPKDigest   string // 期望的 SHA256（十六进制小写），空表示上游未提供
+	FPKMD5      string // 上游只提供 md5 时的兜底摘要（十六进制小写）
 }
 
 // fetchLatestRelease 查询 GitHub 最新 Release 并按架构挑选 fpk 更新包
@@ -191,11 +193,12 @@ func fetchLatestRelease() (*releaseInfo, error) {
 	}
 	arch := appArch()
 	archSuffix := "-" + arch + ".fpk"
-	var fpkURL, fpkName, fpkDigest string
+	var fpkURL, fpkName, fpkDigest, fpkMD5 string
 	var fpkSize int64
 	for _, a := range rel.Assets {
 		if strings.HasSuffix(a.Name, archSuffix) && strings.Contains(strings.ToLower(a.Name), "transmission") {
 			fpkURL, fpkName, fpkSize, fpkDigest = a.BrowserDownloadURL, a.Name, a.Size, normalizeDigest(a.Digest)
+			fpkMD5 = normalizeMD5(a.MD5)
 			break
 		}
 	}
@@ -203,6 +206,7 @@ func fetchLatestRelease() (*releaseInfo, error) {
 		for _, a := range rel.Assets {
 			if strings.HasSuffix(a.Name, ".fpk") {
 				fpkURL, fpkName, fpkSize, fpkDigest = a.BrowserDownloadURL, a.Name, a.Size, normalizeDigest(a.Digest)
+				fpkMD5 = normalizeMD5(a.MD5)
 				break
 			}
 		}
@@ -216,6 +220,7 @@ func fetchLatestRelease() (*releaseInfo, error) {
 		FPKName:     fpkName,
 		FPKSize:     fpkSize,
 		FPKDigest:   fpkDigest,
+		FPKMD5:      fpkMD5,
 	}, nil
 }
 
@@ -236,6 +241,19 @@ func normalizeDigest(raw string) string {
 		return ""
 	}
 	return hexSum
+}
+
+// normalizeMD5 归一化 GitHub 的 md5 字段（32 位十六进制）。仅在 sha256 缺失时兜底使用：
+// 摘要强弱的取舍见 downloadFPK —— 弱摘要只能证明「没被换过」，不能证明「没被构造过」。
+func normalizeMD5(raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if len(raw) != 32 {
+		return ""
+	}
+	if _, err := hex.DecodeString(raw); err != nil {
+		return ""
+	}
+	return raw
 }
 
 // updateService 更新检测/下载状态（进程内单例，含检查结果缓存）
@@ -408,23 +426,35 @@ func (u *updateHandler) download(c *gin.Context) {
 
 // downloadSource 更新包的一个下载来源
 type downloadSource struct {
-	url    string
-	direct bool // 直连 GitHub：元数据与文件同源，摘要缺失时才允许作为可信来源
-	msg    string
+	url     string
+	direct  bool // 直连 GitHub：元数据与文件同源，摘要缺失时才允许作为可信来源
+	msg     string
+	display string
 }
 
-// downloadSources 按尝试顺序给出下载来源：先直连 GitHub，失败再依次走主/备用 gh 代理。
-// 直连排在最前——不经中转、且文件与元数据同源；代理链路只作为兜底
-// （GitHub 的 release 资源域名常被墙，直连不通时才需要它们）。
+// downloadSources 按尝试顺序给出下载来源：加速镜像按 UpdateMirrors 顺序在前，直连 GitHub 兜底。
+// 实测直连 github.com 常被墙（可握手但返回 0 字节并超时），放最前只会让用户先白等一轮超时；
+// 镜像优先才能让「一键更新」在受限网络下直接可用。direct=true 只在最后一条来源上成立。
 func downloadSources(fpURL string) []downloadSource {
-	return []downloadSource{
-		{fpURL, true, "正在下载更新包..."},
-		{updateProxyMain + fpURL, false, "直连下载失败，切换代理 gh.dpik.top..."},
-		{updateProxyBackup + fpURL, false, "代理下载失败，切换备用代理 v4.gh-proxy.org..."},
+	out := make([]downloadSource, 0, len(UpdateMirrors)+1)
+	for i, m := range UpdateMirrors {
+		msg := "正在下载更新包..."
+		if i > 0 {
+			msg = fmt.Sprintf("加速源切换中...（%d/%d）", i+1, len(UpdateMirrors))
+		}
+		out = append(out, downloadSource{url: m + fpURL, msg: msg, display: strings.TrimSuffix(strings.TrimPrefix(m, "https://"), "/")})
 	}
+	out = append(out, downloadSource{
+		url:     fpURL,
+		direct:  true,
+		msg:     "加速源均失败，尝试直连 GitHub...",
+		display: "github.com",
+	})
+	return out
 }
 
-// performUpdate 依次走直连/主代理/备用代理下载 fpk，落盘并校验
+// performUpdate 下载 fpk（多镜像 Range 分片并发，必要时回退单流），落盘并校验。
+// 无论成功失败都会释放 updating 标志、清理 .part，保证用户可立刻重试。
 func (u *updateHandler) performUpdate(info *releaseInfo) {
 	svc := u.svc
 	set := func(progress int, message string) {
@@ -434,7 +464,8 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 	}
 	fail := func(msg string) {
 		svc.mu.Lock()
-		svc.failed, svc.progress, svc.message = true, 0, "更新失败: "+msg
+		svc.failed, svc.progress = true, 0
+		svc.message = "更新失败: " + msg + failureNextStep(info)
 		svc.mu.Unlock()
 	}
 	defer func() {
@@ -450,122 +481,106 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 		return
 	}
 	sources := downloadSources(info.FPKURL)
-	lastErr := ""
-	for _, s := range sources {
-		set(10, s.msg)
-		if err := downloadFPK(s.url, dest, s.direct, info, set); err != nil {
-			lastErr = err.Error()
-			slog.Warn("更新包下载失败", "url", s.url, "err", err)
-			continue
+	primary := sources[0]
+	if len(sources) > 1 {
+		// 首个来源只是「文件名」，分片会轮转到所有镜像，直连在最后兜底
+		primary = sources[len(sources)-1]
+		primary = downloadSource{
+			url:     info.FPKURL,
+			direct:  false,
+			display: strings.TrimSuffix(strings.TrimPrefix(sources[0].url, "https://"), "/"),
 		}
-		set(100, "下载完成")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+
+	set(10, primary.msg)
+	progress := func(written, total int64, doneChunks, totalChunks int, label string) {
+		if label == "" {
+			label = primary.display
+		}
+		if totalChunks > 0 {
+			pct := 10
+			if total > 0 {
+				pct = 10 + int(written*50/total)
+			}
+			if pct > 60 {
+				pct = 60
+			}
+			set(pct, fmt.Sprintf("正在从 %s 下载 · %d/%d 分片 %.1fMB/%.1fMB",
+				label, doneChunks, totalChunks, float64(written)/(1<<20), float64(total)/(1<<20)))
+			return
+		}
+		pct := 10
+		if total > 0 {
+			pct = 10 + int(written*50/total)
+		}
+		if pct > 60 {
+			pct = 60
+		}
+		set(pct, fmt.Sprintf("正在从 %s 下载... %.1fMB/%.1fMB",
+			label, float64(written)/(1<<20), float64(total)/(1<<20)))
+	}
+
+	set(15, "正在校验更新包...")
+	if err := fetchFPK(ctx, info.FPKURL, dest, false, info, progress); err != nil {
+		slog.Warn("更新包下载失败", "url", info.FPKURL, "err", err)
+		// 兜底：分片/镜像全挂时，若直连可用则走一次直连顺序下载（摘要缺失时属可信来源）
+		if ctx.Err() == nil {
+			set(20, "加速源均失败，尝试直连 GitHub...")
+			if derr := fetchFPK(ctx, info.FPKURL, dest, true, info, progress); derr == nil {
+				set(100, "下载完成")
+				return
+			} else {
+				slog.Warn("更新包直连下载失败", "err", derr)
+				err = fmt.Errorf("%v；直连也失败: %v", err, derr)
+			}
+		}
+		fail(err.Error())
 		return
 	}
-	fail(lastErr)
+	set(100, "下载完成")
 }
 
-// downloadFPK 单个 URL 的下载 + 校验（格式魔数 / 大小 / 摘要），失败时清理临时文件。
-// direct 表示本轮是 GitHub 直连下载（仅影响「上游未提供摘要」时的取舍）。
-func downloadFPK(url, dest string, direct bool, info *releaseInfo, set func(int, string)) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return err
+// failureNextStep 失败信息里的可操作下一步：给出发布页让用户手动下载 fpk 安装，
+// 而不是只回一句「更新失败」把用户卡在界面上。
+func failureNextStep(info *releaseInfo) string {
+	if info == nil {
+		return ""
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	client := &http.Client{
-		Timeout:   downloadTimeout,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}},
+	url := info.ReleaseURL
+	if url == "" {
+		url = "https://github.com/" + updateRepo + "/releases/latest"
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("网络错误: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("服务器返回 HTTP %d", resp.StatusCode)
-	}
+	return fmt.Sprintf("。可前往发布页手动下载 fpk 后，在 应用中心 → 手动安装 上传：%s", url)
+}
 
-	// 先清掉上次失败留下的残件，再以 O_EXCL 创建：即便有人预置了同名软链，
-	// Remove 只删链接本身，O_EXCL 也不会跟随链接写到目标文件上
-	tmp := dest + ".part"
-	_ = os.Remove(tmp)
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	fail := func(format string, args ...interface{}) error {
-		f.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf(format, args...)
-	}
-
-	buf := make([]byte, 64*1024)
-	hasher := sha256.New()
-	var downloaded int64
-	for {
-		n, rerr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, werr := f.Write(buf[:n]); werr != nil {
-				return fail("写入失败: %v", werr)
-			}
-			_, _ = hasher.Write(buf[:n])
-			downloaded += int64(n)
-			if downloaded > fpkMaxSize {
-				return fail("下载内容超过大小限制 (%d MB)", fpkMaxSize>>20)
-			}
-			if resp.ContentLength > 0 {
-				progress := 10 + int(downloaded*50/resp.ContentLength)
-				set(progress, fmt.Sprintf("正在下载... %.1fMB/%.1fMB",
-					float64(downloaded)/float64(1<<20), float64(resp.ContentLength)/float64(1<<20)))
-			}
+// downloadFPK 下载单个更新包（旧接口，保留给外部调用/测试）：
+// 全部走 fetchFPK，镜像列表由 UpdateMirrors（或打包侧清单）决定。
+func downloadFPK(rawURL, dest string, direct bool, info *releaseInfo, set func(int, string)) error {
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	var lastPct int
+	progress := func(written, total int64, doneChunks, totalChunks int, label string) {
+		if total <= 0 {
+			return
 		}
-		if rerr == io.EOF {
-			break
+		pct := 10 + int(written*50/total)
+		if pct > 60 {
+			pct = 60
 		}
-		if rerr != nil {
-			return fail("下载中断: %v", rerr)
+		if pct == lastPct {
+			return
 		}
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if downloaded == 0 {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("下载文件为空")
-	}
-	// fpk 实体是 tar.gz / zip 包，校验魔数防止把错误页存成更新包
-	head := make([]byte, 2)
-	if hf, err := os.Open(tmp); err == nil {
-		_, _ = hf.Read(head)
-		hf.Close()
-	}
-	gzipMagic := head[0] == 0x1f && head[1] == 0x8b
-	zipMagic := head[0] == 'P' && head[1] == 'K'
-	if !gzipMagic && !zipMagic {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("文件校验失败: 内容异常 (%q)", head)
-	}
-	if info.FPKSize > 0 && downloaded != info.FPKSize {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("文件大小不匹配: 期望 %d 字节, 实际 %d 字节", info.FPKSize, downloaded)
-	}
-	// 完整性：下载链路经过第三方代理，大小与魔数都可伪造，只有 GitHub 侧算好的摘要
-	// （随 api.github.com 元数据直连取得）能证明这个包没被替换过
-	got := hex.EncodeToString(hasher.Sum(nil))
-	if info.FPKDigest == "" {
-		// 无摘要可校验时，代理链路一律拒绝——否则「校验」形同虚设。
-		// GitHub 直连下载时文件与元数据同源，才降级为仅告警。
-		if !direct {
-			_ = os.Remove(tmp)
-			return fmt.Errorf("发布资源未提供 SHA-256 摘要，无法校验经代理下载的更新包")
+		lastPct = pct
+		if totalChunks > 0 {
+			set(pct, fmt.Sprintf("正在从 %s 下载 · %d/%d 分片", label, doneChunks, totalChunks))
+			return
 		}
-		slog.Warn("发布资源未提供 SHA-256 摘要，本次仅校验了大小与魔数", "fpk", info.FPKName, "sha256", got)
-	} else if !strings.EqualFold(got, info.FPKDigest) {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("文件校验失败: SHA-256 与发布版本不一致（下载链路可能被替换）")
+		set(pct, fmt.Sprintf("正在从 %s 下载... %.1fMB/%.1fMB", label, float64(written)/(1<<20), float64(total)/(1<<20)))
 	}
-	return os.Rename(tmp, dest)
+	return fetchFPK(ctx, rawURL, dest, direct, info, progress)
 }
 
 func fileExists(p string) bool {
