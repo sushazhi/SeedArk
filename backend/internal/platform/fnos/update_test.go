@@ -212,21 +212,6 @@ func TestUpdateMirrorsList(t *testing.T) {
 	}
 }
 
-func TestParseMirrorManifest(t *testing.T) {
-	text := "# 注释行\n\nhttps://gh-proxy.com\nhttps://v4.gh-proxy.org/\nftp://bad/\nhttps://gh.dpik.top/\nhttps://gh-proxy.com/  # 重复\n"
-	got := parseMirrorManifest(text)
-	want := []string{"https://gh-proxy.com/", "https://v4.gh-proxy.org/"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("清单解析不符: %v", got)
-	}
-	if renderMirrorManifest(want) == "" {
-		t.Fatal("清单渲染不应为空")
-	}
-	if out := parseMirrorManifest(renderMirrorManifest(want)); strings.Join(out, ",") != strings.Join(want, ",") {
-		t.Fatalf("渲染/解析应可往返: %v", out)
-	}
-}
-
 // --- 分片边界 -------------------------------------------------------------
 
 func TestPlanChunks(t *testing.T) {
@@ -623,14 +608,7 @@ func TestProbePrefersRangeCapableSource(t *testing.T) {
 func TestFetchFPKSuccess(t *testing.T) {
 	payload := fakePayload(2*downloadChunkSize + 999)
 	m := newMirrorServer(t, payload)
-	// 通过临时清单文件注入镜像列表（与打包侧 update-mirrors.txt 同一机制）
 	dir := t.TempDir()
-	manifest := filepath.Join(dir, "update-mirrors.txt")
-	if err := os.WriteFile(manifest, []byte(renderMirrorManifest([]string{m.URL + "/"})), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SEEDARK_TEST_MIRROR_FILE", manifest)
-
 	info := testReleaseInfo(payload)
 	dest := filepath.Join(dir, "x.fpk")
 	var gotPct []int

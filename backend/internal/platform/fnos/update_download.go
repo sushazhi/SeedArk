@@ -90,8 +90,7 @@ const (
 //   - ghproxy.imciel.com  独立运营，0.5~0.9 MB/s
 //
 // 已淘汰：gh.dpik.top（实测仅 279 KB/s，且 API 侧 403）。
-// 这与 fpk 打包侧 tools/gh_mirror.py 的 MIRRORS 以及打包出的
-// app/bin/update-mirrors.txt 必须保持一致，顺序也不同随意调整。
+// 这份列表是唯一事实来源：不再从安装包里读外部清单，改这里即可。
 var UpdateMirrors = []string{
 	"https://gh-proxy.com/",
 	"https://v4.gh-proxy.org/",
@@ -99,90 +98,27 @@ var UpdateMirrors = []string{
 	"https://ghproxy.imciel.com/",
 }
 
-// mirrorManifestName 打包侧注入的镜像清单文件名（放在 seedark 二进制同级目录）
-const mirrorManifestName = "update-mirrors.txt"
-
-// legacyMirror 已淘汰的旧代理：清单里出现时一律剔除，避免回退到它
+// legacyMirror 已淘汰的旧代理：出现时一律剔除，避免回退到它
 const legacyMirror = "https://gh.dpik.top/"
 
-// testMirrorOverride 仅测试使用：非 nil 时 mirrorOrder 直接返回它（不读磁盘清单）
+// testMirrorOverride 仅测试使用：非 nil 时 mirrorOrder 直接返回它（不读磁盘）
 var testMirrorOverride []string
 
-// mirrorOrder 返回本次下载使用的镜像顺序：
-// 打包侧注入的 update-mirrors.txt（若存在且合法）优先，否则用内置默认列表。
+// mirrorOrder 返回本次下载使用的镜像顺序。
+// 只认内置的 UpdateMirrors——加速源清单随代码走，不读任何外部文件，
+// 也就不存在「清单过期 / 清单与代码不一致」这类问题。
 func mirrorOrder() []string {
 	if testMirrorOverride != nil {
 		return append([]string(nil), testMirrorOverride...)
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return append([]string(nil), UpdateMirrors...)
-	}
-	if got := parseMirrorManifest(readMirrorManifest(exe + ".update-mirrors")); len(got) > 0 {
-		return got
-	}
-	if got := parseMirrorManifest(readMirrorManifest(joinDir(exe, mirrorManifestName))); len(got) > 0 {
-		return got
-	}
-	return append([]string(nil), UpdateMirrors...)
-}
-
-func joinDir(exePath, name string) string {
-	dir := exePath
-	if i := strings.LastIndexAny(exePath, `/\`); i >= 0 {
-		dir = exePath[:i+1]
-	} else {
-		dir += string(os.PathSeparator)
-	}
-	return dir + name
-}
-
-// readMirrorManifest 读清单文件；不存在/读不到返回空串（调用方回退默认列表）
-func readMirrorManifest(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
-// parseMirrorManifest 解析镜像清单：# 开头为注释，空行忽略，
-// 每行一个前缀地址；非 http(s) 或以已淘汰域名开头的行被丢弃。
-// 与打包侧 tools/gh_mirror.py 的 parse_mirrors 保持同一格式，便于交叉核对。
-func parseMirrorManifest(text string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, line := range strings.Split(text, "\n") {
-		if i := strings.IndexByte(line, '#'); i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
+	out := make([]string, 0, len(UpdateMirrors))
+	for _, m := range UpdateMirrors {
+		if strings.HasPrefix(m, legacyMirror) {
 			continue
 		}
-		if !strings.HasPrefix(line, "https://") && !strings.HasPrefix(line, "http://") {
-			continue
-		}
-		if !strings.HasSuffix(line, "/") {
-			line += "/"
-		}
-		if strings.HasPrefix(line, legacyMirror) || seen[line] {
-			continue
-		}
-		seen[line] = true
-		out = append(out, line)
+		out = append(out, m)
 	}
 	return out
-}
-
-// renderMirrorManifest 生成清单文本（供测试与运维核对；格式与打包侧一致）
-func renderMirrorManifest(mirrors []string) string {
-	var b strings.Builder
-	b.WriteString("# fnOS 应用更新加速源（每行一个前缀，镜像地址 + GitHub 资源地址即为下载地址）\n")
-	for _, m := range mirrors {
-		b.WriteString(strings.TrimSpace(m) + "\n")
-	}
-	return b.String()
 }
 
 // contentRange 解析 RFC 7233 的 Content-Range: bytes <start>-<end>/<total>。
