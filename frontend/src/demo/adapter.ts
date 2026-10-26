@@ -46,6 +46,22 @@ import {
   verifyTorrent,
   APP_VERSION,
 } from './state'
+import {
+  ptCalendar,
+  ptDeleteContract,
+  ptDeleteSite,
+  ptLedger,
+  ptMatrix,
+  ptOverview,
+  ptPublishKit,
+  ptPublishPreview,
+  ptSample,
+  ptSaveSite,
+  ptSetContract,
+  ptSites,
+  ptVault,
+  ptVaultDetail,
+} from './pt'
 
 // 演示模式 axios adapter：全部 /api 请求在浏览器内应答，无需真实后端。
 // 未覆盖的接口返回 code!=0，由 request() 统一弹错
@@ -58,6 +74,12 @@ function respond(config: InternalAxiosRequestConfig, data?: unknown): AxiosRespo
 
 function fail(config: InternalAxiosRequestConfig, message: string): AxiosResponse<ApiResponse> {
   return { data: { code: 1, message, data: null }, status: 200, statusText: 'OK', headers: {}, config }
+}
+
+// 二进制响应（档案 .torrent、发种资料包）：调用方用的是 responseType:'blob'，
+// axios 不会再套 ApiResponse，拿到的就是 Blob 本身，因此不能走 respond()
+function respondBlob(config: InternalAxiosRequestConfig, blob: Blob): AxiosResponse<Blob> {
+  return { data: blob, status: 200, statusText: 'OK', headers: {}, config }
 }
 
 function formDataToObject(data: FormData): Record<string, unknown> {
@@ -219,6 +241,53 @@ export const demoAdapter: AxiosAdapter = async (config) => {
   if (url === '/automove/run' && method === 'post') return respond(config)
   const autoDel = /^\/automove\/(.+)$/.exec(url)
   if (autoDel && method === 'delete') { autoMoveRemove(autoDel[1]); return respond(config) }
+
+  // —— 保种台 ——
+  // 演示数据手工编排（见 demo/pt.ts）：七个页签都要有代表性内容，
+  // 否则公开演示页会出现空白页签或报「未提供该接口」
+  if (url === '/pt/overview' && method === 'get') return respond(config, ptOverview())
+  if (url === '/pt/ledger' && method === 'get') return respond(config, ptLedger())
+  if (url === '/pt/calendar' && method === 'get') return respond(config, ptCalendar(params.month as string | undefined))
+  if (url === '/pt/matrix' && method === 'get') return respond(config, ptMatrix())
+  if (url === '/pt/sample' && method === 'post') return respond(config, ptSample())
+  if (url === '/pt/sites' && method === 'get') return respond(config, ptSites())
+  if (url === '/pt/sites' && method === 'post') return respond(config, ptSaveSite(body as never))
+  if (url === '/pt/sites/seed' && method === 'post') return respond(config, { created: 0 })
+  if (url === '/pt/contract' && method === 'post') return respond(config, ptSetContract(body as never))
+  if (url === '/pt/publish/preview' && method === 'post') return respond(config, ptPublishPreview(body as never))
+  if (url === '/pt/publish/kit' && method === 'post') {
+    let payload: never
+    try { payload = JSON.parse(String(body.payload ?? '{}')) as never } catch { payload = {} as never }
+    const file = body.torrent as { name?: string } | undefined
+    return respondBlob(config, ptPublishKit(payload, file?.name))
+  }
+  // 档案文件必须先于 /pt/vault/:id 匹配，否则会被当成档案详情
+  if (/^\/pt\/vault\/[^/]+\/file$/.test(url) && method === 'get') {
+    // 与真实实现一致：v1 只留档磁力，没有 .torrent 文件时返回失败而不是伪造一个
+    return fail(config, '该档案未留存 .torrent 文件（v1 仅留档磁力）')
+  }
+  if (/^\/pt\/vault\/[^/]+\/revive$/.test(url) && method === 'post') {
+    return respond(config, { id: Date.now() % 100000, via: 'magnet' })
+  }
+  if (url === '/pt/vault' && method === 'get') return respond(config, ptVault(params.q as string | undefined))
+  const ptVaultOne = /^\/pt\/vault\/([^/]+)$/.exec(url)
+  if (ptVaultOne && method === 'get') {
+    const d = ptVaultDetail(decodeURIComponent(ptVaultOne[1]))
+    return d ? respond(config, d) : fail(config, '档案不存在')
+  }
+  if (ptVaultOne && method === 'delete') return respond(config, { deleted: true })
+  const ptContractDel = /^\/pt\/contract\/([^/]+)$/.exec(url)
+  if (ptContractDel && method === 'delete') {
+    return ptDeleteContract(decodeURIComponent(ptContractDel[1]))
+      ? respond(config, { deleted: true })
+      : fail(config, '该种子没有保种契约')
+  }
+  const ptSiteDel = /^\/pt\/sites\/([^/]+)$/.exec(url)
+  if (ptSiteDel && method === 'delete') {
+    return ptDeleteSite(decodeURIComponent(ptSiteDel[1]))
+      ? respond(config, { deleted: true })
+      : fail(config, '站点规则不存在')
+  }
 
   // —— 检查更新 ——
   if (url === '/update/check' && method === 'get') {
