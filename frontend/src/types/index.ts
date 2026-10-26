@@ -453,6 +453,8 @@ export interface SeedPolicyRule {
   minRatio: number
   minSeedDays: number
   minUploadGB: number
+  /** 开启后，留 0 的阈值字段取该种子所属站点的站点规则值（规则自身填了值的仍以规则为准） */
+  inheritSite: boolean
   action: SeedPolicyAction
 }
 

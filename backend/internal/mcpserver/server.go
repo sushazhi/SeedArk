@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sushazhi/seedark/backend/internal/driver"
 	"github.com/sushazhi/seedark/backend/internal/platform"
+	"github.com/sushazhi/seedark/backend/internal/pt"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/state"
@@ -22,6 +23,9 @@ type Server struct {
 	policy  *seedpolicy.Service
 	store   *state.Store
 	plat    platform.Platform
+	// ptSvc 保种台数据服务（台账/日历/档案/同内容）。数据目录不可写时为 nil，
+	// 此时不注册保种台相关工具（AI 客户端看不到用不上的工具）
+	ptSvc *pt.Service
 	// allowDelete 控制删除类工具是否可用（高危操作，默认关闭）；
 	// 指向共享的原子开关，设置界面修改后无需重启即生效
 	allowDelete *atomic.Bool
@@ -35,13 +39,14 @@ type Server struct {
 	cache map[driverSig]*mcp.Server
 }
 
-// New 创建 MCP 服务
-func New(manager *rpc.Manager, policy *seedpolicy.Service, store *state.Store, plat platform.Platform, allowDelete, allowDangerous *atomic.Bool, onMutation func()) *Server {
+// New 创建 MCP 服务。ptSvc 可为 nil（保种台不可用时不注册相关工具）
+func New(manager *rpc.Manager, policy *seedpolicy.Service, store *state.Store, plat platform.Platform, allowDelete, allowDangerous *atomic.Bool, onMutation func(), ptSvc *pt.Service) *Server {
 	return &Server{
 		manager:        manager,
 		policy:         policy,
 		store:          store,
 		plat:           plat,
+		ptSvc:          ptSvc,
 		allowDelete:    allowDelete,
 		allowDangerous: allowDangerous,
 		onMutation:     onMutation,

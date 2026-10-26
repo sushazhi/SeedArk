@@ -942,8 +942,9 @@ export function serverSwitch(index: number): { index: number; version: string } 
 // —— 做种策略 ——
 
 let seedRules: SeedPolicyRule[] = [
-  { id: 'sp-1', name: 'HD 保种达标暂停', enabled: true, sites: ['private-hd.club'], labels: [], nameMatch: '', minRatio: 2, minSeedDays: 5, minUploadGB: 0, action: 'pause' },
-  { id: 'sp-2', name: '公开源达标清理', enabled: false, sites: ['example-tracker.org', 'open-mirror.net'], labels: [], nameMatch: '', minRatio: 1, minSeedDays: 3, minUploadGB: 0, action: 'delete' },
+  // 演示「继承站点要求」：这条自己不填天数，延用站点规则里配的值
+  { id: 'sp-1', name: 'HD 保种达标暂停', enabled: true, sites: ['private-hd.club'], labels: [], nameMatch: '', minRatio: 2, minSeedDays: 0, minUploadGB: 0, inheritSite: true, action: 'pause' },
+  { id: 'sp-2', name: '公开源达标清理', enabled: false, sites: ['example-tracker.org', 'open-mirror.net'], labels: [], nameMatch: '', minRatio: 1, minSeedDays: 3, minUploadGB: 0, inheritSite: false, action: 'delete' },
 ]
 const seedGuard: SeedPolicyGuard = { enforce: false, minSeedHours: 48, excludeSites: [], excludeLabels: [] }
 let seedLogs: SeedPolicyLog[] = [

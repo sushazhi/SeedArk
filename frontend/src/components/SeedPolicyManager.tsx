@@ -28,6 +28,7 @@ const emptyRule = (): SeedPolicyRule => ({
   minRatio: 5,
   minSeedDays: 0,
   minUploadGB: 0,
+  inheritSite: false,
   action: 'pause',
 })
 
@@ -138,7 +139,9 @@ export function SeedPolicyManager({ open, onClose }: { open: boolean; onClose: (
 
   const save = async () => {
     if (!editing) return
-    if (editing.minRatio <= 0 && editing.minSeedDays <= 0 && editing.minUploadGB <= 0) {
+    // 全部为 0 时，只有开启了「继承站点要求」才有达标条件可言；
+    // 否则这条规则永远不会命中（既没有自己的阈值，也不会去取站点值）
+    if (editing.minRatio <= 0 && editing.minSeedDays <= 0 && editing.minUploadGB <= 0 && !editing.inheritSite) {
       toast.warning(t('seedPolicy.conditionRequired'))
       return
     }
@@ -334,6 +337,18 @@ export function SeedPolicyManager({ open, onClose }: { open: boolean; onClose: (
                 <TagInput value={editing.labels} onChange={(v) => setEditing({ ...editing, labels: v })} suggestions={allLabels} placeholder={t('seedPolicy.labels')} className="text-footnote" />
               </div>
               <div className="text-footnote text-gray-400">{t('seedPolicy.sitesHint')}</div>
+              {/* 站点要求只需在「保种台 → 站点规则」里配一次，这里开启继承即可，
+                  避免两处各配一遍导致日历与策略互相矛盾。开关必须配一行说明（规范 §9.5） */}
+              <div className={row}>
+                <div className="min-w-0">
+                  <div className={label}>{t('seedPolicy.inheritSite')}</div>
+                  <div className="text-footnote text-gray-400">{t('seedPolicy.inheritSiteHint')}</div>
+                </div>
+                <Switch
+                  checked={editing.inheritSite}
+                  onCheckedChange={(v) => setEditing({ ...editing, inheritSite: v })}
+                />
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <div className="text-footnote text-gray-500 mb-1">{t('seedPolicy.minRatio')}</div>

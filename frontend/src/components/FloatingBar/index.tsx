@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Eraser, FolderOpen, Pause, Play, Plus, Settings, Sprout } from 'lucide-react'
+import { Eraser, FolderOpen, Pause, Play, Plus, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/stores/appStore'
 import { useHideOnScroll } from '@/hooks/useHideOnScroll'
@@ -71,7 +71,9 @@ export function FloatingBar({ isMobile, onOpenAdd, onOpenClean, onOpenSettings, 
 
   const size = isMobile ? 'h-11' : 'h-10'
   const items = [
-    { key: 'add', label: t('topbar.addTask'), icon: Sprout, run: onOpenAdd },
+    // 「添加」一律用 Plus：与胶囊收起态的圆钮、顶栏的「添加任务」保持同一语义。
+    // 曾用 Sprout，与保种台入口撞成同一个图标（移动端两处同时可见，看起来像重复）。
+    { key: 'add', label: t('topbar.addTask'), icon: Plus, run: onOpenAdd },
     {
       key: 'toggleAll',
       label: hasActive ? t('action.pauseAll') : t('action.startAll'),

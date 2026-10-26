@@ -58,6 +58,12 @@ type SeedPolicyRule struct {
 	MinSeedDays float64  `json:"minSeedDays"`
 	MinUploadGB float64  `json:"minUploadGB"`
 	Action      string   `json:"action"` // pause / delete / deleteData
+	// InheritSite 开启后，本规则留 0 的阈值字段取该种子所属站点的 SiteProfile 值，
+	// 规则自身填了值的字段仍以规则为准（用于标签/名称级覆盖）。
+	// 这样「站点要求保多少天、分享率多少」只需在站点规则里配一次，
+	// 不必在策略规则里再抄一遍——两处抄两遍正是日历与策略会互相矛盾的根源。
+	// 默认 false：既有规则行为完全不变。
+	InheritSite bool `json:"inheritSite"`
 }
 
 // SeedPolicyGuard 做种策略全局安全保护，对所有规则生效
@@ -124,6 +130,57 @@ type SpeedApplied struct {
 	Honors bool  `json:"honors"` // 接管前 honorsSessionLimits 的值
 }
 
+// SiteProfile PT 站点规则：把「哪个站的种子要保多久、分享率目标多少、
+// H&R 要求多少小时」收敛成一条可编辑配置，供 PT 中心的释放日历/资产台账估算。
+// MinSeedDays 与 HRSeedHours 都为 0 时视为规则缺失，估算一律显示「待定」而不是猜。
+type SiteProfile struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`        // 展示名
+	Match       string  `json:"match"`       // Tracker 主机名/站点名的子串（大小写不敏感）
+	MinSeedDays float64 `json:"minSeedDays"` // 站点要求的最短做种天数，0 = 不设
+	MinRatio    float64 `json:"minRatio"`    // 目标分享率，0 = 不设
+	HRSeedHours float64 `json:"hrSeedHours"` // H&R 要求的最短做种小时数，0 = 无 H&R
+	// BudgetGB 该站保种体积预算（GB），0 = 不设。
+	// 只用于在概览里标出「这台站占了多少盘、超没超预算」，不触发任何自动清理。
+	BudgetGB float64 `json:"budgetGb"`
+	Enabled  bool    `json:"enabled"`
+}
+
+// MatchSiteProfile 在站点规则里找最匹配的一条。
+//
+// 全站唯一的站点规则匹配实现：保种台（释放日历/台账）与做种策略都走它。
+// 两处各写一份匹配逻辑，就会出现「日历说可释放、策略却继续攥着」这类互相矛盾的结论。
+// 取「匹配串最长」的一条，避免 "m-team" 与 "team" 同时命中时选错；
+// 双向子串匹配，规则里写站点简称也能命中完整 tracker 主机名。
+func MatchSiteProfile(profiles []SiteProfile, site string) (SiteProfile, bool) {
+	s := strings.ToLower(strings.TrimSpace(site))
+	if s == "" {
+		return SiteProfile{}, false
+	}
+	var best SiteProfile
+	bestLen := -1
+	for _, p := range profiles {
+		if !p.Enabled {
+			continue
+		}
+		m := strings.ToLower(strings.TrimSpace(p.Match))
+		if m == "" {
+			continue
+		}
+		if !strings.Contains(s, m) && !strings.Contains(m, s) {
+			continue
+		}
+		if len(m) > bestLen {
+			best = p
+			bestLen = len(m)
+		}
+	}
+	if bestLen < 0 {
+		return SiteProfile{}, false
+	}
+	return best, true
+}
+
 // State 持久化状态
 type State struct {
 	Servers          []Server          `json:"servers"`
@@ -134,6 +191,8 @@ type State struct {
 	SeedPolicyLogs   []SeedPolicyLog   `json:"seedPolicyLogs"`
 	SpeedPolicyRules []SpeedPolicyRule `json:"speedPolicyRules"`
 	SpeedPolicyGuard SpeedPolicyGuard  `json:"speedPolicyGuard"`
+	// SiteProfiles PT 站点规则（PT 中心用；与做种策略规则相互独立）
+	SiteProfiles []SiteProfile `json:"siteProfiles"`
 	// SpeedPolicyApplied 引擎最近一轮下发给各种子（方向 down/up）的限速 KB/s，
 	// 以及接管前是否跟随全局限速。持久化保存：服务重启后仍能区分
 	// 「引擎设定」与「用户手动设定」的限速，只在确认是引擎写入时才释放。
@@ -242,6 +301,7 @@ func Load(path string) (*Store, error) {
 		AutoMoveRules:    []AutoMoveRule{},
 		SeedPolicyRules:  []SeedPolicyRule{},
 		SpeedPolicyRules: []SpeedPolicyRule{},
+		SiteProfiles:     []SiteProfile{},
 		ProcessedMoves:   map[string]string{},
 		ProcessedPolicy:  map[string]string{},
 	}
@@ -272,6 +332,9 @@ func (st *State) normalize() {
 	}
 	if st.SpeedPolicyApplied == nil {
 		st.SpeedPolicyApplied = map[int64]SpeedApplied{}
+	}
+	if st.SiteProfiles == nil {
+		st.SiteProfiles = []SiteProfile{}
 	}
 	// 归档（move）已下线：旧规则改成暂停，避免被引擎静默跳过
 	for i := range st.SeedPolicyRules {

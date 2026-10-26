@@ -1,0 +1,1246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1600, initial-scale=1">
+<title>SeedArk · 保种台效果图</title>
+<style>
+  :root{
+    --bg:#080b12;
+    --panel:rgba(26,29,39,.72);
+    --panel-2:rgba(255,255,255,.045);
+    --panel-3:rgba(255,255,255,.075);
+    --line:rgba(255,255,255,.10);
+    --line-2:rgba(255,255,255,.16);
+    --text:#f4f6fb;
+    --sub:#a7aebd;
+    --muted:#8b94a7;
+    --blue:#0a84ff;
+    --blue-2:#4da3ff;
+    --green:#32d74b;
+    --green-2:#63e57a;
+    --orange:#ff9f0a;
+    --purple:#bf5af2;
+    --pink:#ff6b81;
+    --teal:#64d2ff;
+    --red:#ff453a;
+    --yellow:#ffd60a;
+    --radius:22px;
+    --radius-2:16px;
+    --radius-3:11px;
+    --shadow:0 24px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.075);
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    --mono:"SF Mono","Cascadia Code","Consolas","Microsoft YaHei",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  body{width:1600px;height:1000px;overflow:hidden}
+  button{font-family:var(--font);cursor:pointer;border:0;background:none;color:inherit}
+  ::selection{background:rgba(10,132,255,.35)}
+
+  .ic{width:16px;height:16px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .ic-sm{width:13px;height:13px}
+  .ic-lg{width:19px;height:19px}
+
+  .app{
+    width:1600px;height:1000px;position:relative;overflow:hidden;
+    display:grid;grid-template-columns:232px 1fr;grid-template-rows:64px 1fr;
+    grid-template-areas:"top top" "side main";
+    background:
+      radial-gradient(900px 620px at 12% -6%, rgba(10,132,255,.30), transparent 62%),
+      radial-gradient(820px 600px at 92% 8%, rgba(191,90,242,.22), transparent 62%),
+      radial-gradient(900px 720px at 54% 112%, rgba(50,215,75,.12), transparent 60%),
+      linear-gradient(135deg,#080b12 0%,#0e1220 48%,#090c14 100%);
+  }
+  .app::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(420px 260px at 22% 22%, rgba(100,210,255,.10), transparent 70%),
+      radial-gradient(520px 300px at 78% 34%, rgba(255,159,10,.06), transparent 70%);
+    filter:blur(10px);
+  }
+  .app::after{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.22;
+    background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+    background-size:44px 44px;
+    mask-image:linear-gradient(180deg,black,transparent 88%);
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    grid-area:top;position:relative;z-index:5;display:flex;align-items:center;gap:18px;
+    padding:0 24px;border-bottom:1px solid rgba(255,255,255,.075);
+    background:linear-gradient(180deg,rgba(18,21,30,.78),rgba(13,16,24,.66));
+    backdrop-filter:blur(28px) saturate(160%);
+  }
+  .brand{display:flex;align-items:center;gap:11px;width:196px;flex:0 0 auto}
+  .brand-mark{
+    width:34px;height:34px;border-radius:11px;display:grid;place-items:center;color:#fff;
+    background:linear-gradient(145deg,#2b9bff,#0066d6);
+    box-shadow:0 6px 18px rgba(10,132,255,.40), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .brand-name{font-size:17px;font-weight:650;letter-spacing:.2px}
+  .brand-ver{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 5px;margin-left:1px}
+  .search{
+    width:430px;height:36px;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;
+    background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.085);color:var(--muted);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .search span{font-size:13px;flex:1;color:#8b93a5}
+  .kbd{font-size:10px;color:#8993a6;border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:2px 5px;background:rgba(255,255,255,.04)}
+  .top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .speed{
+    height:32px;border-radius:10px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:12px;
+    color:#c9d0de;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.075);font-variant-numeric:tabular-nums;
+  }
+  .speed.up .ic{color:var(--green)}
+  .speed.down .ic{color:var(--blue-2)}
+  .top-conn{font-size:11px;color:#8e97a9;display:flex;align-items:center;gap:6px;padding:0 4px}
+  .dot-live{width:7px;height:7px;border-radius:99px;background:var(--green);box-shadow:0 0 0 4px rgba(50,215,75,.10)}
+  .icon-btn{
+    width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#b7bfce;
+    background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);
+  }
+  .avatar{
+    width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:650;color:#fff;
+    background:linear-gradient(145deg,#ff9f0a,#ff453a);box-shadow:0 4px 12px rgba(255,69,58,.28);
+  }
+
+  /* ---------- sidebar ---------- */
+  .sidebar{
+    grid-area:side;position:relative;z-index:4;padding:16px 13px 14px;overflow:hidden;
+    border-right:1px solid rgba(255,255,255,.065);
+    background:linear-gradient(180deg,rgba(17,20,29,.62),rgba(11,14,21,.72));
+    backdrop-filter:blur(24px) saturate(140%);
+    display:flex;flex-direction:column;gap:13px;
+  }
+  .side-label{font-size:10px;letter-spacing:.11em;color:#8b94a7;text-transform:uppercase;padding:0 9px;margin:2px 0 -3px}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav-item{
+    height:33px;border-radius:10px;display:flex;align-items:center;gap:9px;padding:0 9px;color:#aab2c2;font-size:12.5px;
+  }
+  .nav-item .ic{color:#7e879a}
+  .nav-item .n{margin-left:auto;font-size:11px;color:#8b94a7;font-variant-numeric:tabular-nums}
+  .nav-item.active{background:linear-gradient(90deg,rgba(10,132,255,.22),rgba(10,132,255,.07));color:#fff;box-shadow:inset 0 0 0 1px rgba(10,132,255,.22)}
+  .nav-item.active .ic{color:var(--blue-2)}
+  .nav-item.active .n{color:#9fc9ff}
+  .nav-item.new::after{content:"NEW";font-size:8px;font-weight:700;letter-spacing:.04em;color:#081018;background:linear-gradient(135deg,#8be28b,#32d74b);border-radius:4px;padding:1px 4px;margin-left:2px}
+  .side-divider{height:1px;background:rgba(255,255,255,.065);margin:1px 2px}
+
+  .site-list{display:flex;flex-direction:column;gap:3px}
+  .site-item{height:31px;border-radius:9px;display:flex;align-items:center;gap:8px;padding:0 8px;color:#aab2c2;font-size:12px}
+  .site-item .sdot{width:7px;height:7px;border-radius:99px;flex:0 0 auto}
+  .site-item .sname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .site-item .scount{font-size:10.5px;color:#717a8d;font-variant-numeric:tabular-nums}
+  .site-item .sbar{width:34px;height:3px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+  .site-item .sbar i{display:block;height:100%;border-radius:99px}
+
+  .disk-card{
+    margin-top:auto;border-radius:15px;padding:12px 13px;background:rgba(255,255,255,.045);
+    border:1px solid rgba(255,255,255,.075);box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .disk-top{display:flex;align-items:center;gap:7px;font-size:11px;color:#9da6b8}
+  .disk-top .ic{color:#8e97a9}
+  .disk-num{margin-top:7px;font-size:18px;font-weight:640;letter-spacing:-.2px;font-variant-numeric:tabular-nums}
+  .disk-num small{font-size:11px;color:#7e879a;font-weight:500;margin-left:2px}
+  .disk-bar{height:6px;border-radius:99px;background:rgba(255,255,255,.075);margin-top:9px;overflow:hidden}
+  .disk-bar i{display:block;height:100%;width:70%;border-radius:99px;background:linear-gradient(90deg,#0a84ff,#64d2ff);box-shadow:0 0 14px rgba(10,132,255,.45)}
+  .disk-foot{display:flex;justify-content:space-between;margin-top:7px;font-size:10.5px;color:#7d8698}
+  .disk-foot b{color:#c6cede;font-weight:600}
+
+  /* ---------- main ---------- */
+  .main{grid-area:main;position:relative;z-index:3;padding:17px 25px 22px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .crumb{font-size:11px;color:#8b94a7;display:flex;align-items:center;gap:5px;margin-bottom:4px}
+  .crumb b{color:#98a2b5;font-weight:500}
+  .pt-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:13px}
+  .pt-title{font-size:27px;line-height:1.1;font-weight:680;letter-spacing:-.4px}
+  .pt-title .spark{color:var(--blue-2);margin-right:4px}
+  .pt-sub{font-size:12px;color:#8e97a9;margin-top:6px;display:flex;align-items:center;gap:8px}
+  .pt-sub .sep{width:3px;height:3px;border-radius:99px;background:#596173}
+  .head-actions{display:flex;align-items:center;gap:8px}
+  .seg{display:flex;padding:3px;border-radius:11px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.075);gap:2px}
+  .seg button{height:28px;padding:0 11px;border-radius:8px;font-size:11.5px;color:#8d96a8}
+  .seg button.on{background:rgba(255,255,255,.11);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.08)}
+  .btn{
+    height:32px;border-radius:10px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    font-size:12px;font-weight:560;color:#dbe2ee;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);
+  }
+  .btn:hover{background:rgba(255,255,255,.09)}
+  .btn.primary{
+    color:#fff;background:linear-gradient(135deg,#3095ff,#0068dd);border-color:rgba(120,190,255,.35);
+    box-shadow:0 8px 22px rgba(10,132,255,.28),inset 0 1px 0 rgba(255,255,255,.28);
+  }
+  .btn.ghost{background:rgba(255,255,255,.035)}
+  .btn.danger{color:#ffb4ae;background:rgba(255,69,58,.10);border-color:rgba(255,69,58,.20)}
+  .btn .ic{width:14px;height:14px}
+
+  .tabs{
+    display:flex;align-items:center;gap:3px;padding:4px;border-radius:14px;width:max-content;margin-bottom:13px;
+    background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  .tab{
+    height:32px;padding:0 14px;border-radius:10px;display:flex;align-items:center;gap:7px;
+    font-size:12.5px;color:#8d96a8;white-space:nowrap;
+  }
+  .tab .ic{width:14px;height:14px;color:#8b94a7}
+  .tab.active{background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.075));color:#fff;box-shadow:0 3px 9px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.13)}
+  .tab.active .ic{color:var(--blue-2)}
+  .tab .badge{font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(255,159,10,.16);color:#ffc45e;border:1px solid rgba(255,159,10,.20)}
+
+  .screen{display:none;height:calc(100% - 0px);min-height:0}
+  body[data-s="overview"] #s-overview,
+  body[data-s="calendar"] #s-calendar,
+  body[data-s="ledger"] #s-ledger,
+  body[data-s="vault"] #s-vault,
+  body[data-s="matrix"] #s-matrix,
+  body[data-s="publish"] #s-publish{display:block}
+
+  .card{
+    position:relative;border-radius:var(--radius);border:1px solid rgba(255,255,255,.10);
+    background:linear-gradient(180deg,rgba(35,39,51,.72),rgba(19,22,31,.80));
+    box-shadow:var(--shadow);backdrop-filter:blur(26px) saturate(150%);overflow:hidden;
+  }
+  .card.soft{background:linear-gradient(180deg,rgba(30,34,45,.58),rgba(18,21,29,.66));border-color:rgba(255,255,255,.075)}
+  .card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 17px 10px}
+  .card-t{font-size:13px;font-weight:620;letter-spacing:.1px}
+  .card-a{font-size:11px;color:#909aad;display:flex;align-items:center;gap:5px}
+  .muted{color:var(--muted)}
+  .sub{color:var(--sub)}
+  .num{font-variant-numeric:tabular-nums}
+  .pill{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;font-size:10px;font-weight:560;border:1px solid transparent;white-space:nowrap}
+  .pill.green{color:#8af09a;background:rgba(50,215,75,.12);border-color:rgba(50,215,75,.18)}
+  .pill.blue{color:#8ec5ff;background:rgba(10,132,255,.13);border-color:rgba(10,132,255,.18)}
+  .pill.orange{color:#ffc45e;background:rgba(255,159,10,.12);border-color:rgba(255,159,10,.18)}
+  .pill.red{color:#ffaaa4;background:rgba(255,69,58,.12);border-color:rgba(255,69,58,.18)}
+  .pill.purple{color:#dda6ff;background:rgba(191,90,242,.13);border-color:rgba(191,90,242,.18)}
+  .pill.gray{color:#aab3c4;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.08)}
+
+  /* ---------- overview ---------- */
+  .ov-top{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;height:228px}
+  .hero{padding:21px 22px;display:flex;gap:20px;background:
+    radial-gradient(420px 210px at 92% 10%,rgba(10,132,255,.22),transparent 70%),
+    linear-gradient(180deg,rgba(35,39,51,.78),rgba(18,21,30,.84));}
+  .hero::after{content:"";position:absolute;right:-70px;top:-90px;width:280px;height:280px;border-radius:50%;border:1px solid rgba(100,180,255,.14);box-shadow:0 0 0 34px rgba(100,180,255,.028),0 0 0 70px rgba(100,180,255,.018)}
+  .hero-l{flex:1;min-width:0;position:relative;z-index:1}
+  .eyebrow{font-size:11px;color:#8fbdf4;letter-spacing:.06em;display:flex;align-items:center;gap:6px}
+  .hero-num{font-size:49px;line-height:1.22;font-weight:700;letter-spacing:-1.6px;margin:10px 0 2px;font-variant-numeric:tabular-nums}
+  .hero-num span{font-size:17px;font-weight:600;color:#9ab5d8;letter-spacing:0}
+  .hero-sub{font-size:12px;color:#9aa4b7;line-height:1.5}
+  .hero-sub b{color:#e9eef8;font-weight:600}
+  .hero-actions{display:flex;gap:8px;margin-top:17px}
+  .hero-r{width:250px;flex:0 0 auto;display:flex;flex-direction:column;justify-content:flex-end;position:relative;z-index:1}
+  .mini-bars{display:flex;align-items:flex-end;gap:7px;height:112px;padding:0 2px}
+  .mbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+  .mbar i{display:block;width:100%;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,rgba(80,180,255,.95),rgba(10,132,255,.30));box-shadow:0 0 12px rgba(10,132,255,.18)}
+  .mbar.today i{background:linear-gradient(180deg,#8ef29c,rgba(50,215,75,.28));box-shadow:0 0 14px rgba(50,215,75,.22)}
+  .mbar em{font-size:9px;color:#747e91;font-style:normal}
+  .mbar.today em{color:#9decaa}
+  .mini-legend{display:flex;gap:12px;font-size:9.5px;color:#909aad;margin-top:9px}
+  .mini-legend span{display:flex;align-items:center;gap:5px}
+  .lg-dot{width:6px;height:6px;border-radius:99px}
+
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;height:228px}
+  .stat{padding:14px 15px;border-radius:18px;border:1px solid rgba(255,255,255,.085);background:linear-gradient(180deg,rgba(32,36,47,.65),rgba(18,21,29,.72));box-shadow:inset 0 1px 0 rgba(255,255,255,.045);position:relative;overflow:hidden}
+  .stat .st-top{display:flex;align-items:center;gap:7px;font-size:10.5px;color:#8d96a8}
+  .stat .st-top .ic{width:14px;height:14px;color:#7e889b}
+  .stat .st-num{font-size:22px;font-weight:660;margin-top:9px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+  .stat .st-num small{font-size:11px;color:#8b94a7;font-weight:500;margin-left:2px}
+  .stat .st-foot{font-size:10px;color:#8b94a7;margin-top:5px;display:flex;align-items:center;gap:5px}
+  .stat .st-foot b{color:#9decaa;font-weight:600}
+  .stat.warn .st-num{color:#ffc45e}
+  .stat .st-glow{position:absolute;right:-22px;bottom:-30px;width:90px;height:90px;border-radius:50%;background:rgba(10,132,255,.12);filter:blur(12px)}
+  .stat.warn .st-glow{background:rgba(255,159,10,.13)}
+
+  .site-row{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;height:112px;margin-top:13px}
+  .site-card{padding:12px 13px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.60),rgba(17,20,28,.68));box-shadow:inset 0 1px 0 rgba(255,255,255,.04);position:relative;overflow:hidden}
+  .site-card .sc-top{display:flex;align-items:center;gap:7px}
+  .site-card .sc-dot{width:8px;height:8px;border-radius:99px;box-shadow:0 0 0 3px rgba(255,255,255,.035)}
+  .site-card .sc-name{font-size:12px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .site-card .sc-ratio{font-size:10px;color:#9decaa;font-variant-numeric:tabular-nums}
+  .site-card .sc-main{display:flex;align-items:flex-end;gap:8px;margin-top:9px}
+  .site-card .sc-count{font-size:19px;font-weight:660;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+  .site-card .sc-size{font-size:10px;color:#909aad;margin-bottom:2px}
+  .site-card .sc-bar{height:4px;border-radius:99px;background:rgba(255,255,255,.075);margin-top:8px;overflow:hidden}
+  .site-card .sc-bar i{display:block;height:100%;border-radius:99px}
+  .site-card .sc-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:9.5px;color:#8993a6}
+  .site-card .sc-foot b{color:#b9c2d3;font-weight:550}
+
+  .ov-bottom{display:grid;grid-template-columns:1.62fr 1fr;gap:14px;height:calc(100% - 366px);margin-top:13px;min-height:0}
+  .tbl{padding:0 0 8px;display:flex;flex-direction:column;min-height:0}
+  .tbl-head{display:grid;grid-template-columns:1fr 74px 64px 78px 78px 62px;gap:8px;padding:0 17px 8px;font-size:10px;color:#8b94a7;letter-spacing:.02em}
+  .tbl-row{display:grid;grid-template-columns:1fr 74px 64px 78px 78px 62px;gap:8px;align-items:center;padding:0 17px;height:41px;border-top:1px solid rgba(255,255,255,.052);font-size:11.5px}
+  .tbl-row:hover{background:rgba(255,255,255,.026)}
+  .t-name{display:flex;align-items:center;gap:8px;min-width:0}
+  .t-name .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#dbe2ee;font-size:11.5px}
+  .t-site{display:flex;align-items:center;gap:5px;color:#aab3c4;font-size:10.5px;white-space:nowrap;overflow:hidden}
+  .t-site i{width:6px;height:6px;border-radius:99px;flex:0 0 auto}
+  .t-num{font-variant-numeric:tabular-nums;color:#b8c1d2;font-size:10.5px}
+  .t-num.green{color:#8af09a}
+  .score{display:flex;align-items:center;gap:6px}
+  .score .sbar{width:34px;height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+  .score .sbar i{display:block;height:100%;border-radius:99px}
+  .score b{font-size:10.5px;font-weight:600;color:#cbd4e4;font-variant-numeric:tabular-nums;width:18px}
+
+  .release{padding:0 0 10px;display:flex;flex-direction:column}
+  .rel-highlight{margin:2px 15px 8px;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,rgba(50,215,75,.13),rgba(50,215,75,.03));border:1px solid rgba(50,215,75,.14)}
+  .rel-highlight .rh-top{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#9decaa}
+  .rel-highlight .rh-num{font-size:21px;font-weight:660;margin-top:4px;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+  .rel-highlight .rh-num small{font-size:10.5px;color:#87bf92;font-weight:500}
+  .rel-row{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid rgba(255,255,255,.05);font-size:11px}
+  .rel-row .rd{width:44px;color:#8d96a8;font-size:10.5px;font-variant-numeric:tabular-nums}
+  .rel-row .ri{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .rel-row .rt{display:flex;justify-content:space-between;color:#c5cedd}
+  .rel-row .rsub{font-size:9.5px;color:#8993a6}
+  .rel-row .rbar{height:3px;border-radius:99px;background:rgba(255,255,255,.075);overflow:hidden}
+  .rel-row .rbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#32d74b,#8ef29c)}
+  .rel-foot{margin-top:auto;padding:9px 16px 2px;display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#909aad;border-top:1px solid rgba(255,255,255,.05)}
+  .rel-foot b{color:#c9d2e2;font-weight:600}
+
+  /* ---------- calendar ---------- */
+  .cal-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;height:68px;margin-bottom:13px}
+  .cal-sum{padding:11px 14px;border-radius:15px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.58),rgba(17,20,28,.66));display:flex;align-items:center;gap:11px}
+  .cal-sum .cs-ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:rgba(10,132,255,.12);color:#8ec5ff;flex:0 0 auto}
+  .cal-sum .cs-ic.g{background:rgba(50,215,75,.11);color:#8af09a}
+  .cal-sum .cs-ic.o{background:rgba(255,159,10,.11);color:#ffc45e}
+  .cal-sum .cs-ic.p{background:rgba(191,90,242,.11);color:#dda6ff}
+  .cal-sum .cs-l{font-size:10px;color:#909aad}
+  .cal-sum .cs-v{font-size:16px;font-weight:640;margin-top:2px;font-variant-numeric:tabular-nums}
+  .cal-sum .cs-v small{font-size:10px;color:#8b94a7;font-weight:500}
+
+  .cal-main{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;height:calc(100% - 81px);min-height:0}
+  .calendar{display:flex;flex-direction:column;padding:0 0 10px;min-height:0}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 17px 6px}
+  .cal-month{font-size:16px;font-weight:650;letter-spacing:-.1px}
+  .cal-month small{font-size:10.5px;color:#909aad;font-weight:500;margin-left:6px}
+  .cal-nav{display:flex;gap:5px}
+  .cal-nav button{width:27px;height:27px;border-radius:8px;display:grid;place-items:center;color:#9aa3b5;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07)}
+  .cal-week{display:grid;grid-template-columns:repeat(7,1fr);padding:4px 13px 0;font-size:10px;color:#8b94a7;text-align:center}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:6px;padding:7px 13px;flex:1;min-height:0}
+  .cal-cell{position:relative;border-radius:11px;padding:7px 7px 5px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.045);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .cal-cell.dim{opacity:.36}
+  .cal-cell.today{background:linear-gradient(160deg,rgba(10,132,255,.20),rgba(10,132,255,.045));border-color:rgba(90,170,255,.45);box-shadow:0 0 0 1px rgba(90,170,255,.12),0 8px 18px rgba(10,132,255,.10)}
+  .cal-cell .cd{font-size:11px;color:#aab3c4;font-variant-numeric:tabular-nums}
+  .cal-cell.today .cd{color:#fff;font-weight:650}
+  .cal-cell .cb{margin-top:auto;font-size:9px;line-height:1.2;font-weight:600;color:#8af09a;background:rgba(50,215,75,.10);border:1px solid rgba(50,215,75,.13);border-radius:5px;padding:2px 4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cal-cell .cb.mid{color:#8ec5ff;background:rgba(10,132,255,.10);border-color:rgba(10,132,255,.15)}
+  .cal-cell .cb.low{color:#ffc45e;background:rgba(255,159,10,.09);border-color:rgba(255,159,10,.13)}
+  .cal-cell .cb.wait{color:#8d96a8;background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.07)}
+  .cal-cell .cdots{display:flex;gap:3px;margin-top:3px}
+  .cal-cell .cdots i{width:4px;height:4px;border-radius:99px;background:#ff9f0a}
+  .cal-legend{display:flex;gap:14px;padding:2px 16px 0;font-size:9.5px;color:#909aad}
+  .cal-legend span{display:flex;align-items:center;gap:5px}
+
+  .day-detail{display:flex;flex-direction:column;min-height:0;padding:0 0 13px}
+  .dd-head{padding:15px 17px 8px;border-bottom:1px solid rgba(255,255,255,.055)}
+  .dd-date{font-size:15px;font-weight:650}
+  .dd-date small{font-size:10.5px;color:#909aad;font-weight:500;margin-left:5px}
+  .dd-meta{display:flex;gap:14px;margin-top:6px;font-size:10.5px;color:#8d96a8}
+  .dd-meta b{color:#dbe2ee;font-weight:600;font-variant-numeric:tabular-nums}
+  .dd-list{flex:1;overflow:hidden}
+  .dd-item{display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid rgba(255,255,255,.048)}
+  .dd-check{width:14px;height:14px;border-radius:4px;border:1px solid rgba(255,255,255,.20);flex:0 0 auto}
+  .dd-check.on{background:var(--blue);border-color:var(--blue);position:relative}
+  .dd-check.on::after{content:"";position:absolute;left:4px;top:1.5px;width:4px;height:7px;border:1.5px solid #fff;border-top:0;border-left:0;transform:rotate(42deg)}
+  .dd-info{flex:1;min-width:0}
+  .dd-name{font-size:11px;color:#d7deea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dd-sub{display:flex;gap:7px;margin-top:2px;font-size:9.5px;color:#8993a6}
+  .dd-sub i{width:5px;height:5px;border-radius:99px;display:inline-block;margin-right:3px}
+  .dd-size{font-size:10.5px;color:#aab3c4;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .dd-foot{margin-top:auto;padding:11px 16px 0;border-top:1px solid rgba(255,255,255,.055)}
+  .dd-total{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#8d96a8;margin-bottom:9px}
+  .dd-total b{font-size:15px;color:#8af09a;font-weight:650;font-variant-numeric:tabular-nums}
+  .dd-actions{display:flex;gap:7px}
+  .dd-actions .btn{flex:1}
+  .dd-warn{font-size:9.5px;color:#909aad;margin-top:8px;display:flex;align-items:center;gap:5px}
+
+  /* ---------- ledger ---------- */
+  .led-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;height:70px;margin-bottom:12px}
+  .led-filter{display:flex;align-items:center;gap:8px;height:38px;margin-bottom:12px}
+  .chips{display:flex;gap:5px}
+  .chip{height:28px;padding:0 10px;border-radius:8px;font-size:10.5px;color:#8d96a8;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:5px}
+  .chip.on{color:#fff;background:rgba(10,132,255,.16);border-color:rgba(10,132,255,.22)}
+  .chip .n{font-size:9px;color:#8ec5ff;background:rgba(10,132,255,.16);border-radius:4px;padding:1px 4px}
+  .led-search{margin-left:auto;width:210px;height:30px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:7px;padding:0 9px;font-size:10.5px;color:#909aad}
+  .led-main{display:grid;grid-template-columns:1fr 312px;gap:14px;height:calc(100% - 132px);min-height:0}
+  .led-table{display:flex;flex-direction:column;min-height:0;padding-bottom:6px}
+  .led-head{display:grid;grid-template-columns:26px 1fr 70px 62px 58px 72px 66px 72px 60px;gap:7px;padding:9px 14px 7px;font-size:9.5px;color:#8b94a7;align-items:center;border-bottom:1px solid rgba(255,255,255,.055)}
+  .led-row{display:grid;grid-template-columns:26px 1fr 70px 62px 58px 72px 66px 72px 60px;gap:7px;align-items:center;padding:0 14px;height:45px;border-bottom:1px solid rgba(255,255,255,.047);font-size:10.5px}
+  .led-row:hover{background:rgba(255,255,255,.023)}
+  .led-check{width:13px;height:13px;border-radius:4px;border:1px solid rgba(255,255,255,.19)}
+  .led-name{min-width:0}
+  .led-name .nm{font-size:11px;color:#d7deea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .led-name .sub2{font-size:9px;color:#8b94a7;margin-top:2px}
+  .led-site{display:flex;align-items:center;gap:5px;color:#aab3c4;font-size:9.8px;white-space:nowrap;overflow:hidden}
+  .led-site i{width:5px;height:5px;border-radius:99px;flex:0 0 auto}
+  .led-val{font-variant-numeric:tabular-nums;color:#b8c1d2;font-size:10px}
+  .led-val.g{color:#8af09a}
+  .led-val.o{color:#ffc45e}
+  .led-val.r{color:#ff8f88}
+  .vbar{display:flex;align-items:center;gap:5px}
+  .vbar .b{width:38px;height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+  .vbar .b i{display:block;height:100%;border-radius:99px}
+  .vbar b{font-size:9.5px;color:#c7d0df;font-weight:600;font-variant-numeric:tabular-nums;width:17px}
+  .led-side{display:flex;flex-direction:column;gap:12px;min-height:0}
+  .side-card{border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.58),rgba(17,20,28,.66));padding:13px 14px}
+  .side-card .sh{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#aab3c4;margin-bottom:10px}
+  .side-card .sh b{color:#fff;font-weight:600}
+  .dist-row{display:flex;align-items:center;gap:7px;margin-bottom:8px;font-size:9.5px;color:#9aa3b5}
+  .dist-row .dn{width:46px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dist-row .db{flex:1;height:4px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+  .dist-row .db i{display:block;height:100%;border-radius:99px}
+  .dist-row .dv{width:42px;text-align:right;color:#b8c1d2;font-variant-numeric:tabular-nums}
+  .advice{border-radius:12px;padding:9px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);margin-top:7px}
+  .advice .at{display:flex;align-items:center;gap:6px;font-size:10px;color:#d7deea}
+  .advice .ad{font-size:9px;color:#909aad;margin-top:3px;line-height:1.45}
+  .advice .aa{font-size:9px;color:#8ec5ff;margin-top:5px}
+  .advice.warn{border-color:rgba(255,159,10,.14);background:rgba(255,159,10,.045)}
+  .advice.warn .at{color:#ffd38a}
+
+  /* ---------- vault ---------- */
+  .vault-banner{display:flex;align-items:center;gap:14px;height:60px;border-radius:16px;padding:0 16px;margin-bottom:13px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(90deg,rgba(10,132,255,.13),rgba(31,35,46,.52) 42%,rgba(17,20,28,.62))}
+  .vb-icon{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;color:#8ec5ff;background:rgba(10,132,255,.14);border:1px solid rgba(10,132,255,.18)}
+  .vb-main{display:flex;flex-direction:column;gap:3px}
+  .vb-main b{font-size:13px;font-weight:620}
+  .vb-main span{font-size:10px;color:#909aad}
+  .vb-stats{margin-left:auto;display:flex;gap:18px}
+  .vb-stat{text-align:right}
+  .vb-stat .n{font-size:15px;font-weight:640;font-variant-numeric:tabular-nums}
+  .vb-stat .l{font-size:9px;color:#909aad;margin-top:2px}
+  .vault-main{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;height:calc(100% - 73px);min-height:0}
+  .vault-list{display:flex;flex-direction:column;min-height:0;padding-bottom:6px}
+  .vl-head{display:flex;align-items:center;gap:7px;padding:12px 14px 9px;border-bottom:1px solid rgba(255,255,255,.055)}
+  .vl-search{flex:1;height:29px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:6px;padding:0 8px;font-size:10px;color:#788194}
+  .vl-row{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.047);min-height:57px}
+  .vl-row:hover{background:rgba(255,255,255,.023)}
+  .vl-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#8ec5ff;background:rgba(10,132,255,.09);border:1px solid rgba(10,132,255,.12);flex:0 0 auto}
+  .vl-info{flex:1;min-width:0}
+  .vl-name{font-size:10.8px;color:#d7deea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vl-sub{display:flex;align-items:center;gap:7px;margin-top:3px;font-size:9px;color:#8993a6}
+  .vl-sub i{width:5px;height:5px;border-radius:99px;display:inline-block;margin-right:3px}
+  .vl-size{font-size:10px;color:#aab3c4;font-variant-numeric:tabular-nums;flex:0 0 auto;text-align:right}
+  .vl-size .st{display:block;font-size:8.5px;margin-top:2px}
+  .vault-detail{display:flex;flex-direction:column;min-height:0;padding:0 0 14px}
+  .vd-head{padding:16px 17px 12px;border-bottom:1px solid rgba(255,255,255,.055)}
+  .vd-title{font-size:13.5px;font-weight:650;line-height:1.35;letter-spacing:-.1px}
+  .vd-title small{display:block;font-size:9.5px;color:#909aad;font-weight:500;margin-top:4px}
+  .vd-status{display:flex;gap:6px;margin-top:9px}
+  .vd-meta{display:grid;grid-template-columns:1fr 1fr;gap:9px 14px;padding:12px 17px;border-bottom:1px solid rgba(255,255,255,.055)}
+  .vd-meta .k{font-size:9px;color:#8b94a7}
+  .vd-meta .v{font-size:11px;color:#cbd4e4;margin-top:2px;font-variant-numeric:tabular-nums}
+  .vd-files{padding:10px 17px;border-bottom:1px solid rgba(255,255,255,.055)}
+  .vd-files .fh{display:flex;justify-content:space-between;font-size:9.5px;color:#909aad;margin-bottom:7px}
+  .vfile{display:flex;align-items:center;gap:7px;font-size:10px;color:#aab3c4;padding:4px 0}
+  .vfile .ic{width:12px;height:12px;color:#8993a6}
+  .vfile .fs{margin-left:auto;font-size:9px;color:#909aad;font-variant-numeric:tabular-nums}
+  .vd-actions{margin-top:auto;padding:12px 17px 0;display:flex;gap:7px}
+  .vd-actions .btn{flex:1}
+  .vd-note{font-size:8.8px;color:#8b94a7;padding:8px 17px 0;display:flex;align-items:flex-start;gap:5px;line-height:1.45}
+
+  /* ---------- matrix ---------- */
+  .mx-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:66px;margin-bottom:12px}
+  .mx-tools{display:flex;align-items:center;gap:8px;margin-bottom:11px;height:30px}
+  .mx-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:calc(100% - 119px);min-height:0}
+  .group{display:flex;flex-direction:column;min-height:0;padding:0 0 8px}
+  .group-h{padding:12px 14px 9px;border-bottom:1px solid rgba(255,255,255,.055)}
+  .group-title{font-size:12px;font-weight:620;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .group-sub{display:flex;align-items:center;gap:7px;margin-top:5px;font-size:9px;color:#909aad}
+  .group-sub .sites{display:flex;gap:4px}
+  .group-sub .sites span{font-size:8px;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,.055);color:#aab3c4}
+  .group-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:space-evenly}
+  .copy-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.045);font-size:10px}
+  .copy-row .csite{width:56px;display:flex;align-items:center;gap:5px;color:#cbd4e4;white-space:nowrap;overflow:hidden}
+  .copy-row .csite i{width:5px;height:5px;border-radius:99px;flex:0 0 auto}
+  .copy-row .cdl{width:72px;color:#8d96a8;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .copy-row .cst{width:52px}
+  .copy-row .cup{flex:1;text-align:right;color:#b8c1d2;font-variant-numeric:tabular-nums;font-size:9px}
+  .copy-row .cact{width:24px;display:flex;justify-content:flex-end;color:#8b94a7}
+  .group-f{padding:8px 14px 0;margin-top:auto;display:flex;align-items:center;justify-content:space-between;font-size:9px;color:#909aad;border-top:1px solid rgba(255,255,255,.05)}
+  .group-f b{color:#ffc45e;font-weight:600}
+  .group-f .btn{height:26px;padding:0 8px;font-size:9.5px}
+
+  /* ---------- publish ---------- */
+  .pub-steps{display:flex;align-items:center;gap:0;height:50px;border-radius:15px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);padding:0 16px;margin-bottom:12px}
+  .pstep{display:flex;align-items:center;gap:8px;font-size:11px;color:#909aad}
+  .pstep .pn{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:9.5px;font-weight:650;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);color:#9aa3b5}
+  .pstep.done .pn{background:rgba(50,215,75,.16);border-color:rgba(50,215,75,.22);color:#8af09a}
+  .pstep.on .pn{background:linear-gradient(135deg,#3095ff,#0068dd);border-color:rgba(120,190,255,.35);color:#fff;box-shadow:0 4px 12px rgba(10,132,255,.28)}
+  .pstep.on{color:#fff}
+  .pstep .pl{font-weight:560}
+  .pstep .pd{font-size:9px;color:#8b94a7;margin-left:2px}
+  .pline{width:44px;height:1px;background:rgba(255,255,255,.10);margin:0 13px}
+  .pub-main{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;height:calc(100% - 62px);min-height:0}
+  .pub-left,.pub-right{display:flex;flex-direction:column;gap:12px;min-height:0}
+  .pub-file{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.6),rgba(17,20,28,.68))}
+  .pf-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#8ec5ff;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.16);flex:0 0 auto}
+  .pf-main{flex:1;min-width:0}
+  .pf-name{font-size:11.5px;color:#e4eaf4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pf-sub{font-size:9.5px;color:#909aad;margin-top:3px;display:flex;gap:8px}
+  .pf-sub b{color:#9decaa;font-weight:500}
+  .mi-card{padding:13px 15px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.58),rgba(17,20,28,.66))}
+  .mi-title{font-size:11px;color:#aab3c4;display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+  .mi-title b{color:#fff;font-weight:600}
+  .mi-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .mi-chips span{font-size:9.5px;color:#cbd4e4;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.07);border-radius:6px;padding:4px 7px}
+  .shots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+  .shot{position:relative;height:78px;border-radius:9px;overflow:hidden;border:1px solid rgba(255,255,255,.09)}
+  .shot .sh-bg{position:absolute;inset:0}
+  .shot .sh-time{position:absolute;left:5px;bottom:4px;font-size:8px;color:#fff;background:rgba(0,0,0,.45);border-radius:3px;padding:1px 3px;font-variant-numeric:tabular-nums}
+  .shot .sh-play{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.65)}
+  .tpl-row{display:flex;align-items:center;gap:9px;margin-top:10px;font-size:9.5px;color:#909aad}
+  .tpl-row .tpl{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:8px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.075);color:#cbd4e4;font-size:9.5px}
+  .bb-card{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 0 10px}
+  .bb-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px}
+  .bb-code{flex:1;margin:0 12px;border-radius:10px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.075);padding:10px 11px;font-family:var(--mono);font-size:9.2px;line-height:1.55;color:#b9c6d9;overflow:hidden;white-space:pre-wrap}
+  .bb-code .tag{color:#7fb6ff}
+  .bb-code .key{color:#8af09a}
+  .bb-code .dim{color:#8b94a7}
+  .check-card{padding:12px 14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.58),rgba(17,20,28,.66))}
+  .check-title{font-size:10.5px;color:#aab3c4;margin-bottom:7px;display:flex;justify-content:space-between}
+  .check-row{display:flex;align-items:center;gap:7px;font-size:9.8px;color:#aab3c4;margin-top:6px}
+  .check-row .ck{width:14px;height:14px;border-radius:50%;display:grid;place-items:center;background:rgba(50,215,75,.14);color:#8af09a;flex:0 0 auto}
+  .check-row .ck .ic{width:9px;height:9px;stroke-width:2.6}
+  .pub-actions{display:flex;gap:8px;margin-top:auto}
+  .pub-actions .btn{flex:1}
+  .pub-note{font-size:8.8px;color:#8b94a7;line-height:1.45;padding:8px 2px 0}
+
+  .pub-history{margin-top:auto;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(31,35,46,.58),rgba(17,20,28,.66));padding:11px 14px}
+  .pub-history .phh{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#aab3c4;margin-bottom:6px}
+  .pub-history .phh b{color:#fff;font-weight:600}
+  .pub-history .phh span{color:#8ec5ff;font-size:9px}
+  .pub-history .phr{display:flex;align-items:center;gap:8px;font-size:9.5px;color:#aab3c4;padding:6px 0;border-top:1px solid rgba(255,255,255,.045)}
+  .pub-history .phr .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cbd4e4}
+  .pub-history .phr .s{color:#8b94a7;font-size:9px;width:40px}
+  .pub-history .phr .d{color:#8b94a7;font-size:9px;width:36px;text-align:right}
+
+  /* ---------- mobile board ---------- */
+  .mobile-board{display:none;position:relative;width:1000px;height:1000px;overflow:hidden;background:
+    radial-gradient(700px 500px at 18% 8%,rgba(10,132,255,.28),transparent 62%),
+    radial-gradient(600px 500px at 88% 18%,rgba(191,90,242,.18),transparent 60%),
+    linear-gradient(135deg,#080b12,#0e1220 55%,#090c14);}
+  body[data-s="mobile"] .mobile-board{display:flex}
+  body[data-s="mobile"] .app{display:none}
+  .mb-left{width:420px;padding:96px 0 0 66px;position:relative;z-index:2}
+  .mb-brand{display:flex;align-items:center;gap:11px;margin-bottom:34px}
+  .mb-title{font-size:38px;line-height:1.12;font-weight:700;letter-spacing:-1.1px}
+  .mb-title span{color:#8ec5ff}
+  .mb-desc{font-size:13px;line-height:1.8;color:#9aa4b7;margin-top:16px;max-width:330px}
+  .mb-list{margin-top:28px;display:flex;flex-direction:column;gap:14px}
+  .mb-li{display:flex;gap:10px;align-items:flex-start}
+  .mb-li .li-ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.16);color:#8ec5ff;flex:0 0 auto}
+  .mb-li b{display:block;font-size:12px;color:#e4eaf4;font-weight:600}
+  .mb-li span{display:block;font-size:10.5px;color:#909aad;margin-top:3px;line-height:1.5}
+  .mb-meta{margin-top:36px;font-size:10px;color:#8b94a7;display:flex;gap:10px;align-items:center}
+  .mb-meta .dot{width:4px;height:4px;border-radius:99px;background:#475064}
+  .phone{
+    position:absolute;right:82px;top:78px;width:390px;height:844px;border-radius:52px;overflow:hidden;
+    background:#070a10;border:1px solid rgba(255,255,255,.18);
+    box-shadow:0 50px 120px rgba(0,0,0,.62),0 0 0 10px rgba(10,13,20,.85),0 0 0 11px rgba(255,255,255,.08);
+    z-index:1;
+  }
+  .phone::before{content:"";position:absolute;top:11px;left:50%;transform:translateX(-50%);width:118px;height:27px;border-radius:99px;background:#05070b;z-index:20;border:1px solid rgba(255,255,255,.05)}
+  .ph-screen{position:absolute;inset:0;background:
+    radial-gradient(420px 360px at 12% -8%,rgba(10,132,255,.34),transparent 62%),
+    radial-gradient(360px 320px at 100% 10%,rgba(191,90,242,.20),transparent 60%),
+    linear-gradient(180deg,#0b0f18,#0a0d15 58%,#080b11);}
+  .ph-status{height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 23px 6px;font-size:11px;font-weight:600;color:#fff;position:relative;z-index:2}
+  .ph-status .sr{display:flex;align-items:center;gap:5px;font-size:10px}
+  .ph-bars{display:flex;align-items:flex-end;gap:1.5px;height:9px}
+  .ph-bars i{width:2.5px;border-radius:1px;background:#fff}
+  .ph-head{display:flex;align-items:center;justify-content:space-between;padding:10px 18px 12px;position:relative;z-index:2}
+  .ph-head .ph-t{font-size:21px;font-weight:700;letter-spacing:-.4px}
+  .ph-head .ph-x{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);color:#aab3c4}
+  .ph-body{padding:0 16px;position:relative;z-index:2}
+  .ph-hero{border-radius:20px;padding:15px 16px;background:
+    radial-gradient(240px 160px at 100% 0%,rgba(10,132,255,.25),transparent 70%),
+    linear-gradient(180deg,rgba(38,43,58,.72),rgba(19,22,31,.86));
+    border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 36px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.08)}
+  .ph-hero .pe{font-size:10px;color:#8fbdf4}
+  .ph-hero .pn{font-size:36px;font-weight:700;letter-spacing:-1.2px;margin:7px 0 2px;font-variant-numeric:tabular-nums}
+  .ph-hero .pn small{font-size:12px;color:#9ab5d8;font-weight:600}
+  .ph-hero .ps{font-size:10px;color:#8d96a8}
+  .ph-hero .pbars{display:flex;align-items:flex-end;gap:5px;height:46px;margin-top:12px}
+  .ph-hero .pbars i{flex:1;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,rgba(80,180,255,.95),rgba(10,132,255,.25))}
+  .ph-hero .pbars i.on{background:linear-gradient(180deg,#8ef29c,rgba(50,215,75,.25))}
+  .ph-hero .pbtn{margin-top:11px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:600;color:#fff;background:linear-gradient(135deg,#3095ff,#0068dd);box-shadow:0 8px 20px rgba(10,132,255,.28)}
+  .ph-stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+  .ph-stat{border-radius:14px;padding:10px 11px;background:linear-gradient(180deg,rgba(31,35,46,.62),rgba(17,20,28,.72));border:1px solid rgba(255,255,255,.08)}
+  .ph-stat .l{font-size:9px;color:#909aad}
+  .ph-stat .v{font-size:18px;font-weight:660;margin-top:4px;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+  .ph-stat .v small{font-size:9px;color:#8b94a7;font-weight:500}
+  .ph-stat .f{font-size:8.5px;color:#909aad;margin-top:3px}
+  .ph-stat .f b{color:#8af09a;font-weight:500}
+  .ph-stat.warn .v{color:#ffc45e}
+  .ph-sec{display:flex;align-items:center;justify-content:space-between;margin:14px 2px 7px;font-size:11px;font-weight:600;color:#d7deea}
+  .ph-sec span{font-size:9px;color:#909aad;font-weight:400}
+  .ph-sites{border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);overflow:hidden}
+  .ph-site{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid rgba(255,255,255,.045);font-size:10px;color:#aab3c4}
+  .ph-site:last-child{border-bottom:0}
+  .ph-site .d{width:6px;height:6px;border-radius:99px}
+  .ph-site .n{width:52px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cbd4e4}
+  .ph-site .b{flex:1;height:3px;border-radius:99px;background:rgba(255,255,255,.075);overflow:hidden}
+  .ph-site .b i{display:block;height:100%;border-radius:99px}
+  .ph-site .v{width:48px;text-align:right;font-size:8.5px;color:#909aad;font-variant-numeric:tabular-nums}
+  .ph-tabbar{position:absolute;left:12px;right:12px;bottom:20px;height:58px;border-radius:20px;background:rgba(24,27,37,.78);border:1px solid rgba(255,255,255,.09);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-around;box-shadow:0 16px 34px rgba(0,0,0,.35)}
+  .ph-tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8px;color:#8993a6}
+  .ph-tab .ic{width:17px;height:17px}
+  .ph-tab.on{color:#6fb6ff}
+  .ph-tab.on .ic{color:#6fb6ff}
+
+  /* audit helper */
+  #audit{display:none}
+</style>
+</head>
+<body data-s="overview">
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-anchor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-hard-drive" viewBox="0 0 24 24"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12 2H2v10l10 10 10-10Z"/><circle cx="7" cy="7" r="1.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- top bar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><svg class="ic ic-lg"><use href="#i-anchor"/></svg></div>
+      <div class="brand-name">SeedArk</div>
+      <div class="brand-ver">v0.1.3</div>
+    </div>
+    <div class="search">
+      <svg class="ic ic-sm"><use href="#i-search"/></svg>
+      <span>搜索种子、站点、标签…</span>
+      <span class="kbd">⌘ K</span>
+    </div>
+    <div class="top-right">
+      <div class="top-conn"><span class="dot-live"></span>2 台下载器</div>
+      <div class="speed up"><svg class="ic ic-sm"><use href="#i-arrow-up"/></svg>12.4 MB/s</div>
+      <div class="speed down"><svg class="ic ic-sm"><use href="#i-arrow-down"/></svg>3.1 MB/s</div>
+      <div class="icon-btn"><svg class="ic"><use href="#i-bell"/></svg></div>
+      <div class="avatar">S</div>
+    </div>
+  </header>
+
+  <!-- sidebar -->
+  <aside class="sidebar">
+    <div class="side-label">库</div>
+    <nav class="nav">
+      <div class="nav-item"><svg class="ic"><use href="#i-grid"/></svg>全部<span class="n">1,286</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-activity"/></svg>活跃<span class="n">214</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-download"/></svg>下载中<span class="n">18</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-upload"/></svg>做种中<span class="n">1,102</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-check-circle"/></svg>已完成<span class="n">1,241</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-pause"/></svg>暂停<span class="n">62</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-clock"/></svg>校验<span class="n">2</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-alert"/></svg>错误<span class="n">4</span></div>
+    </nav>
+    <div class="side-divider"></div>
+    <div class="side-label">工具</div>
+    <nav class="nav">
+      <div class="nav-item active new"><svg class="ic"><use href="#i-sparkles"/></svg>保种台<span class="n">新</span></div>
+      <div class="nav-item"><svg class="ic"><use href="#i-shield"/></svg>做种策略</div>
+      <div class="nav-item"><svg class="ic"><use href="#i-chart"/></svg>分组限速</div>
+      <div class="nav-item"><svg class="ic"><use href="#i-settings"/></svg>工具箱</div>
+    </nav>
+    <div class="side-divider"></div>
+    <div class="side-label">站点分布</div>
+    <div class="site-list">
+      <div class="site-item"><span class="sdot" style="background:#ff9f0a"></span><span class="sname">M-Team</span><span class="sbar"><i style="width:88%;background:#ff9f0a"></i></span><span class="scount">428</span></div>
+      <div class="site-item"><span class="sdot" style="background:#bf5af2"></span><span class="sname">馒头</span><span class="sbar"><i style="width:72%;background:#bf5af2"></i></span><span class="scount">316</span></div>
+      <div class="site-item"><span class="sdot" style="background:#64d2ff"></span><span class="sname">听听歌</span><span class="sbar"><i style="width:52%;background:#64d2ff"></i></span><span class="scount">207</span></div>
+      <div class="site-item"><span class="sdot" style="background:#ff6b81"></span><span class="sname">彩虹岛</span><span class="sbar"><i style="width:40%;background:#ff6b81"></i></span><span class="scount">154</span></div>
+      <div class="site-item"><span class="sdot" style="background:#32d74b"></span><span class="sname">52pt</span><span class="sbar"><i style="width:27%;background:#32d74b"></i></span><span class="scount">98</span></div>
+    </div>
+    <div class="disk-card">
+      <div class="disk-top"><svg class="ic ic-sm"><use href="#i-hard-drive"/></svg>存储空间 1</div>
+      <div class="disk-num">8.42 <small>/ 12 TB</small></div>
+      <div class="disk-bar"><i></i></div>
+      <div class="disk-foot"><span>已用 70%</span><b>剩余 3.58 TB</b></div>
+    </div>
+  </aside>
+
+  <!-- main -->
+  <main class="main">
+    <div class="crumb">工具 <span>›</span> <b>保种台</b></div>
+    <div class="pt-head">
+      <div>
+        <div class="pt-title"><span class="spark">✦</span>保种台</div>
+        <div class="pt-sub">1,286 颗种子<span class="sep"></span>8.42 TB 做种体积<span class="sep"></span>近 30 天上传 3.27 TB<span class="sep"></span>2 台下载器</div>
+      </div>
+      <div class="head-actions">
+        <div class="seg"><button>7 天</button><button class="on">30 天</button><button>90 天</button></div>
+        <button class="btn ghost"><svg class="ic"><use href="#i-refresh"/></svg>刷新</button>
+        <button class="btn ghost"><svg class="ic"><use href="#i-settings"/></svg></button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="overview"><svg class="ic"><use href="#i-grid"/></svg>概览</div>
+      <div class="tab" data-tab="calendar"><svg class="ic"><use href="#i-calendar"/></svg>释放日历<span class="badge">38</span></div>
+      <div class="tab" data-tab="ledger"><svg class="ic"><use href="#i-chart"/></svg>资产台账</div>
+      <div class="tab" data-tab="vault"><svg class="ic"><use href="#i-archive"/></svg>档案库</div>
+      <div class="tab" data-tab="matrix"><svg class="ic"><use href="#i-layers"/></svg>同内容</div>
+      <div class="tab" data-tab="publish"><svg class="ic"><use href="#i-upload"/></svg>发种</div>
+    </div>
+
+    <!-- ================= OVERVIEW ================= -->
+    <section class="screen" id="s-overview">
+      <div class="ov-top">
+        <div class="card hero">
+          <div class="hero-l">
+            <div class="eyebrow"><svg class="ic ic-sm"><use href="#i-sparkles"/></svg>本周可释放</div>
+            <div class="hero-num">1.84 <span>TB</span></div>
+            <div class="hero-sub"><b>38 颗种子</b>已满足站点规则 · 预计释放 <b>1.84 TB</b>，其中今天 <b>128 GB</b></div>
+            <div class="hero-actions">
+              <button class="btn primary"><svg class="ic"><use href="#i-calendar"/></svg>查看释放日历</button>
+              <button class="btn ghost"><svg class="ic"><use href="#i-file"/></svg>导出报告</button>
+            </div>
+          </div>
+          <div class="hero-r">
+            <div class="mini-bars">
+              <div class="mbar"><i style="height:42%"></i><em>周五</em></div>
+              <div class="mbar"><i style="height:51%"></i><em>周六</em></div>
+              <div class="mbar"><i style="height:72%"></i><em>周日</em></div>
+              <div class="mbar"><i style="height:63%"></i><em>周一</em></div>
+              <div class="mbar"><i style="height:84%"></i><em>周二</em></div>
+              <div class="mbar"><i style="height:56%"></i><em>周三</em></div>
+              <div class="mbar today"><i style="height:61%"></i><em>今天</em></div>
+            </div>
+            <div class="mini-legend">
+              <span><i class="lg-dot" style="background:#32d74b"></i>可释放</span>
+              <span><i class="lg-dot" style="background:#0a84ff"></i>待达标</span>
+              <span><i class="lg-dot" style="background:#ff9f0a"></i>H&R 风险</span>
+            </div>
+          </div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><div class="st-top"><svg class="ic"><use href="#i-hard-drive"/></svg>做种总量</div><div class="st-num">8.42<small>TB</small></div><div class="st-foot">1,286 颗 · 2 台下载器</div><div class="st-glow"></div></div>
+          <div class="stat"><div class="st-top"><svg class="ic"><use href="#i-arrow-up"/></svg>30 天上传</div><div class="st-num">3.27<small>TB</small></div><div class="st-foot"><b>↑ 12.4%</b> 较上月</div><div class="st-glow"></div></div>
+          <div class="stat"><div class="st-top"><svg class="ic"><use href="#i-chart"/></svg>平均上传效率</div><div class="st-num">38.6<small>MB/GB·日</small></div><div class="st-foot"><b>↑ 6.2%</b> 高于上月</div><div class="st-glow"></div></div>
+          <div class="stat warn"><div class="st-top"><svg class="ic"><use href="#i-alert"/></svg>H&R 风险</div><div class="st-num">3<small>颗</small></div><div class="st-foot" style="color:#c7a45e">需尽快补种 · 最早 2 天后到期</div><div class="st-glow"></div></div>
+        </div>
+      </div>
+
+      <div class="site-row">
+        <div class="site-card"><div class="sc-top"><span class="sc-dot" style="background:#ff9f0a"></span><span class="sc-name">M-Team</span><span class="sc-ratio">4.82</span></div><div class="sc-main"><span class="sc-count">428</span><span class="sc-size">2.84 TB</span></div><div class="sc-bar"><i style="width:88%;background:#ff9f0a"></i></div><div class="sc-foot"><span>30 天 <b>1.42 TB</b></span><span>高价值</span></div></div>
+        <div class="site-card"><div class="sc-top"><span class="sc-dot" style="background:#bf5af2"></span><span class="sc-name">馒头</span><span class="sc-ratio">3.16</span></div><div class="sc-main"><span class="sc-count">316</span><span class="sc-size">2.12 TB</span></div><div class="sc-bar"><i style="width:72%;background:#bf5af2"></i></div><div class="sc-foot"><span>30 天 <b>0.98 TB</b></span><span>稳定</span></div></div>
+        <div class="site-card"><div class="sc-top"><span class="sc-dot" style="background:#64d2ff"></span><span class="sc-name">听听歌</span><span class="sc-ratio">2.74</span></div><div class="sc-main"><span class="sc-count">207</span><span class="sc-size">1.36 TB</span></div><div class="sc-bar"><i style="width:52%;background:#64d2ff"></i></div><div class="sc-foot"><span>30 天 <b>0.42 TB</b></span><span>稳定</span></div></div>
+        <div class="site-card"><div class="sc-top"><span class="sc-dot" style="background:#ff6b81"></span><span class="sc-name">彩虹岛</span><span class="sc-ratio">1.92</span></div><div class="sc-main"><span class="sc-count">154</span><span class="sc-size">1.18 TB</span></div><div class="sc-bar"><i style="width:40%;background:#ff6b81"></i></div><div class="sc-foot"><span>30 天 <b>0.31 TB</b></span><span>观察</span></div></div>
+        <div class="site-card"><div class="sc-top"><span class="sc-dot" style="background:#32d74b"></span><span class="sc-name">52pt</span><span class="sc-ratio">1.38</span></div><div class="sc-main"><span class="sc-count">98</span><span class="sc-size">0.92 TB</span></div><div class="sc-bar"><i style="width:27%;background:#32d74b"></i></div><div class="sc-foot"><span>30 天 <b>0.14 TB</b></span><span>低效</span></div></div>
+      </div>
+
+      <div class="ov-bottom">
+        <div class="card tbl">
+          <div class="card-h"><div class="card-t">高价值保种</div><div class="card-a">按价值分排序 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></div></div>
+          <div class="tbl-head"><span>种子</span><span>站点</span><span>体积</span><span>30 天上传</span><span>效率</span><span>价值分</span></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit.DTS-HD.MA.5.1</span></div><div class="t-site"><i style="background:#ff9f0a"></i>M-Team</div><div class="t-num">62.4 GB</div><div class="t-num green">182.4 GB</div><div class="t-num">82.4</div><div class="score"><span class="sbar"><i style="width:96%;background:linear-gradient(90deg,#32d74b,#8ef29c)"></i></span><b>96</b></div></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">Oppenheimer.2023.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.5.1</span></div><div class="t-site"><i style="background:#bf5af2"></i>馒头</div><div class="t-num">58.1 GB</div><div class="t-num green">121.6 GB</div><div class="t-num">64.8</div><div class="score"><span class="sbar"><i style="width:91%;background:linear-gradient(90deg,#32d74b,#8ef29c)"></i></span><b>91</b></div></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">The.Bear.S03.2160p.DSNP.WEB-DL.DDP5.1.H.265</span></div><div class="t-site"><i style="background:#64d2ff"></i>听听歌</div><div class="t-num">41.8 GB</div><div class="t-num green">68.2 GB</div><div class="t-num">51.2</div><div class="score"><span class="sbar"><i style="width:88%;background:linear-gradient(90deg,#32d74b,#8ef29c)"></i></span><b>88</b></div></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">Shogun.2024.S01.2160p.HULU.WEB-DL.DDP5.1.H.265</span></div><div class="t-site"><i style="background:#ff6b81"></i>彩虹岛</div><div class="t-num">38.6 GB</div><div class="t-num green">44.7 GB</div><div class="t-num">47.6</div><div class="score"><span class="sbar"><i style="width:84%;background:linear-gradient(90deg,#64d2ff,#8ec5ff)"></i></span><b>84</b></div></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">Severance.S02.2160p.ATVP.WEB-DL.DDP5.1.H.265</span></div><div class="t-site"><i style="background:#32d74b"></i>52pt</div><div class="t-num">36.2 GB</div><div class="t-num green">21.4 GB</div><div class="t-num">39.1</div><div class="score"><span class="sbar"><i style="width:79%;background:linear-gradient(90deg,#64d2ff,#8ec5ff)"></i></span><b>79</b></div></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">Blade.Runner.2049.2017.2160p.UHD.BluRay.x265</span></div><div class="t-site"><i style="background:#ff9f0a"></i>M-Team</div><div class="t-num">54.8 GB</div><div class="t-num">12.8 GB</div><div class="t-num">12.6</div><div class="score"><span class="sbar"><i style="width:68%;background:linear-gradient(90deg,#ff9f0a,#ffd38a)"></i></span><b>68</b></div></div>
+          <div class="tbl-row"><div class="t-name"><span class="nm">Chernobyl.S01.2160p.MAX.WEB-DL.DDP5.1.H.265</span></div><div class="t-site"><i style="background:#bf5af2"></i>馒头</div><div class="t-num">32.1 GB</div><div class="t-num">3.2 GB</div><div class="t-num">4.8</div><div class="score"><span class="sbar"><i style="width:52%;background:linear-gradient(90deg,#ff9f0a,#ffd38a)"></i></span><b>52</b></div></div>
+        </div>
+        <div class="card release">
+          <div class="card-h"><div class="card-t">最近可释放</div><div class="card-a">按日期 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></div></div>
+          <div class="rel-highlight">
+            <div class="rh-top"><span>今天 · 10 月 22 日</span><span class="pill green">4 颗可释放</span></div>
+            <div class="rh-num">128 <small>GB</small></div>
+          </div>
+          <div class="rel-row"><div class="rd">10/24</div><div class="ri"><div class="rt"><span>8 颗种子</span><span>326 GB</span></div><div class="rbar"><i style="width:76%"></i></div></div></div>
+          <div class="rel-row"><div class="rd">10/26</div><div class="ri"><div class="rt"><span>12 颗种子</span><span>412 GB</span></div><div class="rbar"><i style="width:96%"></i></div></div></div>
+          <div class="rel-row"><div class="rd">10/28</div><div class="ri"><div class="rt"><span>3 颗种子</span><span>82 GB</span></div><div class="rbar"><i style="width:24%"></i></div></div></div>
+          <div class="rel-row"><div class="rd">10/30</div><div class="ri"><div class="rt"><span>12 颗种子</span><span>426 GB</span></div><div class="rbar"><i style="width:100%"></i></div></div></div>
+          <div class="rel-foot"><span>未来 30 天</span><b>4.62 TB</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CALENDAR ================= -->
+    <section class="screen" id="s-calendar">
+      <div class="cal-summary">
+        <div class="cal-sum"><div class="cs-ic g"><svg class="ic"><use href="#i-calendar"/></svg></div><div><div class="cs-l">今天可释放</div><div class="cs-v">128 <small>GB</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic"><svg class="ic"><use href="#i-chart"/></svg></div><div><div class="cs-l">本周可释放</div><div class="cs-v">1.84 <small>TB</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic p"><svg class="ic"><use href="#i-clock"/></svg></div><div><div class="cs-l">未来 30 天</div><div class="cs-v">4.62 <small>TB</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic o"><svg class="ic"><use href="#i-alert"/></svg></div><div><div class="cs-l">H&R 风险</div><div class="cs-v">3 <small>颗</small></div></div></div>
+      </div>
+      <div class="cal-main">
+        <div class="card calendar">
+          <div class="cal-head">
+            <div class="cal-month">2026 年 10 月 <small>释放计划</small></div>
+            <div class="cal-nav"><button><svg class="ic ic-sm"><use href="#i-chevron-left"/></svg></button><button><svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></button></div>
+          </div>
+          <div class="cal-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div class="cal-grid">
+            <div class="cal-cell dim"><span class="cd">28</span></div>
+            <div class="cal-cell dim"><span class="cd">29</span></div>
+            <div class="cal-cell dim"><span class="cd">30</span></div>
+            <div class="cal-cell"><span class="cd">1</span></div>
+            <div class="cal-cell"><span class="cd">2</span></div>
+            <div class="cal-cell"><span class="cd">3</span></div>
+            <div class="cal-cell"><span class="cd">4</span></div>
+            <div class="cal-cell"><span class="cd">5</span></div>
+            <div class="cal-cell"><span class="cd">6</span></div>
+            <div class="cal-cell"><span class="cd">7</span></div>
+            <div class="cal-cell"><span class="cd">8</span><span class="cb low">82 GB</span></div>
+            <div class="cal-cell"><span class="cd">9</span></div>
+            <div class="cal-cell"><span class="cd">10</span><span class="cb wait">待定</span></div>
+            <div class="cal-cell"><span class="cd">11</span></div>
+            <div class="cal-cell"><span class="cd">12</span></div>
+            <div class="cal-cell"><span class="cd">13</span><span class="cb low">96 GB</span></div>
+            <div class="cal-cell"><span class="cd">14</span></div>
+            <div class="cal-cell"><span class="cd">15</span><span class="cb mid">154 GB</span></div>
+            <div class="cal-cell"><span class="cd">16</span></div>
+            <div class="cal-cell"><span class="cd">17</span><span class="cb low">64 GB</span></div>
+            <div class="cal-cell"><span class="cd">18</span></div>
+            <div class="cal-cell"><span class="cd">19</span><span class="cb mid">188 GB</span></div>
+            <div class="cal-cell"><span class="cd">20</span><span class="cb low">64 GB</span></div>
+            <div class="cal-cell"><span class="cd">21</span><span class="cb wait">待定</span><div class="cdots"><i></i></div></div>
+            <div class="cal-cell today"><span class="cd">22</span><span class="cb">128 GB</span></div>
+            <div class="cal-cell"><span class="cd">23</span><span class="cb low">96 GB</span></div>
+            <div class="cal-cell"><span class="cd">24</span><span class="cb">326 GB</span></div>
+            <div class="cal-cell"><span class="cd">25</span><span class="cb wait">待定</span><div class="cdots"><i></i><i></i></div></div>
+            <div class="cal-cell"><span class="cd">26</span><span class="cb">412 GB</span></div>
+            <div class="cal-cell"><span class="cd">27</span><span class="cb mid">154 GB</span></div>
+            <div class="cal-cell"><span class="cd">28</span><span class="cb low">82 GB</span></div>
+            <div class="cal-cell"><span class="cd">29</span><span class="cb mid">188 GB</span></div>
+            <div class="cal-cell"><span class="cd">30</span><span class="cb">426 GB</span></div>
+            <div class="cal-cell"><span class="cd">31</span><span class="cb low">112 GB</span></div>
+            <div class="cal-cell dim"><span class="cd">1</span><span class="cb mid">218 GB</span></div>
+            <div class="cal-cell dim"><span class="cd">2</span><span class="cb low">96 GB</span></div>
+            <div class="cal-cell dim"><span class="cd">3</span></div>
+            <div class="cal-cell dim"><span class="cd">4</span></div>
+            <div class="cal-cell dim"><span class="cd">5</span></div>
+            <div class="cal-cell dim"><span class="cd">6</span></div>
+            <div class="cal-cell dim"><span class="cd">7</span></div>
+            <div class="cal-cell dim"><span class="cd">8</span></div>
+          </div>
+          <div class="cal-legend"><span><i class="lg-dot" style="background:#32d74b"></i>可释放</span><span><i class="lg-dot" style="background:#0a84ff"></i>待达标</span><span><i class="lg-dot" style="background:#ff9f0a"></i>H&R 风险</span><span><i class="lg-dot" style="background:#596173"></i>规则缺失 / 待定</span></div>
+        </div>
+        <div class="card day-detail">
+          <div class="dd-head">
+            <div class="dd-date">10 月 30 日 <small>周五</small></div>
+            <div class="dd-meta"><span><b>12</b> 颗种子</span><span><b>426</b> GB</span><span><b>0</b> H&R 风险</span></div>
+          </div>
+          <div class="dd-list">
+            <div class="dd-item"><span class="dd-check on"></span><div class="dd-info"><div class="dd-name">Dune.Part.Two.2024.2160p.UHD.BluRay.x265</div><div class="dd-sub"><span><i style="background:#ff9f0a"></i>M-Team</span><span>已达 30 天</span><span>分享率 4.82</span></div></div><span class="dd-size">62.4 GB</span></div>
+            <div class="dd-item"><span class="dd-check on"></span><div class="dd-info"><div class="dd-name">Oppenheimer.2023.2160p.BluRay.REMUX.HEVC</div><div class="dd-sub"><span><i style="background:#bf5af2"></i>馒头</span><span>分享率 3.16</span><span>已达 45 天</span></div></div><span class="dd-size">58.1 GB</span></div>
+            <div class="dd-item"><span class="dd-check on"></span><div class="dd-info"><div class="dd-name">The.Bear.S03.2160p.DSNP.WEB-DL.DDP5.1</div><div class="dd-sub"><span><i style="background:#64d2ff"></i>听听歌</span><span>已达 30 天</span></div></div><span class="dd-size">41.8 GB</span></div>
+            <div class="dd-item"><span class="dd-check on"></span><div class="dd-info"><div class="dd-name">Shogun.2024.S01.2160p.HULU.WEB-DL</div><div class="dd-sub"><span><i style="background:#ff6b81"></i>彩虹岛</span><span>分享率 2.1</span><span>已达 60 天</span></div></div><span class="dd-size">38.6 GB</span></div>
+            <div class="dd-item"><span class="dd-check on"></span><div class="dd-info"><div class="dd-name">Severance.S02.2160p.ATVP.WEB-DL</div><div class="dd-sub"><span><i style="background:#32d74b"></i>52pt</span><span>已达 30 天</span></div></div><span class="dd-size">36.2 GB</span></div>
+            <div class="dd-item"><span class="dd-check"></span><div class="dd-info"><div class="dd-name">Blade.Runner.2049.2017.2160p.UHD</div><div class="dd-sub"><span><i style="background:#ff9f0a"></i>M-Team</span><span>分享率 2.8</span></div></div><span class="dd-size">54.8 GB</span></div>
+          </div>
+          <div class="dd-foot">
+            <div class="dd-total"><span>已选 5 颗 · 预计释放</span><b>237.1 GB</b></div>
+            <div class="dd-actions"><button class="btn ghost"><svg class="ic"><use href="#i-pause"/></svg>暂停</button><button class="btn danger"><svg class="ic"><use href="#i-trash"/></svg>删除选中</button></div>
+            <div class="dd-warn"><svg class="ic ic-sm"><use href="#i-alert"/></svg>仅为预计，不会自动执行；删除前会再次校验做种时长与 H&R</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= LEDGER ================= -->
+    <section class="screen" id="s-ledger">
+      <div class="led-summary">
+        <div class="cal-sum"><div class="cs-ic"><svg class="ic"><use href="#i-hard-drive"/></svg></div><div><div class="cs-l">做种体积</div><div class="cs-v">8.42 <small>TB</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic g"><svg class="ic"><use href="#i-arrow-up"/></svg></div><div><div class="cs-l">30 天上传</div><div class="cs-v">3.27 <small>TB</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic p"><svg class="ic"><use href="#i-chart"/></svg></div><div><div class="cs-l">平均上传效率</div><div class="cs-v">38.6 <small>MB/GB·日</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic o"><svg class="ic"><use href="#i-clock"/></svg></div><div><div class="cs-l">零上传种子</div><div class="cs-v">23 <small>颗 / 1.2 TB</small></div></div></div>
+      </div>
+      <div class="led-filter">
+        <div class="seg"><button class="on">按种子</button><button>按站点</button></div>
+        <div class="chips"><span class="chip on">全部 <b class="n">1,286</b></span><span class="chip">有上传</span><span class="chip">零上传 <b class="n">23</b></span><span class="chip">高价值</span><span class="chip" style="color:#ffc45e">H&R 风险 <b class="n" style="color:#ffc45e;background:rgba(255,159,10,.14)">3</b></span></div>
+        <div class="led-search"><svg class="ic ic-sm"><use href="#i-search"/></svg>搜索种子或站点</div>
+        <button class="btn ghost" style="height:30px"><svg class="ic"><use href="#i-file"/></svg>CSV</button>
+      </div>
+      <div class="led-main">
+        <div class="card led-table">
+          <div class="led-head"><span></span><span>种子</span><span>站点</span><span>体积</span><span>做种</span><span>30 天上传</span><span>效率</span><span>最后上传</span><span>价值分</span></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Dune.Part.Two.2024.2160p.UHD.BluRay.x265</div><div class="sub2">128 天 · 分享率 4.82</div></div><div class="led-site"><i style="background:#ff9f0a"></i>M-Team</div><div class="led-val">62.4 GB</div><div class="led-val">128 天</div><div class="led-val g">182.4 GB</div><div class="led-val">82.4</div><div class="led-val">2 分钟前</div><div class="vbar"><span class="b"><i style="width:96%;background:#32d74b"></i></span><b>96</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Oppenheimer.2023.2160p.BluRay.REMUX.HEVC</div><div class="sub2">96 天 · 分享率 3.16</div></div><div class="led-site"><i style="background:#bf5af2"></i>馒头</div><div class="led-val">58.1 GB</div><div class="led-val">96 天</div><div class="led-val g">121.6 GB</div><div class="led-val">64.8</div><div class="led-val">18 分钟前</div><div class="vbar"><span class="b"><i style="width:91%;background:#32d74b"></i></span><b>91</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">The.Bear.S03.2160p.DSNP.WEB-DL.DDP5.1</div><div class="sub2">74 天 · 分享率 2.74</div></div><div class="led-site"><i style="background:#64d2ff"></i>听听歌</div><div class="led-val">41.8 GB</div><div class="led-val">74 天</div><div class="led-val g">68.2 GB</div><div class="led-val">51.2</div><div class="led-val">1 小时前</div><div class="vbar"><span class="b"><i style="width:88%;background:#32d74b"></i></span><b>88</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Shogun.2024.S01.2160p.HULU.WEB-DL</div><div class="sub2">61 天 · 分享率 2.10</div></div><div class="led-site"><i style="background:#ff6b81"></i>彩虹岛</div><div class="led-val">38.6 GB</div><div class="led-val">61 天</div><div class="led-val g">44.7 GB</div><div class="led-val">47.6</div><div class="led-val">3 小时前</div><div class="vbar"><span class="b"><i style="width:84%;background:#64d2ff"></i></span><b>84</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Severance.S02.2160p.ATVP.WEB-DL.DDP5.1</div><div class="sub2">45 天 · 分享率 1.92</div></div><div class="led-site"><i style="background:#32d74b"></i>52pt</div><div class="led-val">36.2 GB</div><div class="led-val">45 天</div><div class="led-val g">21.4 GB</div><div class="led-val">39.1</div><div class="led-val">昨天</div><div class="vbar"><span class="b"><i style="width:79%;background:#64d2ff"></i></span><b>79</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Blade.Runner.2049.2017.2160p.UHD.BluRay</div><div class="sub2">210 天 · 分享率 1.38</div></div><div class="led-site"><i style="background:#ff9f0a"></i>M-Team</div><div class="led-val">54.8 GB</div><div class="led-val">210 天</div><div class="led-val o">12.8 GB</div><div class="led-val o">12.6</div><div class="led-val">12 天前</div><div class="vbar"><span class="b"><i style="width:68%;background:#ff9f0a"></i></span><b>68</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Chernobyl.S01.2160p.MAX.WEB-DL.DDP5.1</div><div class="sub2">188 天 · 分享率 1.12</div></div><div class="led-site"><i style="background:#bf5af2"></i>馒头</div><div class="led-val">32.1 GB</div><div class="led-val">188 天</div><div class="led-val o">3.2 GB</div><div class="led-val o">4.8</div><div class="led-val">46 天前</div><div class="vbar"><span class="b"><i style="width:52%;background:#ff9f0a"></i></span><b>52</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Taylor.Swift.The.Eras.Tour.2024.2160p</div><div class="sub2">95 天 · 分享率 0.00</div></div><div class="led-site"><i style="background:#64d2ff"></i>听听歌</div><div class="led-val">28.4 GB</div><div class="led-val">95 天</div><div class="led-val r">0.0 GB</div><div class="led-val r">0.0</div><div class="led-val">62 天前</div><div class="vbar"><span class="b"><i style="width:31%;background:#ff453a"></i></span><b>31</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">The.Last.of.Us.S02.2160p.MAX.WEB-DL</div><div class="sub2">130 天 · 分享率 0.00</div></div><div class="led-site"><i style="background:#ff6b81"></i>彩虹岛</div><div class="led-val">44.2 GB</div><div class="led-val">130 天</div><div class="led-val r">0.0 GB</div><div class="led-val r">0.0</div><div class="led-val">71 天前</div><div class="vbar"><span class="b"><i style="width:28%;background:#ff453a"></i></span><b>28</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Succession.S04.2160p.MAX.WEB-DL.DDP5.1</div><div class="sub2">160 天 · 分享率 1.21</div></div><div class="led-site"><i style="background:#64d2ff"></i>听听歌</div><div class="led-val">38.4 GB</div><div class="led-val">160 天</div><div class="led-val o">8.1 GB</div><div class="led-val o">7.2</div><div class="led-val">28 天前</div><div class="vbar"><span class="b"><i style="width:48%;background:#ff9f0a"></i></span><b>48</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">The.White.Lotus.S02.2160p.MAX.WEB-DL</div><div class="sub2">142 天 · 分享率 0.94</div></div><div class="led-site"><i style="background:#ff6b81"></i>彩虹岛</div><div class="led-val">34.6 GB</div><div class="led-val">142 天</div><div class="led-val r">2.6 GB</div><div class="led-val r">2.1</div><div class="led-val">38 天前</div><div class="vbar"><span class="b"><i style="width:42%;background:#ff9f0a"></i></span><b>42</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">Planet.Earth.III.2023.2160p.UHD.BluRay</div><div class="sub2">205 天 · 分享率 1.06</div></div><div class="led-site"><i style="background:#ff9f0a"></i>M-Team</div><div class="led-val">46.2 GB</div><div class="led-val">205 天</div><div class="led-val o">5.4 GB</div><div class="led-val o">3.9</div><div class="led-val">53 天前</div><div class="vbar"><span class="b"><i style="width:39%;background:#ff9f0a"></i></span><b>39</b></div></div>
+          <div class="led-row"><span class="led-check"></span><div class="led-name"><div class="nm">The.Crown.S06.2160p.NF.WEB-DL.DDP5.1</div><div class="sub2">171 天 · 分享率 0.88</div></div><div class="led-site"><i style="background:#bf5af2"></i>馒头</div><div class="led-val">31.8 GB</div><div class="led-val">171 天</div><div class="led-val r">0.0 GB</div><div class="led-val r">0.0</div><div class="led-val">64 天前</div><div class="vbar"><span class="b"><i style="width:24%;background:#ff453a"></i></span><b>24</b></div></div>
+        </div>
+        <div class="led-side">
+          <div class="side-card">
+            <div class="sh"><b>站点体积分布</b><span>8.42 TB</span></div>
+            <div class="dist-row"><span class="dn">M-Team</span><span class="db"><i style="width:88%;background:#ff9f0a"></i></span><span class="dv">2.84 TB</span></div>
+            <div class="dist-row"><span class="dn">馒头</span><span class="db"><i style="width:72%;background:#bf5af2"></i></span><span class="dv">2.12 TB</span></div>
+            <div class="dist-row"><span class="dn">听听歌</span><span class="db"><i style="width:52%;background:#64d2ff"></i></span><span class="dv">1.36 TB</span></div>
+            <div class="dist-row"><span class="dn">彩虹岛</span><span class="db"><i style="width:40%;background:#ff6b81"></i></span><span class="dv">1.18 TB</span></div>
+            <div class="dist-row"><span class="dn">52pt</span><span class="db"><i style="width:27%;background:#32d74b"></i></span><span class="dv">0.92 TB</span></div>
+            <div class="advice"><div class="at"><svg class="ic ic-sm" style="color:#ffc45e"><use href="#i-alert"/></svg>23 颗僵尸种子 · 1.2 TB</div><div class="ad">30 天零上传，释放后预计月上传损失 &lt; 0.4%</div><div class="aa">查看清理建议 →</div></div>
+            <div class="advice warn"><div class="at"><svg class="ic ic-sm"><use href="#i-shield"/></svg>3 颗 H&R 风险</div><div class="ad">最早 2 天后到期，不要删除，优先补种</div><div class="aa" style="color:#ffd38a">查看风险清单 →</div></div>
+          </div>
+          <div class="side-card" style="flex:1">
+            <div class="sh"><b>本周期洞察</b><span>30 天</span></div>
+            <div class="advice" style="margin-top:0"><div class="at"><svg class="ic ic-sm" style="color:#8af09a"><use href="#i-arrow-up"/></svg>上传效率提升 6.2%</div><div class="ad">主要来自 M-Team 的 4 部 4K 原盘，建议继续保留。</div></div>
+            <div class="advice"><div class="at"><svg class="ic ic-sm" style="color:#8ec5ff"><use href="#i-chart"/></svg>52pt 效率偏低</div><div class="ad">做种 0.92 TB，30 天仅上传 0.14 TB，可考虑降到 500 GB 预算。</div></div>
+            <div class="advice"><div class="at"><svg class="ic ic-sm" style="color:#dda6ff"><use href="#i-layers"/></svg>7 组同内容重复</div><div class="ad">跨站重复占用约 186 GB，去「同内容」查看。</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= VAULT ================= -->
+    <section class="screen" id="s-vault">
+      <div class="vault-banner">
+        <div class="vb-icon"><svg class="ic"><use href="#i-archive"/></svg></div>
+        <div class="vb-main"><b>种子档案库</b><span>删除前自动留档 · 数据还在时可以秒级复活</span></div>
+        <div class="vb-stats">
+          <div class="vb-stat"><div class="n">342</div><div class="l">档案条目</div></div>
+          <div class="vb-stat"><div class="n">1.2 GB</div><div class="l">档案占用</div></div>
+          <div class="vb-stat"><div class="n">365 天</div><div class="l">保留策略</div></div>
+        </div>
+      </div>
+      <div class="vault-main">
+        <div class="card vault-list">
+          <div class="vl-head">
+            <div class="vl-search"><svg class="ic ic-sm"><use href="#i-search"/></svg>搜索名称、hash、站点</div>
+            <button class="chip on">全部</button><button class="chip">数据还在</button><button class="chip">数据已删</button><button class="chip">无种子</button>
+          </div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit</div><div class="vl-sub"><span><i style="background:#ff9f0a"></i>M-Team</span><span>2026-09-18 删除</span><span>128 天</span></div></div><div class="vl-size">62.4 GB<span class="st" style="color:#8af09a">数据还在</span></div></div>
+          <div class="vl-row" style="background:rgba(10,132,255,.055)"><div class="vl-icon" style="color:#8af09a;background:rgba(50,215,75,.10);border-color:rgba(50,215,75,.14)"><svg class="ic"><use href="#i-check-circle"/></svg></div><div class="vl-info"><div class="vl-name">Oppenheimer.2023.2160p.BluRay.REMUX.HEVC</div><div class="vl-sub"><span><i style="background:#bf5af2"></i>馒头</span><span>2026-08-02 删除</span><span>96 天</span></div></div><div class="vl-size">58.1 GB<span class="st" style="color:#8af09a">数据还在</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">The.Bear.S03.2160p.DSNP.WEB-DL.DDP5.1</div><div class="vl-sub"><span><i style="background:#64d2ff"></i>听听歌</span><span>2026-07-11 删除</span><span>74 天</span></div></div><div class="vl-size">41.8 GB<span class="st" style="color:#8d96a8">数据已删</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">Shogun.2024.S01.2160p.HULU.WEB-DL</div><div class="vl-sub"><span><i style="background:#ff6b81"></i>彩虹岛</span><span>2026-06-24 删除</span><span>61 天</span></div></div><div class="vl-size">38.6 GB<span class="st" style="color:#8af09a">数据还在</span></div></div>
+          <div class="vl-row"><div class="vl-icon" style="color:#ffc45e;background:rgba(255,159,10,.09);border-color:rgba(255,159,10,.13)"><svg class="ic"><use href="#i-alert"/></svg></div><div class="vl-info"><div class="vl-name">Severance.S02.2160p.ATVP.WEB-DL</div><div class="vl-sub"><span><i style="background:#32d74b"></i>52pt</span><span>2026-05-30 删除</span><span>磁力添加</span></div></div><div class="vl-size">36.2 GB<span class="st" style="color:#ffc45e">无种子文件</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">Blade.Runner.2049.2017.2160p.UHD</div><div class="vl-sub"><span><i style="background:#ff9f0a"></i>M-Team</span><span>2026-04-12 删除</span><span>210 天</span></div></div><div class="vl-size">54.8 GB<span class="st" style="color:#8d96a8">数据已删</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">Chernobyl.S01.2160p.MAX.WEB-DL.DDP5.1</div><div class="vl-sub"><span><i style="background:#bf5af2"></i>馒头</span><span>2026-03-08 删除</span><span>188 天</span></div></div><div class="vl-size">32.1 GB<span class="st" style="color:#8af09a">数据还在</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">Succession.S04.2160p.MAX.WEB-DL.DDP5.1</div><div class="vl-sub"><span><i style="background:#64d2ff"></i>听听歌</span><span>2026-02-14 删除</span><span>160 天</span></div></div><div class="vl-size">38.4 GB<span class="st" style="color:#8af09a">数据还在</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">The.White.Lotus.S02.2160p.MAX.WEB-DL</div><div class="vl-sub"><span><i style="background:#ff6b81"></i>彩虹岛</span><span>2026-01-22 删除</span><span>142 天</span></div></div><div class="vl-size">34.6 GB<span class="st" style="color:#8d96a8">数据已删</span></div></div>
+          <div class="vl-row"><div class="vl-icon"><svg class="ic"><use href="#i-file"/></svg></div><div class="vl-info"><div class="vl-name">Planet.Earth.III.2023.2160p.UHD.BluRay</div><div class="vl-sub"><span><i style="background:#ff9f0a"></i>M-Team</span><span>2025-12-30 删除</span><span>205 天</span></div></div><div class="vl-size">46.2 GB<span class="st" style="color:#8af09a">数据还在</span></div></div>
+        </div>
+        <div class="card vault-detail">
+          <div class="vd-head">
+            <div class="vd-title">Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit.DTS-HD.MA.5.1<small>8f3a9c2e…c21d · 62.4 GB · M-Team</small></div>
+            <div class="vd-status"><span class="pill green"><svg class="ic ic-sm"><use href="#i-check"/></svg>可复活</span><span class="pill blue">原始 .torrent 已留档</span><span class="pill gray">128 天做种</span></div>
+          </div>
+          <div class="vd-meta">
+            <div><div class="k">最后分享率</div><div class="v">4.82</div></div>
+            <div><div class="k">累计上传</div><div class="v">182.4 GB</div></div>
+            <div><div class="k">删除时间</div><div class="v">2026-09-18 21:04</div></div>
+            <div><div class="k">数据目录</div><div class="v" style="font-size:9.5px">/vol1/影视/电影/Dune...</div></div>
+          </div>
+          <div class="vd-files">
+            <div class="fh"><span>文件列表</span><span>3 个文件</span></div>
+            <div class="vfile"><svg class="ic"><use href="#i-file"/></svg>Dune.Part.Two.2024.2160p.UHD.BluRay.x265.mkv<span class="fs">61.8 GB</span></div>
+            <div class="vfile"><svg class="ic"><use href="#i-file"/></svg>featurette.mkv<span class="fs">412 MB</span></div>
+            <div class="vfile"><svg class="ic"><use href="#i-file"/></svg>sample.mkv<span class="fs">186 MB</span></div>
+          </div>
+          <div class="vd-actions"><button class="btn primary"><svg class="ic"><use href="#i-upload"/></svg>复活到 qBittorrent</button><button class="btn ghost"><svg class="ic"><use href="#i-download"/></svg>.torrent</button><button class="btn ghost"><svg class="ic"><use href="#i-copy"/></svg></button></div>
+          <div class="vd-note"><svg class="ic ic-sm" style="color:#ffc45e;flex:0 0 auto"><use href="#i-shield"/></svg>种子内含 passkey，下载后请勿公开分享；复活时会先校验本地数据，数据缺失则提示重新下载。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= MATRIX ================= -->
+    <section class="screen" id="s-matrix">
+      <div class="mx-summary">
+        <div class="cal-sum"><div class="cs-ic"><svg class="ic"><use href="#i-layers"/></svg></div><div><div class="cs-l">同内容分组</div><div class="cs-v">186 <small>组</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic o"><svg class="ic"><use href="#i-hard-drive"/></svg></div><div><div class="cs-l">重复占用</div><div class="cs-v">1.86 <small>TB</small></div></div></div>
+        <div class="cal-sum"><div class="cs-ic g"><svg class="ic"><use href="#i-check-circle"/></svg></div><div><div class="cs-l">可合并 / 可暂停</div><div class="cs-v">42 <small>组</small></div></div></div>
+      </div>
+      <div class="mx-tools"><span class="chip on"><svg class="ic ic-sm"><use href="#i-layers"/></svg>全部内容</span><span class="chip">重复占用最大</span><span class="chip">同一下载器重复</span><span class="chip">跨下载器重复</span><div class="led-search" style="width:190px"><svg class="ic ic-sm"><use href="#i-search"/></svg>搜索内容</div></div>
+      <div class="mx-grid">
+        <div class="card group">
+          <div class="group-h"><div class="group-title">Dune.Part.Two.2024.2160p.UHD.BluRay</div><div class="group-sub"><span>4 个副本 · 249.6 GB</span><span class="sites"><span>M-Team</span><span>馒头</span><span>彩虹岛</span><span>52pt</span></span></div></div>
+          <div class="group-body">
+            <div class="copy-row"><span class="csite"><i style="background:#ff9f0a"></i>M-Team</span><span class="cdl">QB · 下载</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">182.4 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#bf5af2"></i>馒头</span><span class="cdl">QB · 下载</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">96.2 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#ff6b81"></i>彩虹岛</span><span class="cdl">TR · 保种</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">44.1 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#32d74b"></i>52pt</span><span class="cdl">TR · 保种</span><span class="cst"><span class="pill orange">暂停</span></span><span class="cup">12.8 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+          </div>
+          <div class="group-f"><span>重复占用 <b>186.4 GB</b> · 跨 2 台下载器</span><button class="btn ghost">查看详情</button></div>
+        </div>
+        <div class="card group">
+          <div class="group-h"><div class="group-title">Oppenheimer.2023.2160p.BluRay.REMUX</div><div class="group-sub"><span>2 个副本 · 116.2 GB</span><span class="sites"><span>馒头</span><span>M-Team</span></span></div></div>
+          <div class="group-body">
+            <div class="copy-row"><span class="csite"><i style="background:#bf5af2"></i>馒头</span><span class="cdl">QB · 下载</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">121.6 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#ff9f0a"></i>M-Team</span><span class="cdl">TR · 保种</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">68.3 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+          </div>
+          <div class="group-f"><span>同一下载器无重复 · 可保留双站</span><button class="btn ghost">查看详情</button></div>
+        </div>
+        <div class="card group">
+          <div class="group-h"><div class="group-title">The.Bear.S03.2160p.DSNP.WEB-DL</div><div class="group-sub"><span>3 个副本 · 125.4 GB</span><span class="sites"><span>听听歌</span><span>彩虹岛</span><span>52pt</span></span></div></div>
+          <div class="group-body">
+            <div class="copy-row"><span class="csite"><i style="background:#64d2ff"></i>听听歌</span><span class="cdl">QB · 下载</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">68.2 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#ff6b81"></i>彩虹岛</span><span class="cdl">QB · 下载</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">31.4 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#32d74b"></i>52pt</span><span class="cdl">QB · 下载</span><span class="cst"><span class="pill orange">暂停</span></span><span class="cup">3.1 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+          </div>
+          <div class="group-f"><span>同一下载器 2 份重复 · 可释放 <b>41.8 GB</b></span><button class="btn ghost">查看详情</button></div>
+        </div>
+        <div class="card group">
+          <div class="group-h"><div class="group-title">Shogun.2024.S01.2160p.HULU.WEB-DL</div><div class="group-sub"><span>2 个副本 · 77.2 GB</span><span class="sites"><span>彩虹岛</span><span>M-Team</span></span></div></div>
+          <div class="group-body">
+            <div class="copy-row"><span class="csite"><i style="background:#ff6b81"></i>彩虹岛</span><span class="cdl">TR · 保种</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">44.7 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+            <div class="copy-row"><span class="csite"><i style="background:#ff9f0a"></i>M-Team</span><span class="cdl">TR · 保种</span><span class="cst"><span class="pill green">做种</span></span><span class="cup">36.8 GB ↑</span><span class="cact"><svg class="ic ic-sm"><use href="#i-more"/></svg></span></div>
+          </div>
+          <div class="group-f"><span>近似匹配 · 建议核对文件列表</span><button class="btn ghost">查看详情</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PUBLISH ================= -->
+    <section class="screen" id="s-publish">
+      <div class="pub-steps">
+        <div class="pstep done"><span class="pn"><svg class="ic ic-sm"><use href="#i-check"/></svg></span><span class="pl">选择文件</span><span class="pd">已建种</span></div>
+        <span class="pline"></span>
+        <div class="pstep on"><span class="pn">2</span><span class="pl">生成资料</span><span class="pd">MediaInfo · 截图 · BBCode</span></div>
+        <span class="pline"></span>
+        <div class="pstep"><span class="pn">3</span><span class="pl">检查发布</span><span class="pd">生成 zip</span></div>
+      </div>
+      <div class="pub-main">
+        <div class="pub-left">
+          <div class="pub-file">
+            <div class="pf-icon"><svg class="ic"><use href="#i-file"/></svg></div>
+            <div class="pf-main"><div class="pf-name">Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit.DTS-HD.MA.5.1</div><div class="pf-sub"><span>62.4 GB</span><span>infohash 8f3a…c21d</span><b>已建种</b></div></div>
+            <button class="btn ghost" style="height:28px">重新选择</button>
+          </div>
+          <div class="mi-card">
+            <div class="mi-title"><b>MediaInfo</b><span>已提取 · 24.6 GB 主视频</span></div>
+            <div class="mi-chips"><span>3840 × 2160</span><span>HEVC 10bit</span><span>23.976 fps</span><span>DTS-HD MA 5.1</span><span>2h 46m</span><span>HDR10</span><span>中英特效</span></div>
+            <div class="shots">
+              <div class="shot"><div class="sh-bg" style="background:linear-gradient(135deg,#8a4b2a,#d99a5b 45%,#3a2418)"></div><div class="sh-play"><svg class="ic ic-lg"><use href="#i-play"/></svg></div><span class="sh-time">00:12:34</span></div>
+              <div class="shot"><div class="sh-bg" style="background:linear-gradient(135deg,#23425f,#6d9fbd 50%,#101a24)"></div><div class="sh-play"><svg class="ic ic-lg"><use href="#i-play"/></svg></div><span class="sh-time">00:48:10</span></div>
+              <div class="shot"><div class="sh-bg" style="background:linear-gradient(135deg,#4a2e20,#b8743c 55%,#1a100b)"></div><div class="sh-play"><svg class="ic ic-lg"><use href="#i-play"/></svg></div><span class="sh-time">01:32:05</span></div>
+              <div class="shot"><div class="sh-bg" style="background:linear-gradient(135deg,#2c3d36,#7ca58e 50%,#101713)"></div><div class="sh-play"><svg class="ic ic-lg"><use href="#i-play"/></svg></div><span class="sh-time">02:18:44</span></div>
+            </div>
+            <div class="tpl-row"><span>发布模板</span><span class="tpl"><svg class="ic ic-sm"><use href="#i-file"/></svg>NexusPHP · 电影<svg class="ic ic-sm"><use href="#i-chevron-down"/></svg></span><span class="tpl">通用 BBCode</span><span style="margin-left:auto;color:#8ec5ff">编辑模板</span></div>
+          </div>
+          <div class="check-card">
+            <div class="check-title"><span>发布前检查</span><span style="color:#8af09a">7 / 7 通过</span></div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>标题符合站点命名规范</div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>截图 4 张，尺寸 1920 × 1080</div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>MediaInfo 完整，含音轨与字幕</div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>未命中站点禁词 / 禁发规则</div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>截图无黑边，已选 4 个时间点</div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>音轨与字幕语言已标注</div>
+            <div class="check-row"><span class="ck"><svg class="ic"><use href="#i-check"/></svg></span>分类 / 标签与站点一致</div>
+          </div>
+          <div class="pub-history">
+            <div class="phh"><b>最近发布</b><span>查看全部</span></div>
+            <div class="phr"><span class="n">Dune.Part.Two.2024.2160p.UHD.BluRay</span><span class="s">M-Team</span><span class="pill green">已发布</span><span class="d">10-18</span></div>
+            <div class="phr"><span class="n">Oppenheimer.2023.2160p.BluRay.REMUX</span><span class="s">馒头</span><span class="pill green">已发布</span><span class="d">09-22</span></div>
+          </div>
+        </div>
+        <div class="pub-right">
+          <div class="card bb-card">
+            <div class="bb-head"><div class="card-t">BBCode 预览</div><div class="card-a"><svg class="ic ic-sm"><use href="#i-copy"/></svg>复制</div></div>
+            <div class="bb-code"><span class="tag">[img]</span>https://.../dune-01.jpg<span class="tag">[/img]</span>
+<span class="tag">[quote]</span><span class="key">[b]</span>译名<span class="key">[/b]</span> 沙丘2
+<span class="key">[b]</span>片名<span class="key">[/b]</span> Dune: Part Two
+<span class="key">[b]</span>年代<span class="key">[/b]</span> 2024
+<span class="key">[b]</span>国家<span class="key">[/b]</span> 美国
+<span class="key">[b]</span>类别<span class="key">[/b]</span> 剧情 / 科幻 / 冒险
+<span class="key">[b]</span>分辨率<span class="key">[/b]</span> 3840x2160
+<span class="key">[b]</span>视频编码<span class="key">[/b]</span> HEVC 10bit
+<span class="key">[b]</span>音频<span class="key">[/b]</span> DTS-HD MA 5.1
+<span class="key">[b]</span>字幕<span class="key">[/b]</span> 中英特效
+<span class="key">[b]</span>大小<span class="key">[/b]</span> 62.4 GB
+<span class="tag">[/quote]</span>
+<span class="tag">[hide]</span>MediaInfo...<span class="tag">[/hide]</span>
+<span class="dim">&lt;!-- 4 张截图占位 --&gt;</span>
+<span class="tag">[quote]</span><span class="key">[b]</span>MediaInfo<span class="key">[/b]</span>
+General
+Complete name : Dune.Part.Two.2024.2160p.UHD.BluRay.x265.mkv
+Format : Matroska
+File size : 62.4 GiB
+Duration : 2 h 46 min
+Overall bit rate : 53.6 Mb/s
+
+Video
+Format : HEVC
+Format profile : Main 10@L5.1@High
+Width : 3840 pixels
+Height : 2160 pixels
+Frame rate : 23.976 FPS
+HDR format : SMPTE ST 2086, HDR10
+
+Audio
+Format : DTS XLL
+Channel(s) : 6 channels
+Language : English
+<span class="tag">[/quote]</span></div>
+          </div>
+          <div class="pub-actions"><button class="btn primary"><svg class="ic"><use href="#i-archive"/></svg>生成发布包</button><button class="btn ghost"><svg class="ic"><use href="#i-copy"/></svg>复制 BBCode</button></div>
+          <div class="pub-note">资料包包含：种子、4 张截图、mediainfo.txt、bbcode.txt、发布清单。v1 只生成资料，不自动上传站点。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= MOBILE BOARD ================= -->
+<div class="mobile-board">
+  <div class="mb-left">
+    <div class="mb-brand">
+      <div class="brand-mark"><svg class="ic ic-lg"><use href="#i-anchor"/></svg></div>
+      <div class="brand-name">SeedArk</div>
+      <div class="brand-ver">保种台</div>
+    </div>
+    <div class="mb-title">把做种<br>变成<span>看得懂</span>的资产</div>
+    <div class="mb-desc">释放日历、资产台账、档案复活。下载器里发生的事，手机上也一目了然。</div>
+    <div class="mb-list">
+      <div class="mb-li"><div class="li-ic"><svg class="ic ic-sm"><use href="#i-calendar"/></svg></div><div><b>今天能腾多少盘</b><span>按站点规则计算最早可释放时间，H&R 风险单独标出。</span></div></div>
+      <div class="mb-li"><div class="li-ic"><svg class="ic ic-sm"><use href="#i-chart"/></svg></div><div><b>哪些种子在真正上传</b><span>30 天上传效率、最后上传时间、保种价值分。</span></div></div>
+      <div class="mb-li"><div class="li-ic"><svg class="ic ic-sm"><use href="#i-archive"/></svg></div><div><b>删了也能找回来</b><span>原始 .torrent 留档，数据还在时可秒级复活。</span></div></div>
+    </div>
+    <div class="mb-meta"><span>SeedArk v0.2 Preview</span><span class="dot"></span><span>PT 资产工作台</span></div>
+  </div>
+  <div class="phone">
+    <div class="ph-screen">
+      <div class="ph-status"><span>9:41</span><span class="sr"><span class="ph-bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:9px"></i></span><span>5G</span><span style="display:inline-block;width:17px;height:8px;border:1px solid #fff;border-radius:2px;position:relative"><i style="position:absolute;inset:1px;right:3px;background:#fff;border-radius:1px;display:block"></i></span></span></div>
+      <div class="ph-head"><div class="ph-t">保种台</div><div class="ph-x"><svg class="ic ic-sm"><use href="#i-x"/></svg></div></div>
+      <div class="ph-body">
+        <div class="ph-hero">
+          <div class="pe">本周可释放</div>
+          <div class="pn">1.84 <small>TB</small></div>
+          <div class="ps">38 颗种子已满足站点规则 · 今天 128 GB</div>
+          <div class="pbars"><i style="height:38%"></i><i style="height:52%"></i><i style="height:72%"></i><i style="height:63%"></i><i style="height:86%"></i><i style="height:58%"></i><i class="on" style="height:64%"></i></div>
+          <div class="pbtn"><svg class="ic ic-sm"><use href="#i-calendar"/></svg>查看释放日历</div>
+        </div>
+        <div class="ph-stats">
+          <div class="ph-stat"><div class="l">做种总量</div><div class="v">8.42<small> TB</small></div><div class="f">1,286 颗 · 2 台</div></div>
+          <div class="ph-stat"><div class="l">30 天上传</div><div class="v">3.27<small> TB</small></div><div class="f"><b>↑ 12.4%</b> 较上月</div></div>
+          <div class="ph-stat"><div class="l">平均效率</div><div class="v">38.6<small> MB/GB·日</small></div><div class="f"><b>↑ 6.2%</b> 高于上月</div></div>
+          <div class="ph-stat warn"><div class="l">H&R 风险</div><div class="v">3<small> 颗</small></div><div class="f">最早 2 天后到期</div></div>
+        </div>
+        <div class="ph-sec">站点分布<span>8.42 TB</span></div>
+        <div class="ph-sites">
+          <div class="ph-site"><span class="d" style="background:#ff9f0a"></span><span class="n">M-Team</span><span class="b"><i style="width:88%;background:#ff9f0a"></i></span><span class="v">2.84 TB</span></div>
+          <div class="ph-site"><span class="d" style="background:#bf5af2"></span><span class="n">馒头</span><span class="b"><i style="width:72%;background:#bf5af2"></i></span><span class="v">2.12 TB</span></div>
+          <div class="ph-site"><span class="d" style="background:#64d2ff"></span><span class="n">听听歌</span><span class="b"><i style="width:52%;background:#64d2ff"></i></span><span class="v">1.36 TB</span></div>
+          <div class="ph-site"><span class="d" style="background:#ff6b81"></span><span class="n">彩虹岛</span><span class="b"><i style="width:40%;background:#ff6b81"></i></span><span class="v">1.18 TB</span></div>
+        </div>
+      </div>
+      <div class="ph-tabbar">
+        <div class="ph-tab on"><svg class="ic"><use href="#i-grid"/></svg>概览</div>
+        <div class="ph-tab"><svg class="ic"><use href="#i-calendar"/></svg>日历</div>
+        <div class="ph-tab"><svg class="ic"><use href="#i-chart"/></svg>台账</div>
+        <div class="ph-tab"><svg class="ic"><use href="#i-archive"/></svg>档案</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const screen = params.get('s') || 'overview';
+  document.body.dataset.s = screen;
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tab === screen));
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      const bad = [];
+      document.querySelectorAll('.screen').forEach(scr => {
+        if (getComputedStyle(scr).display === 'none') return;
+        scr.querySelectorAll('*').forEach(el => {
+          const cs = getComputedStyle(el);
+          if (cs.overflowX === 'hidden' || cs.overflowY === 'hidden' || cs.overflow === 'hidden') return;
+          if (el.scrollWidth > el.clientWidth + 2) bad.push({t: el.className, type:'x', sw: el.scrollWidth, cw: el.clientWidth, txt:(el.textContent||'').trim().slice(0,36)});
+          if (el.scrollHeight > el.clientHeight + 2) bad.push({t: el.className, type:'y', sh: el.scrollHeight, ch: el.clientHeight, txt:(el.textContent||'').trim().slice(0,36)});
+        });
+      });
+      const pre = document.createElement('pre');
+      pre.id = 'audit';
+      pre.textContent = JSON.stringify(bad.slice(0, 60));
+      document.body.appendChild(pre);
+      const keys = ['.bb-code','.cal-grid','.calendar','.led-table','.vault-list','.ov-bottom','.screen','.main','.pub-main','.pub-left','.pub-right','.check-card','.mi-card','.led-main','.vault-main','.mx-grid'];
+      const clips = [];
+      keys.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none') return;
+        if (el.scrollHeight > el.clientHeight + 2 || el.scrollWidth > el.clientWidth + 2) {
+          clips.push({sel, sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight, of: cs.overflow});
+        }
+      });
+      const pre2 = document.createElement('pre');
+      pre2.id = 'audit2';
+      pre2.textContent = JSON.stringify(clips);
+      document.body.appendChild(pre2);
+      const lay = [];
+      const mainEl = document.querySelector('.main');
+      if (mainEl) {
+        const mr = mainEl.getBoundingClientRect();
+        document.querySelectorAll('.screen').forEach(scr => {
+          if (getComputedStyle(scr).display === 'none') return;
+          const r = scr.getBoundingClientRect();
+          if (r.bottom > mr.bottom + 1) lay.push({what:'screen-bottom', id:scr.id, bottom:r.bottom, mainBottom:mr.bottom});
+        });
+        document.querySelectorAll('.screen .card, .screen .cal-sum, .screen .site-card, .screen .stat').forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.bottom > mr.bottom + 1 || r.right > mr.right + 1) lay.push({what:'card-out', cls:el.className, b:r.bottom, r:r.right, mb:mr.bottom, mr:mr.right});
+        });
+      }
+      const phBody = document.querySelector('.ph-body');
+      const tabbar = document.querySelector('.ph-tabbar');
+      if (phBody && tabbar && getComputedStyle(document.querySelector('.mobile-board')).display !== 'none') {
+        const pb = phBody.getBoundingClientRect(), tb = tabbar.getBoundingClientRect();
+        if (pb.bottom > tb.top + 1) lay.push({what:'mobile-overlap', bodyBottom:pb.bottom, tabTop:tb.top});
+      }
+      const pre3 = document.createElement('pre');
+      pre3.id = 'audit3';
+      pre3.textContent = JSON.stringify(lay);
+      document.body.appendChild(pre3);
+      const probe = [];
+      ['.pub-history','.pub-left','.pub-right','.bb-code','.check-card','.mi-card'].forEach(sel => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        probe.push({sel, top:Math.round(r.top), bottom:Math.round(r.bottom), h:Math.round(r.height), sh:el.scrollHeight, ch:el.clientHeight});
+      });
+      const pre4 = document.createElement('pre');
+      pre4.id = 'audit4';
+      pre4.textContent = JSON.stringify(probe);
+      document.body.appendChild(pre4);
+    }, 400);
+  });
+</script>
+</body>
+</html>

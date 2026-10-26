@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sushazhi/seedark/backend/internal/driver"
+	"github.com/sushazhi/seedark/backend/internal/pt"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 )
 
@@ -112,7 +113,7 @@ func TestServerReusesInstancePerDriver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建 Manager 失败: %v", err)
 	}
-	s := New(m, nil, nil, nil, &atomic.Bool{}, &atomic.Bool{}, nil)
+	s := New(m, nil, nil, nil, &atomic.Bool{}, &atomic.Bool{}, nil, nil)
 	first := s.server()
 	if s.server() != first {
 		t.Error("驱动未变时应复用同一实例")
@@ -130,5 +131,46 @@ func TestServerReusesInstancePerDriver(t *testing.T) {
 	}
 	if _, ok := listTools(t, second)["transmission_api_request"]; ok {
 		t.Error("切换为 qBittorrent 后不应再暴露 transmission_api_request")
+	}
+}
+
+// ptToolNames 保种台的只读工具
+var ptToolNames = []string{"pt_seed_ledger", "pt_release_calendar", "pt_vault_search", "pt_content_matrix"}
+
+// toolsForServer 用给定的 Server 注册一份工具清单（处理器不会被调用）
+func toolsForServer(t *testing.T, s *Server, sig driverSig) map[string]string {
+	t.Helper()
+	srv := mcp.NewServer(&mcp.Implementation{Name: "SeedArk", Version: "test"}, nil)
+	registerTools(srv, s, sig)
+	return listTools(t, srv)
+}
+
+// TestPTToolsGatedOnService 保种台工具只在 pt 服务可用时才注册。
+// ptSvc 为 nil 表示数据目录不可写：此时注册出去的工具只会返回错误，
+// 不该出现在清单里让 AI 客户端白调一次。
+func TestPTToolsGatedOnService(t *testing.T) {
+	m, err := rpc.NewManager(rpc.Credentials{Type: driver.KindTransmission, URL: "http://127.0.0.1:19091/transmission/rpc"})
+	if err != nil {
+		t.Fatalf("创建 Manager 失败: %v", err)
+	}
+	sig := backendSig(t, driver.KindTransmission, "http://127.0.0.1:19091/transmission/rpc")
+
+	off := toolsForServer(t, New(m, nil, nil, nil, &atomic.Bool{}, &atomic.Bool{}, nil, nil), sig)
+	for _, name := range ptToolNames {
+		if _, ok := off[name]; ok {
+			t.Errorf("ptSvc 为 nil 时不应注册 %s", name)
+		}
+	}
+
+	// 只验证注册条件，处理器不会被调用，因此 state.Store 传 nil 即可
+	svc, err := pt.New(m, nil, t.TempDir())
+	if err != nil {
+		t.Fatalf("创建 pt 服务失败: %v", err)
+	}
+	on := toolsForServer(t, New(m, nil, nil, nil, &atomic.Bool{}, &atomic.Bool{}, nil, svc), sig)
+	for _, name := range ptToolNames {
+		if _, ok := on[name]; !ok {
+			t.Errorf("ptSvc 可用时应注册 %s", name)
+		}
 	}
 }

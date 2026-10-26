@@ -15,6 +15,7 @@ import (
 	"github.com/sushazhi/seedark/backend/internal/middleware"
 	"github.com/sushazhi/seedark/backend/internal/models"
 	"github.com/sushazhi/seedark/backend/internal/platform"
+	"github.com/sushazhi/seedark/backend/internal/pt"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/speedpolicy"
@@ -40,6 +41,7 @@ type Handler struct {
 	automove     *automove.Service
 	seedpolicy   *seedpolicy.Service
 	speedpolicy  *speedpolicy.Service
+	ptSvc        *pt.Service
 	plat         platform.Platform
 	dataDir      string
 	apiToken     string
@@ -60,7 +62,7 @@ type Handler struct {
 // NewHandler 创建处理器。
 // plat 提供宿主平台能力：本地文件读取白名单、同源判定策略、宿主专属路由（如 fnOS 应用更新）。
 // mcp 为 MCP 服务的运行期开关，与 main 中 /mcp 路由的 gate 共享同一实例。
-func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store, moveSvc *automove.Service, policySvc *seedpolicy.Service, speedSvc *speedpolicy.Service, cfg *config.Config, plat platform.Platform, mcp *McpControl) *Handler {
+func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store, moveSvc *automove.Service, policySvc *seedpolicy.Service, speedSvc *speedpolicy.Service, cfg *config.Config, plat platform.Platform, mcp *McpControl, ptSvc *pt.Service) *Handler {
 	return &Handler{
 		rpc:          manager,
 		hub:          hub,
@@ -69,6 +71,7 @@ func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store
 		automove:     moveSvc,
 		seedpolicy:   policySvc,
 		speedpolicy:  speedSvc,
+		ptSvc:        ptSvc,
 		plat:         plat,
 		dataDir:      cfg.DataDir,
 		apiToken:     cfg.APIToken,
@@ -269,6 +272,26 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		api.POST("/speedpolicy/run", h.runSpeedPolicy)
 		// Peer 地理位置
 		api.POST("/peers/geo", h.lookupPeers)
+		// PT 中心：资产台账 / 释放日历 / 档案库 / 同内容 / 发种 / 站点规则
+		api.GET("/pt/overview", h.ptOverview)
+		api.GET("/pt/ledger", h.ptLedger)
+		api.GET("/pt/calendar", h.ptCalendar)
+		api.GET("/pt/vault", h.ptVault)
+		api.GET("/pt/vault/:id", h.ptVaultDetail)
+		api.GET("/pt/vault/:id/file", h.ptVaultFile)
+		api.POST("/pt/vault/:id/revive", h.ptVaultRevive)
+		api.DELETE("/pt/vault/:id", h.ptVaultDelete)
+		api.GET("/pt/matrix", h.ptMatrix)
+		api.POST("/pt/publish/preview", h.ptPublishPreview)
+		api.POST("/pt/publish/kit", h.ptPublishKit)
+		api.GET("/pt/sites", h.ptSites)
+		api.POST("/pt/sites", h.ptSaveSite)
+		api.POST("/pt/sites/seed", h.ptSeedSites)
+		api.DELETE("/pt/sites/:id", h.ptDeleteSite)
+		api.POST("/pt/sample", h.ptSample)
+		// 保种契约（①）：只记录承诺，不触发暂停/删除
+		api.POST("/pt/contract", h.ptSetContract)
+		api.DELETE("/pt/contract/:hash", h.ptDeleteContract)
 		// 远端→本地路径映射（打开目录/复制路径时的展示转换）
 		api.GET("/paths/map", h.listPathMappings)
 		// 系统命令

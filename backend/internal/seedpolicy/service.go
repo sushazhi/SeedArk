@@ -245,11 +245,46 @@ func evaluate(st *state.State, rules []*state.SeedPolicyRule, t *rpc.Torrent, si
 		return planItem{}, false
 	}
 	for _, r := range rules {
-		if reason, ok := reached(r, t); ok && matchesRuleScope(r, t, sites) {
+		// 站点要求（SiteProfile）是「这个站要求保多少天 / 多少分享率」的唯一出处。
+		// 规则自身填了阈值的字段以规则为准（标签/名称级覆盖），留 0 的字段在开启
+		// InheritSite 时取站点值——这样不必在两处各配一遍，日历与策略也不会互相矛盾。
+		if reason, ok := reached(effectiveRule(r, st.SiteProfiles, sites), t); ok && matchesRuleScope(r, t, sites) {
 			return planItem{torrent: t, rule: r, site: primarySite(t), reason: reason}, true
 		}
 	}
 	return planItem{}, false
+}
+
+// effectiveRule 把站点要求继承进规则（原地返回副本，不改动持久化配置）。
+// 未开启 InheritSite、或该种子不属于任何已配置站点时原样返回。
+func effectiveRule(r *state.SeedPolicyRule, profiles []state.SiteProfile, sites []string) *state.SeedPolicyRule {
+	if r == nil || !r.InheritSite {
+		return r
+	}
+	p, ok := profileFor(profiles, sites)
+	if !ok {
+		return r
+	}
+	er := *r
+	if er.MinRatio <= 0 && p.MinRatio > 0 {
+		er.MinRatio = p.MinRatio
+	}
+	if er.MinSeedDays <= 0 && p.MinSeedDays > 0 {
+		er.MinSeedDays = p.MinSeedDays
+	}
+	// SiteProfile 没有「最少上传量」这一项，MinUploadGB 只能由规则自己给
+	return &er
+}
+
+// profileFor 取该种子所属站点对应的站点要求。
+// 匹配走 state.MatchSiteProfile（与保种台同一个函数），命中多个取第一个。
+func profileFor(profiles []state.SiteProfile, sites []string) (state.SiteProfile, bool) {
+	for _, s := range sites {
+		if p, ok := state.MatchSiteProfile(profiles, s); ok {
+			return p, true
+		}
+	}
+	return state.SiteProfile{}, false
 }
 
 // matchesRuleScope 判断种子是否落在规则的站点 / 标签 / 名称范围内

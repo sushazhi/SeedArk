@@ -17,6 +17,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sprout,
   SquareCheck,
   SquareX,
   Tags,
@@ -54,6 +55,7 @@ interface Props {
   onOpenDashboard: () => void
   onOpenCreate: () => void
   onOpenLabels: () => void
+  onOpenPT: () => void
   filteredIds: number[]
   isMobile?: boolean
   onOpenDrawer?: () => void
@@ -101,7 +103,7 @@ const THEME_PRESETS: { id: string; from: string; to: string }[] = [
 ]
 
 // 玻璃悬浮顶栏：单行 —— Logo + 搜索 + 批量操作（选中时出现在同行）+ 排序/视图/刷新 + 添加 + 头像
-export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashboard, onOpenCreate, onOpenLabels, filteredIds, isMobile, onOpenDrawer }) => {
+export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashboard, onOpenCreate, onOpenLabels, onOpenPT, filteredIds, isMobile, onOpenDrawer }) => {
   const { t } = useTranslation()
   const search = useAppStore((s) => s.filters.search)
   const filters = useAppStore((s) => s.filters)
@@ -289,6 +291,9 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* 排序 / 视图 / 刷新（桌面端并入顶栏，移动端在 ListHeader） */}
           {!isMobile && <ListControls compact onOpenDashboard={onOpenDashboard} />}
+
+          {/* PT 中心：保种资产台账 / 释放日历 / 档案库 / 发种资料，桌面与移动端都保留入口 */}
+          <ToolBtn icon={Sprout} large={isMobile} title={t('pt.title')} onClick={onOpenPT} />
 
           {!isMobile && (
             <DropdownMenu>

@@ -74,6 +74,36 @@ func registerTools(srv *mcp.Server, s *Server, sig driverSig) {
 		Description: "列出全部种子的站点归属：站点名到种子数汇总，以及每个种子对应的站点列表",
 	}, s.getTorrentSites)
 
+	// 保种台（只读）：「哪些种子值多少、什么时候能删、删了还能不能找回」。
+	// 全部基于下载器全量种子的本地账本，不访问站点、不需要站点账号；
+	// 所有释放时间与效率都是估算值，这些工具只回答「是什么」，不动任何种子。
+	//
+	// 注意 s 可能为 nil（单元测试只验证工具清单，不调用处理器），所以这里不能直接
+	// 解引用 s.ptSvc。
+	ptOK := s != nil && s.ptSvc != nil
+	addToolIf(srv, ptOK, &mcp.Tool{
+		Name: "pt_seed_ledger",
+		Description: "保种资产台账：逐颗种子给出体积、分享率、近 30 天上传、上传效率（MB/GB·日）、保种分 0-100、" +
+			"连续无上传天数、站点是否已删种（无效做种）、保种契约剩余天数，并按站点汇总。" +
+			"用于回答「哪些种子在真正上传」「哪个站最费盘」。近 30 天上传在采样不足 30 天时是折算估算值",
+	}, s.ptSeedLedger)
+	addToolIf(srv, ptOK, &mcp.Tool{
+		Name: "pt_release_calendar",
+		Description: "保种释放日历：按月给出每天可释放的种子数与体积、当日 H&R 风险数、当日到期的保种契约数，" +
+			"以及因缺少站点规则而无法定期的种子汇总。用于回答「下周能删哪些」「今天能腾多少」。" +
+			"全部为预计值，本工具不会删除任何种子",
+	}, s.ptReleaseCalendar)
+	addToolIf(srv, ptOK, &mcp.Tool{
+		Name:        "pt_vault_search",
+		Description: "搜索种子档案库：删除种子时自动留档的名称/体积/分享率/做种天数/磁力/文件清单。用于找回误删的种子；留档不含 .torrent 文件时只能靠磁力重新添加",
+	}, s.ptVaultSearch)
+	addToolIf(srv, ptOK, &mcp.Tool{
+		Name: "pt_content_matrix",
+		Description: "跨站/跨下载器同内容矩阵：按归一化名称把同一份内容的多份副本归为一组，给出总占用、" +
+			"冗余体积与「同一下载器内重复」告警。用于回答「这部片我在几个站有」。" +
+			"分组按名称近似匹配，版本不同（1080p 与 2160p）不会被合并，需人工确认",
+	}, s.ptContentMatrix)
+
 	// 写操作（默认开放）
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "verify_torrents",
@@ -945,7 +975,7 @@ type apiRequestIn struct {
 // validateTorrentAddArgs 对透传的 torrent-add 做与 add_torrent 同口径的校验。
 // Transmission 的 filename 参数原生支持本地路径：透传入口若只按方法名放行，
 // 调用方可传任意宿主机路径借 Transmission 进程权限读文件，绕过文件读取白名单
-//（与 rpc.ValidTorrentLink 注释描述的是同一处风险，两侧必须一致）。
+// （与 rpc.ValidTorrentLink 注释描述的是同一处风险，两侧必须一致）。
 func validateTorrentAddArgs(args map[string]any) error {
 	raw, ok := args["filename"]
 	if !ok || raw == nil {

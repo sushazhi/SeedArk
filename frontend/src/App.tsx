@@ -6,6 +6,7 @@ import { AddTorrent } from '@/components/AddTorrent'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { AuthTokenDialog } from '@/components/AuthTokenDialog'
 import { CreateTorrentDialog } from '@/components/CreateTorrentDialog'
+import { PTDialog } from '@/components/PT/PTDialog'
 import { Dashboard } from '@/components/Dashboard'
 import { DesktopSidebar, MobileDrawer, STATUS_ITEMS } from '@/components/Sidebar'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
@@ -85,6 +86,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [ptOpen, setPtOpen] = useState(false)
   const [cleanOpen, setCleanOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [detailTorrent, setDetailTorrent] = useState<Torrent | null>(null)
@@ -385,6 +387,7 @@ export default function App() {
           onOpenAdd={() => setAddOpen(true)}
           onOpenDashboard={() => setDashboardOpen(true)}
           onOpenCreate={() => setCreateOpen(true)}
+          onOpenPT={() => setPtOpen(true)}
           onOpenLabels={() => {
             const first = torrents.find((t) => selectedIds.includes(t.id))
             setBatchLabels(first?.labels ?? [])
@@ -437,6 +440,7 @@ export default function App() {
       <BatchCleanDialog open={cleanOpen} onClose={() => setCleanOpen(false)} />
       <TorrentDetail torrent={detailTorrent} onClose={() => setDetailTorrent(null)} onOpenChange={(open) => { if (!open) setDetailTorrent(null) }} isMobile={isMobile} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <PTDialog open={ptOpen} onClose={() => setPtOpen(false)} />
       {/* 组内总限速：设置页与侧边栏分组右键共用同一实例 */}
       <SpeedPolicyManager open={speedOpen} onClose={closeSpeedPolicy} preset={speedPreset} />
       <PwaUpdatePrompt />

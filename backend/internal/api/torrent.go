@@ -644,6 +644,12 @@ func (h *Handler) deleteTorrent(c *gin.Context) {
 		return
 	}
 	deleteData := c.Query("deleteData") == "true"
+	// 删除前先留档（元数据 + 磁力）；失败只记日志，不阻断删除
+	if h.ptSvc != nil {
+		if err := h.ptSvc.Capture(c.Request.Context(), id); err != nil {
+			slog.Warn("PT 档案留档失败", "id", id, "err", err)
+		}
+	}
 	if err := h.rpc.RemoveTorrents(c.Request.Context(), []int64{id}, deleteData); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
 		return
@@ -723,6 +729,19 @@ func (h *Handler) deleteTorrents(c *gin.Context) {
 	if len(body.IDs) == 0 {
 		respondError(c, http.StatusBadRequest, "缺少 ids")
 		return
+	}
+	// 批量删除前逐颗留档。大批量时限制在 200 颗，避免一次请求拖太久；
+	// 留档失败只记日志，绝不阻断删除本身。
+	if h.ptSvc != nil {
+		limit := len(body.IDs)
+		if limit > 200 {
+			limit = 200
+		}
+		for _, id := range body.IDs[:limit] {
+			if err := h.ptSvc.Capture(c.Request.Context(), id); err != nil {
+				slog.Warn("PT 档案留档失败", "id", id, "err", err)
+			}
+		}
 	}
 	if err := h.rpc.RemoveTorrents(c.Request.Context(), body.IDs, body.DeleteData); err != nil {
 		respondError(c, http.StatusBadGateway, err.Error())
