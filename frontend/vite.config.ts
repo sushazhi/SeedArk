@@ -80,10 +80,19 @@ export default defineConfig({
     // 特殊环境（如阻断 WebSocket 的内嵌 WebView）可用 `DEV_NO_HMR=1 pnpm dev` 关闭。
     hmr: process.env.DEV_NO_HMR === '1' ? false : { overlay: true },
     // 网络盘 / 虚拟机共享目录 / WSL 挂载目录下原生监听可能收不到事件，
-    // 此时用 `DEV_WATCH_POLL=1 pnpm dev` 切换为轮询监听（默认不覆盖 Vite 自身的 watch 配置）
-    ...(process.env.DEV_WATCH_POLL === '1'
-      ? { watch: { usePolling: true, interval: 300 } }
-      : {}),
+    // 此时用 `DEV_WATCH_POLL=1 pnpm dev` 切换为轮询监听
+    watch: {
+      // 排除「原子写」留下的临时路径。
+      //
+      // 很多编辑器与脚本保存文件时会在同目录建临时目录/文件再改名（本项目里
+      // 形如 `src/types/.pt.ts.11076.<guid>.tmpdir/pt.ts.tmp`）。这些路径存活
+      // 只有几毫秒，而 Vite 的 FSWatcher 在 Windows 上对它们会抛 EBUSY，
+      // 且 Vite 不捕获该错误——整个 dev server 会随一次保存直接退出
+      // （现象是开发服务器莫名消失、HMR 断开，日志末尾一条 EBUSY）。
+      // 这些临时路径本来也不需要热更新，排除掉即可。
+      ignored: ['**/.*.tmpdir/**', '**/*.tmpdir/**', '**/*.tmp', '**/.~*'],
+      ...(process.env.DEV_WATCH_POLL === '1' ? { usePolling: true, interval: 300 } : {}),
+    },
     proxy: {
       '/api': { target: 'http://localhost:8200', changeOrigin: true },
       '/mcp': { target: 'http://localhost:8200', changeOrigin: true },

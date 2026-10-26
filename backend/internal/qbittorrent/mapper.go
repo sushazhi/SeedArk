@@ -70,7 +70,7 @@ func (c *Client) mapTorrent(t torrentInfo) *models.Torrent {
 		SecondsSeeding:     t.SeedingTime,
 		Error:              errCode,
 		ErrorString:        errText,
-		Labels:             labels,
+		Labels:             models.NormalizeLabels(labels),
 		QueuePosition:      t.Priority,
 		PeersConnected:     sumNonNegative(t.NumSeeds) + sumNonNegative(t.NumLeechs),
 		PeersSendingToUs:   sumNonNegative(t.NumSeeds),

@@ -112,7 +112,7 @@ func mapTorrent(t trpc.Torrent, detail bool) *Torrent {
 		SecondsSeeding:      toDurSec(t.TimeSeeding),
 		Error:               toI64(t.Error),
 		ErrorString:         toStr(t.ErrorString),
-		Labels:              t.Labels,
+		Labels:              models.NormalizeLabels(t.Labels),
 		QueuePosition:       toI64(t.QueuePosition),
 		PeersConnected:      toI64(t.PeersConnected),
 		PeersSendingToUs:    toI64(t.PeersSendingToUs),

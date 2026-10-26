@@ -1,5 +1,36 @@
 package models
 
+import "strings"
+
+// NormalizeLabels 规范化标签：去空白项、去重（保持首次出现顺序）。
+//
+// 驱动返回的标签可能重复：qBittorrent 的 tags 是逗号串（人工或站点工具都可能写出
+// 重复项），Transmission 的 labels 同理。重复标签不是「两个标签」——它会在界面上
+// 撞 React key（列表以标签名作 key），也会让侧栏的标签计数把同一颗种子算两遍。
+// 标签本就是集合语义，在驱动映射这一层统一收口，所有消费方都拿到干净的列表。
+func NormalizeLabels(labels []string) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(labels))
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		s := strings.TrimSpace(l)
+		if s == "" {
+			continue
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // ApiResponse 统一响应格式
 type ApiResponse struct {
 	Code    int         `json:"code"`

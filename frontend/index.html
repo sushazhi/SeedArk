@@ -6,6 +6,8 @@
     <!-- 初值仅为兜底；实际由 lib/theme.tsx 随主题预设与深浅色动态覆写 -->
     <meta name="theme-color" content="#ddeaff" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- 标准写法；上面那条 apple- 前缀的已被 Chrome 标记为 deprecated，保留以兼容老 iOS -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SeedArk" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -85,6 +87,5 @@
       })()
     </script>
     <script type="module" src="/src/main.tsx"></script>
-    <script src="/pwa-register.js" defer></script>
     </body>
 </html>

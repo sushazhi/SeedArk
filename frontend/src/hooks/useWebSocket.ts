@@ -198,15 +198,31 @@ export function useWebSocket() {
       stopPolling()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (ws) {
+        const sock = ws
         // 卸载前摘掉回调，避免卸载后仍触发重连/轮询
-        ws.onopen = null
-        ws.onmessage = null
-        ws.onclose = null
-        ws.onerror = null
-        try {
-          ws.close()
-        } catch {
-          // 连接从未打开时 close 可能抛异常，忽略
+        sock.onopen = null
+        sock.onmessage = null
+        sock.onclose = null
+        sock.onerror = null
+        // 对处于 CONNECTING 的连接直接 close() 会中断握手，浏览器随即报
+        // "WebSocket is closed before the connection is established"。
+        // 开发模式下 StrictMode 会立刻卸载一次 effect，这条几乎必然出现
+        // （栈里是 commitDoubleInvokeEffectsInDEV），看起来像真故障。
+        // 等它握完手再关：多活几十毫秒，但不再产生假报错。
+        if (sock.readyState === WebSocket.CONNECTING) {
+          sock.addEventListener('open', () => {
+            try {
+              sock.close()
+            } catch {
+              /* 已断开 */
+            }
+          }, { once: true })
+        } else {
+          try {
+            sock.close()
+          } catch {
+            // 连接从未打开时 close 可能抛异常，忽略
+          }
         }
         ws = null
       }
