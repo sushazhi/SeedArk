@@ -209,14 +209,16 @@ export function useWebSocket() {
         // 开发模式下 StrictMode 会立刻卸载一次 effect，这条几乎必然出现
         // （栈里是 commitDoubleInvokeEffectsInDEV），看起来像真故障。
         // 等它握完手再关：多活几十毫秒，但不再产生假报错。
+        // 只用 DemoSocket 也实现了的成员（onopen/readyState/close）：演示模式下 socket 是
+        // DemoSocket 而非真 WebSocket，它没有 addEventListener，用它会抛 TypeError 把 <App> 打挂。
         if (sock.readyState === WebSocket.CONNECTING) {
-          sock.addEventListener('open', () => {
+          sock.onopen = () => {
             try {
               sock.close()
             } catch {
               /* 已断开 */
             }
-          }, { once: true })
+          }
         } else {
           try {
             sock.close()
