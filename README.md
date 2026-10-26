@@ -7,12 +7,12 @@
 
 <br>
 
-[![Go](https://img.shields.io/badge/Go-1.27%2B-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.27.3%2B-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=flat-square&logo=pwa&logoColor=white)]()
 [![fnOS](https://img.shields.io/badge/Optimized%20for-fnOS-FF6B35?style=flat-square)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![Release](https://img.shields.io/badge/release-v0.1.3-blue?style=flat-square)](../../releases)
+[![Release](https://img.shields.io/badge/release-v0.1.4-blue?style=flat-square)](../../releases)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-jianhuayanyu%2Fseedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/r/jianhuayanyu/seedark)
 [![GHCR](https://img.shields.io/badge/GHCR-seedark-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/sushazhi/seedark/pkgs/container/seedark)
 [![在线预览](https://img.shields.io/badge/在线预览-Demo-8A2BE2?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQTEwIDEwIDAgMSAwIDIyIDEyIDEwIDEwIDAgMCAwIDEyIDJ6bTAgMmE4IDggMCAxIDEgOCA4IDggOCAwIDEgLTggOHptLTEtMTJ2NGw0LTQtNC00eiIvPjwvc3ZnPg==)](https://sushazhi.github.io/SeedArk/)
@@ -36,7 +36,8 @@
 | 🌐 | **会话与全局** | 多服务器切换、全局与备用限速（含定时调度）、下载 / 做种队列、轮询间隔、**带宽组管理**（Transmission 4.x） |
 | 🔀 | **多下载器聚合** | 支持 **Transmission 与 qBittorrent**（Web API v2，qBittorrent 4.x / 5.x，含 5.2+ API Key）；「设置 → 多服务器管理」启用 2 台及以上即进入聚合视图：种子列表合并展示、每颗种子标明所属下载器（**下载器**列，服务器名按类型着色、名字看不出类型时补 TR / QB 徽标；进入聚合视图时自动开启，可表头右键关闭）、批量操作按种子自动路由到所属下载器、统计与站点维度跨服务器汇总 |
 | 🛠 | **工具集** | 浏览器端 `.torrent` 创建（bencode + 分片 SHA1）、**服务器路径建种**（后端多线程哈希，大文件秒级完成）、按分享率 / 做种时长批量清理已完成种子 |
-| 🤖 | **自动化** | 已完成种子按站点归档；**做种策略**按站点分享率 / 做种天数 / 上传量目标达标后暂停 / 删除 / 删除并清理文件 |
+| 🤖 | **自动化** | 已完成种子按站点归档；**做种策略**按站点分享率 / 做种天数 / 上传量目标达标后暂停 / 删除 / 删除并清理文件；站点要求（最短做种天数 / 目标分享率）只需在保种台的站点规则里配一次，策略规则可开启「继承站点要求」，不必两处各配一遍 |
+| 🗂️ | **保种台** | 保种资产台账（体积 / 分享率 / 近 30 天上传 / 上传效率 / 保种分 / H&R 风险 / 连续无上传天数）、释放日历、**保种契约**（承诺保到什么时候 + 违约提醒）、**站点已删种识别**、**采样覆盖率与告警**、**种子档案库与复活**（删除前自动留档元数据与磁力）、发种资料包（BBCode + zip）、跨站同内容矩阵；站点规则可配最短做种天数 / 目标分享率 / H&R 时长 / 保种体积预算。全部为预计值，**不自动删除也不自动上传** |
 | 🤝 | **MCP 服务** | 内置 MCP 端点（`/mcp`，工具清单随当前下载器能力自适应），Claude / Qoder 等 AI 客户端可直接查询种子 / 站点 / 会话配置与磁盘空间，执行添加、启停、校验、重宣告、限速、打标签、队列调整等操作；「设置 → 自动化 → MCP 服务」开启，独立接入令牌鉴权，删除与移动 / 重命名 / 立即执行做种策略等高危操作默认关闭 |
 | 📈 | **图表统计** | 速度历史曲线 + 统计仪表盘 |
 | 📲 | **PWA** | 可安装、离线缓存、新版本更新提示、键盘快捷键（`N` / `Space` / `Delete` / `Ctrl+A` / `/` / `Esc` / `Ctrl±`） |
@@ -125,7 +126,7 @@ API_TOKEN=change-me docker compose up -d
 |:--|:--|
 | 镜像 | `jianhuayanyu/seedark`（Docker Hub，推荐）／`ghcr.io/sushazhi/seedark`（GHCR） |
 | 架构 | `linux/amd64`、`linux/arm64` |
-| 标签 | `v0.1.3`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
+| 标签 | `v0.1.4`（与仓库 Git 标签完全一致）、`latest`（当前最新版本的镜像） |
 | 数据卷 | `/data`（即 `SA_DATA_DIR`，存放 `sa-state.json` 与界面保存的连接配置） |
 | 健康检查 | `GET /` 每 30s |
 
@@ -323,6 +324,29 @@ qBittorrent 驱动有基于 qbmock 的端到端测试（cookie / API Key 登录�
 - **Transmission**：下载目录、全局限速与定时调度、队列、网络（端口 / 加密 / DHT / PEX）、做种默认值、黑名单、脚本钩子等
 - **qBittorrent**：完整对齐官方 WebUI 的偏好项（行为 / 下载 / 连接 / 速度 / BitTorrent / RSS / WebUI / 高级），改完在吸顶条上一次性保存，只提交改动项；只读项与用不上的能力自动隐藏
 
+### 保种台
+
+右上角「保种台」（`Sprout` 图标，桌面与移动端都有）把做种资产集中到一个对话框，7 个页签各管一件事：
+
+- **概览 / 资产台账**：每颗种子的体积、分享率、近 30 天上传、上传效率（MB/GB·日）、保种分（0-100）、H&R 风险、连续无上传天数、是否已被站点删种、保种契约剩余天数；按站点汇总（含预算占用），支持搜索、站点过滤与多列排序。近 30 天上传在有采样历史时取真实增量，否则按累计折算并标 `≈`。
+- **释放日历**：按月看每天能释放多少（数量与体积），已到期的日子高亮，点某天列出当日到期的种子。日期由站点规则推算（`max(完成时间 + 最短做种天数, 完成时间 + H&R 小时数)`）；规则缺失时显示「待定」，不猜。保种契约到期日是**另一层**，单独标在日历上（它和「可释放」不是同一个概念）。
+- **档案库**：删除种子前自动留档名称 / 体积 / 文件清单 / 磁力（`DataDir/pt/`，权限 0600）。档案可搜索、查看文件清单、一键复活（优先原始 `.torrent`，否则用留档磁力重新添加，保存路径沿用删除前），也可手动删档。
+- **同内容**：按归一化名称把同一份内容在不同站点 / 下载器上的副本归为一组，给出冗余体积与「同一下载器内重复」告警，便于决定清理哪一份。
+- **发种**：填表 + 粘贴 MediaInfo → 生成站点惯用的 BBCode 与发布资料包 zip（`bbcode.txt` / `mediainfo.txt` / `checklist.txt`，可附 `.torrent`）；缺截图 / MediaInfo 会提示。**只生成素材，不会自动上传到站点。**
+- **站点规则**：为每个站点填最短做种天数、目标分享率、H&R 小时数与保种体积预算，也可从当前检测到的站点一键生成占位规则（不猜天数）。匹配串对 Tracker 主机名做大小写不敏感子串匹配。
+
+五项围绕「看得明白」的增量能力：
+
+- **今日上传增量**：严格对比**前一自然日**的逐颗读数，概览给出总量、站点行给出分台量。没有前一日采样时**不给 `0`**——那看起来像「今天没上传」，实际只是「不可比」；读数回退（计数器重置或换下载器）也不补算、不当负增量。每处都带口径说明（`exact` / `partial` / `unknown` / `rollback`）。
+- **保种契约**：给单颗种子记一条「承诺保到什么时候」（台账里点一下即可设/改/解除，落在 `DataDir/pt/contracts.json`）。契约只驱动提醒与日历标记，**不会暂停、不会删除、也不上报站点**。
+- **采样覆盖率**：概览直接写明「采样覆盖 N 天（自 X 起）」。采样不足 30 天时台账里的 `≈` 是折算值，这条说明让用户知道它差多少，而不是对着一串 `≈` 猜。
+- **站点已删种（无效做种）**：Tracker 宣告明确报「未注册」时把该种子标出来 —— 这类种子占着盘但不会再产生上传，容易被误当成「低价值可清理」。判定带**防误判护栏**：只有该站点下还有别的种子宣告成功时才敢判，否则站点临时关站会诱导你删掉本来正常的种子。
+- **站点保种预算**：给站点设做种体积上限，超出时在概览里标出并计入告警。**只提示，不触发任何清理。**
+
+所有释放时间与效率都是**预计 / 估算值**：SeedArk 不会据此自动删种，也不会自动上传站点。
+
+保种台的数据也通过 MCP 暴露给 AI 客户端（只读）：`pt_seed_ledger`、`pt_release_calendar`、`pt_vault_search`、`pt_content_matrix`。数据目录不可写时不注册这些工具。
+
 ### 主题、语言与外观
 
 右上角切换明 / 暗主题与中文 / 英文（偏好持久化）；飞牛 OS 中自动跟随系统主题。
@@ -408,6 +432,10 @@ mcp_token: ""              # 接入令牌，留空 = 不启用鉴权
 | 🔍 只读 | `test_port` | 监听端口外网可达性检测（仅 Transmission） |
 | 🔍 只读 | `get_torrent_sites` | 站点汇总与种子归属 |
 | 🔍 只读 | `get_seed_policy_report` | 做种策略规则 + 已达标种子及依据（只读评估，不执行） |
+| 🔍 只读 | `pt_seed_ledger` | 保种台账：逐颗体积 / 分享率 / 近 30 天上传 / 效率 / 保种分 / 连续无上传 / 无效做种 / 保种契约，按站点汇总 |
+| 🔍 只读 | `pt_release_calendar` | 释放日历：每天可释放的数量与体积、H&R 风险数、契约到期数 |
+| 🔍 只读 | `pt_vault_search` | 搜索种子档案库（删除时留档的元数据 / 磁力 / 文件清单） |
+| 🔍 只读 | `pt_content_matrix` | 跨站 / 跨下载器同内容分组、总占用与冗余体积 |
 | ✏️ 写操作 | `add_torrent` | 磁力 / URL / 白名单路径添加，默认以暂停状态添加 |
 | ✏️ 写操作 | `start_torrents` / `stop_torrents` | 批量开始 / 暂停 |
 | ✏️ 写操作 | `verify_torrents` | 批量触发本地数据校验 |
@@ -514,6 +542,7 @@ seedark/
 │   │   ├── automove/                 # 自动文件管理（已完成种子按站点归档）
 │   │   ├── seedpolicy/               # 做种策略引擎
 │   │   ├── speedpolicy/              # 分组限速引擎（组内总上限摊到种子）
+│   │   ├── pt/                       # 保种台（台账 / 释放日历 / 档案库 / 发种 / 同内容）
 │   │   └── state/                    # 运行时状态持久化（sa-state.json）
 │   ├── web/dist/                     # 内嵌前端构建产物
 │   └── seedark(.exe)                 # 已编译产物

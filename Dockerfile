@@ -20,7 +20,7 @@ COPY frontend/ ./
 RUN pnpm build
 
 # ---------- 2. 编译后端（go:embed 读取 backend/web/dist） ----------
-FROM golang:1.27-alpine AS server
+FROM golang:1.27.3-alpine AS server
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
