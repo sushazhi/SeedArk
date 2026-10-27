@@ -292,8 +292,10 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
           {/* 排序 / 视图 / 刷新（桌面端并入顶栏，移动端在 ListHeader） */}
           {!isMobile && <ListControls compact onOpenDashboard={onOpenDashboard} />}
 
-          {/* PT 中心：保种资产台账 / 释放日历 / 档案库 / 发种资料，桌面与移动端都保留入口 */}
-          <ToolBtn icon={Sprout} large={isMobile} title={t('pt.title')} onClick={onOpenPT} />
+          {/* 保种台：桌面端留在顶栏，移动端移到底部胶囊。
+              移动端顶栏右侧只剩一个窄条，还要容纳批量操作与头像；同一颗入口两处都在，
+              既挤掉搜索框，又和胶囊里的「添加」撞图标（两者都曾用 Sprout）。 */}
+          {!isMobile && <ToolBtn icon={Sprout} title={t('pt.title')} onClick={onOpenPT} />}
 
           {!isMobile && (
             <DropdownMenu>

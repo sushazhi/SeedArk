@@ -410,6 +410,7 @@ export default function App() {
           isMobile
           onOpenAdd={() => setAddOpen(true)}
           onOpenClean={() => setCleanOpen(true)}
+          onOpenPT={() => setPtOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           scrollHost={dropRef}
         />

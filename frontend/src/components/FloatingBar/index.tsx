@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Eraser, FolderOpen, Pause, Play, Plus, Settings } from 'lucide-react'
+import { Eraser, FolderOpen, Pause, Play, Plus, Settings, Sprout } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/stores/appStore'
 import { useHideOnScroll } from '@/hooks/useHideOnScroll'
@@ -12,6 +12,8 @@ interface Props {
   isMobile?: boolean
   onOpenAdd: () => void
   onOpenClean: () => void
+  /** 保种台：移动端顶栏不再放这颗入口，统一收进胶囊 */
+  onOpenPT: () => void
   onOpenSettings?: () => void
   /** 主内容列：其中任何滚动发生都暂时收起胶囊 */
   scrollHost?: RefObject<HTMLElement | null>
@@ -20,14 +22,14 @@ interface Props {
 /**
  * 底部悬浮胶囊（液态玻璃 · float 材质档）
  *
- * 只放首页拿不到的操作：添加任务、全部启停、清理已完成。
+ * 只放首页拿不到的操作：添加任务、保种台、全部启停、清理已完成。
  * 刷新 / 统计已在分类标题行常驻，重复一遍等于让玻璃多压住一块列表。
  *
  * 水平居中悬浮在列表之上，且刻意不占停靠边界：它只有 56px 宽，而任何预留
  * 净空都按整条列表的宽度生效，为一颗圆钮让出全宽空带不值。让位靠
  * useHideOnScroll——滑动期间整块玻璃下滑出屏，静止时才浮在列表上。
  */
-export function FloatingBar({ isMobile, onOpenAdd, onOpenClean, onOpenSettings, scrollHost }: Props) {
+export function FloatingBar({ isMobile, onOpenAdd, onOpenClean, onOpenPT, onOpenSettings, scrollHost }: Props) {
   const { t } = useTranslation()
   const torrents = useAppStore((s) => s.torrents)
   const downloadDir = useAppStore((s) => s.session?.downloadDir)
@@ -74,6 +76,9 @@ export function FloatingBar({ isMobile, onOpenAdd, onOpenClean, onOpenSettings, 
     // 「添加」一律用 Plus：与胶囊收起态的圆钮、顶栏的「添加任务」保持同一语义。
     // 曾用 Sprout，与保种台入口撞成同一个图标（移动端两处同时可见，看起来像重复）。
     { key: 'add', label: t('topbar.addTask'), icon: Plus, run: onOpenAdd },
+    // 保种台（原顶栏右上角那颗）：移动端顶栏放不下又一屏两处入口，统一收到这里，
+    // Sprout 这一枚图标从此只属于保种台
+    { key: 'pt', label: t('pt.title'), icon: Sprout, run: onOpenPT },
     {
       key: 'toggleAll',
       label: hasActive ? t('action.pauseAll') : t('action.startAll'),
