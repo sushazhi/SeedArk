@@ -1486,7 +1486,12 @@ export function PTDialog({ open, onClose }: { open: boolean; onClose: () => void
           <p className="text-caption1 text-gray-500 dark:text-gray-400">{t('pt.subtitle')}</p>
         </DialogHeader>
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="glass-subcard h-auto w-full justify-start gap-1 overflow-x-auto rounded-tile p-1">
+          {/* shrink-0 必须留着：页签条是这一列 flex 里的第一项，默认 flex-shrink:1，
+              而下面那格内容（min-h-0 flex-1，可滚）的基准高度是它的全部内容，
+              列里一旦放不下，被压缩的就是页签条自己——它又是 overflow-x-auto 的滚动容器，
+              于是把自己切成一条缝：390×640 的视口下页签只剩 77% 可见，上下各被削掉约 3px
+              （激活项的圆角与 focus ring 一起被切）。让它不参与压缩，高度缺口交给下面那格吸收。 */}
+          <TabsList className="glass-subcard h-auto w-full shrink-0 justify-start gap-1 overflow-x-auto rounded-tile p-1">
             {TABS.map(({ id, icon: Icon }) => (
               <TabsTrigger key={id} value={id} className="shrink-0 gap-1.5 text-caption1 data-[state=active]:bg-background">
                 <Icon className="h-3.5 w-3.5" />
