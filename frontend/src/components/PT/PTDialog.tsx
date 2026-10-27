@@ -259,93 +259,108 @@ function OverviewTab() {
           {t('pt.card.uploadedToday')}：{o.todayNote}
         </p>
       )}
+      {/* 两块面板都带 min-w-0：grid 的列按内容最小宽度定尺寸，而两个表格全是 nowrap，
+          少了它就是现在这样——整列被表格撑得比弹窗还宽，右侧内容连同同一行的另一块面板
+          一起被裁掉（窄屏下「释放日历」那栏就是这么被挡住的）。min-w-0 让面板按弹窗宽度
+          收缩，超出的部分交给表格自己的横向滚动。 */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <Panel>
+        <Panel className="min-w-0">
           <SectionTitle icon={HardDrive} text={t('pt.sites.title')} />
           {sites.length === 0 ? (
             <Empty label={t('pt.sites.empty')} />
           ) : (
-            // 用真表格而不是一排 flex 行：这几列都是数字，没有表头根本看不出哪列是哪列
-            <table className="w-full border-collapse text-footnote">
-              <thead className="text-caption1 text-gray-500 dark:text-gray-400">
-                <tr>
-                  {/* 表头必须 nowrap：首列用 w-full max-w-0 吃掉剩余宽度后，数字列会被压到
-                      内容最小宽度，表头文字（「种子数」「今日上传」）就会逐字换行 */}
-                  <th className="whitespace-nowrap py-1 pr-2 text-left font-medium">{t('pt.sites.colName')}</th>
-                  <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.sites.colCount')}</th>
-                  <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.sites.colToday')}</th>
-                  <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.sites.colSize')}</th>
-                  <th className="whitespace-nowrap py-1 pl-2 text-right font-medium">{t('pt.sites.colRatio')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sites.map((s) => (
-                  <tr key={s.site} className="border-t border-gray-200/60 dark:border-white/10">
-                    {/* w-full + max-w-0 让站点名吃掉剩余宽度并截断，数字列保持稳定 */}
-                    <td className="w-full max-w-0 py-1.5 pr-2">
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate" title={s.site}>
-                          {s.site}
+            // 用真表格而不是一排 flex 行：这几列都是数字，没有表头根本看不出哪列是哪列。
+            // 外面套 overflow-x-auto：五列表头全是 nowrap，手机宽度下表格比面板宽，靠这里横向滚动，
+            // 与「资产台账」「站点规则」两个页签的表格写法一致。
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-footnote">
+                <thead className="text-caption1 text-gray-500 dark:text-gray-400">
+                  <tr>
+                    {/* 表头必须 nowrap：首列用 w-full max-w-0 吃掉剩余宽度后，数字列会被压到
+                        内容最小宽度，表头文字（「种子数」「今日上传」）就会逐字换行 */}
+                    <th className="whitespace-nowrap py-1 pr-2 text-left font-medium">{t('pt.sites.colName')}</th>
+                    <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.sites.colCount')}</th>
+                    <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.sites.colToday')}</th>
+                    <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.sites.colSize')}</th>
+                    <th className="whitespace-nowrap py-1 pl-2 text-right font-medium">{t('pt.sites.colRatio')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sites.map((s) => (
+                    <tr key={s.site} className="border-t border-gray-200/60 dark:border-white/10">
+                      {/* w-full + max-w-0 让站点名吃掉剩余宽度并截断，数字列保持稳定 */}
+                      <td className="w-full max-w-0 py-1.5 pr-2">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate" title={s.site}>
+                            {s.site}
+                          </span>
+                          {/* ⑦ 超预算标记：只提示，不触发清理 */}
+                          {s.overBudget && (
+                            <span className="shrink-0 rounded-full bg-amber-100 px-1 text-caption2 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                              {t('pt.sites.overBudget')}
+                            </span>
+                          )}
                         </span>
-                        {/* ⑦ 超预算标记：只提示，不触发清理 */}
-                        {s.overBudget && (
-                          <span className="shrink-0 rounded-full bg-amber-100 px-1 text-caption2 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                            {t('pt.sites.overBudget')}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{s.count}</td>
+                      {/* 今日上传增量：非 exact 时挂 ≈ 并把口径放进 title，避免把它读成精确值 */}
+                      <td
+                        className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-green-600 dark:text-green-400"
+                        title={t(`pt.today.${s.todayQuality}`)}
+                      >
+                        {s.uploadedToday > 0 ? (
+                          <>
+                            {formatBytes(s.uploadedToday)}
+                            {s.todayQuality !== 'exact' && <span className="ml-0.5 text-caption2">≈</span>}
+                          </>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                        {formatBytes(s.size)}
+                        {s.budgetBytes > 0 && (
+                          // 预算折到第二行显示：两段拼在一行时这一格宽 116px，占满了 390px 手机上
+                          // 整张表格的富余，连带把分享率挤出面板。窄屏分行后仍看得见，桌面端不动。
+                          <span className="block text-caption2 text-gray-400 sm:ml-1 sm:inline">
+                            / {formatBytes(s.budgetBytes)}
                           </span>
                         )}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{s.count}</td>
-                    {/* 今日上传增量：非 exact 时挂 ≈ 并把口径放进 title，避免把它读成精确值 */}
-                    <td
-                      className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-green-600 dark:text-green-400"
-                      title={t(`pt.today.${s.todayQuality}`)}
-                    >
-                      {s.uploadedToday > 0 ? (
-                        <>
-                          {formatBytes(s.uploadedToday)}
-                          {s.todayQuality !== 'exact' && <span className="ml-0.5 text-caption2">≈</span>}
-                        </>
-                      ) : (
-                        <span className="text-gray-400 dark:text-gray-500">—</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
-                      {formatBytes(s.size)}
-                      {s.budgetBytes > 0 && (
-                        <span className="ml-1 text-caption2 text-gray-400">/ {formatBytes(s.budgetBytes)}</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap pl-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{formatRatio(s.ratio)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                      <td className="whitespace-nowrap pl-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{formatRatio(s.ratio)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Panel>
-        <Panel>
+        <Panel className="min-w-0">
           <SectionTitle icon={CalendarDays} text={t('pt.upcoming.title')} />
           {upcoming.length === 0 ? (
             <Empty label={t('pt.upcoming.empty')} />
           ) : (
-            <table className="w-full border-collapse text-footnote">
-              <thead className="text-caption1 text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="whitespace-nowrap py-1 pr-2 text-left font-medium">{t('pt.upcoming.colDate')}</th>
-                  <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.upcoming.colCount')}</th>
-                  <th className="whitespace-nowrap py-1 pl-2 text-right font-medium">{t('pt.upcoming.colBytes')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcoming.map((d) => (
-                  <tr key={d.date} className="border-t border-gray-200/60 dark:border-white/10">
-                    <td className="py-1.5 pr-2 tabular-nums">{d.date}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{d.count}</td>
-                    <td className="whitespace-nowrap pl-2 py-1.5 text-right tabular-nums">{formatBytes(d.bytes)}</td>
+            // 与上面「站点分布」同理：表格自己横向滚动，不把宽度推给 grid
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-footnote">
+                <thead className="text-caption1 text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="whitespace-nowrap py-1 pr-2 text-left font-medium">{t('pt.upcoming.colDate')}</th>
+                    <th className="whitespace-nowrap py-1 px-2 text-right font-medium">{t('pt.upcoming.colCount')}</th>
+                    <th className="whitespace-nowrap py-1 pl-2 text-right font-medium">{t('pt.upcoming.colBytes')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {upcoming.map((d) => (
+                    <tr key={d.date} className="border-t border-gray-200/60 dark:border-white/10">
+                      <td className="py-1.5 pr-2 tabular-nums">{d.date}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{d.count}</td>
+                      <td className="whitespace-nowrap pl-2 py-1.5 text-right tabular-nums">{formatBytes(d.bytes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Panel>
       </div>
