@@ -737,7 +737,7 @@ export default {
     loadFailed: 'Failed to load traffic history',
     retry: 'Retry',
     empty: 'No samples yet',
-    peak: 'Peak bucket',
+    peak: 'Peak interval',
     coverage: 'This host started recording at {{time}}; earlier buckets have no data',
   },
   autoMove: {
@@ -1063,7 +1063,7 @@ export default {
       matchPh: 'Tracker host or short name, case-insensitive',
       minSeedDays: 'Min seed days',
       minRatio: 'Ratio target',
-      hrSeedHours: 'H&R hours',
+      hrSeedHours: 'H&R seed hours',
       today: 'Today',
       budget: 'Size budget (GB)',
       budgetPh: 'blank or 0 = none',

@@ -193,7 +193,7 @@ export function ptOverview(): PTOverview {
     todayQuality: 'partial',
     todayNote: `相对 ${dayKey(-1)}：部分种子当日新加或未被采到，合计偏小`,
     warnings: [
-      '1 颗种子的站点已判为未注册（无效做种），占 148 GB',
+      '1 颗种子的站点已判为未注册（站点已删种），占 148 GB',
       '2 颗种子连续 7 天以上没有上传增长，占 150 GB',
       '1 颗种子的保种契约已过期未解除',
       '1 个站点超出保种预算，合计超出 148 GB',

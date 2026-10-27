@@ -327,7 +327,7 @@ func overviewWarnings(o *Overview) []string {
 		out = append(out, fmt.Sprintf("采样仅覆盖 %d 天（%s 起），近 30 天上传为折算估算值", o.Coverage.Days, from))
 	}
 	if o.InvalidCount > 0 {
-		out = append(out, fmt.Sprintf("%d 颗种子的站点已判为未注册（无效做种），占 %s", o.InvalidCount, humanGB(o.InvalidBytes)))
+		out = append(out, fmt.Sprintf("%d 颗种子的站点已判为未注册（站点已删种），占 %s", o.InvalidCount, humanGB(o.InvalidBytes)))
 	}
 	if o.IdleCount > 0 {
 		out = append(out, fmt.Sprintf("%d 颗种子连续 %d 天以上没有上传增长，占 %s", o.IdleCount, idleThresholdDays, humanGB(o.IdleBytes)))
