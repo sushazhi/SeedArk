@@ -724,6 +724,22 @@ export default {
     bySite: 'By Site',
     total: 'Total',
   },
+  traffic: {
+    title: 'Traffic History',
+    down: 'Down',
+    up: 'Up',
+    range: {
+      '24h': '24 h',
+      '7d': '7 d',
+      '30d': '30 d',
+    },
+    loading: 'Loading…',
+    loadFailed: 'Failed to load traffic history',
+    retry: 'Retry',
+    empty: 'No samples yet',
+    peak: 'Peak bucket',
+    coverage: 'This host started recording at {{time}}; earlier buckets have no data',
+  },
   autoMove: {
     title: 'Auto File Management',
     empty: 'No rules yet. Click below to add one.',

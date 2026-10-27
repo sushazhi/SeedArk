@@ -62,6 +62,7 @@ import {
   ptVault,
   ptVaultDetail,
 } from './pt'
+import { trafficHistory } from './traffic'
 
 // 演示模式 axios adapter：全部 /api 请求在浏览器内应答，无需真实后端。
 // 未覆盖的接口返回 code!=0，由 request() 统一弹错
@@ -245,6 +246,7 @@ export const demoAdapter: AxiosAdapter = async (config) => {
   // —— 保种台 ——
   // 演示数据手工编排（见 demo/pt.ts）：七个页签都要有代表性内容，
   // 否则公开演示页会出现空白页签或报「未提供该接口」
+  if (url === '/traffic/history' && method === 'get') return respond(config, trafficHistory(params.range as string | undefined))
   if (url === '/pt/overview' && method === 'get') return respond(config, ptOverview())
   if (url === '/pt/ledger' && method === 'get') return respond(config, ptLedger())
   if (url === '/pt/calendar' && method === 'get') return respond(config, ptCalendar(params.month as string | undefined))

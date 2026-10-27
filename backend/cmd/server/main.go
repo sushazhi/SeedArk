@@ -30,6 +30,7 @@ import (
 	// 空导入即完成 fnOS 平台注册；不导入时服务自动降级为通用部署
 	_ "github.com/sushazhi/seedark/backend/internal/platform/fnos"
 	"github.com/sushazhi/seedark/backend/internal/pt"
+	"github.com/sushazhi/seedark/backend/internal/traffic"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/speedpolicy"
@@ -119,6 +120,13 @@ func main() {
 		slog.Warn("PT 中心服务初始化失败，相关接口将不可用", "err", ptErr)
 		ptSvc = nil
 	}
+	// 历史流量（统计面板的上下行折线图）：与 PT 中心同样的降级方式，
+	// 数据目录不可写时置 nil、接口回 503，不影响其余功能
+	trafficSvc, trafficErr := traffic.New(manager, cfg.DataDir)
+	if trafficErr != nil {
+		slog.Warn("流量历史服务初始化失败，相关接口将不可用", "err", trafficErr)
+		trafficSvc = nil
+	}
 	// MCP 运行期开关：设置界面修改后即时生效，下次启动的初值来自配置
 	mcpCtl := &api.McpControl{}
 	mcpCtl.Enabled.Store(cfg.MCPEnabled)
@@ -128,7 +136,7 @@ func main() {
 		t := cfg.MCPToken
 		mcpCtl.Token.Store(&t)
 	}
-	handler := api.NewHandler(manager, hub, geo, store, moveSvc, policySvc, speedSvc, cfg, plat, mcpCtl, ptSvc)
+	handler := api.NewHandler(manager, hub, geo, store, moveSvc, policySvc, speedSvc, cfg, plat, mcpCtl, ptSvc, trafficSvc)
 	handler.Register(r, gatewayPrefix)
 	// 按持久化的服务器列表建立聚合成员：配置了 2 台以上启用服务器时，
 	// 面板进入聚合视图，Transmission 与 qBittorrent 可同时被管理
@@ -139,6 +147,9 @@ func main() {
 	go speedSvc.Run(ctx)
 	if ptSvc != nil {
 		go ptSvc.Run(ctx)
+	}
+	if trafficSvc != nil {
+		go trafficSvc.Run(ctx)
 	}
 
 	// MCP：把种子管理能力以工具形式暴露给 AI 客户端（streamable HTTP + 令牌鉴权）。

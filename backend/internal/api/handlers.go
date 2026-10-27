@@ -20,6 +20,7 @@ import (
 	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/speedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/traffic"
 )
 
 // McpControl MCP 服务的运行期开关：/mcp 路由常驻注册，由此控制是否服务请求，
@@ -42,6 +43,7 @@ type Handler struct {
 	seedpolicy   *seedpolicy.Service
 	speedpolicy  *speedpolicy.Service
 	ptSvc        *pt.Service
+	trafficSvc   *traffic.Service
 	plat         platform.Platform
 	dataDir      string
 	apiToken     string
@@ -62,7 +64,7 @@ type Handler struct {
 // NewHandler 创建处理器。
 // plat 提供宿主平台能力：本地文件读取白名单、同源判定策略、宿主专属路由（如 fnOS 应用更新）。
 // mcp 为 MCP 服务的运行期开关，与 main 中 /mcp 路由的 gate 共享同一实例。
-func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store, moveSvc *automove.Service, policySvc *seedpolicy.Service, speedSvc *speedpolicy.Service, cfg *config.Config, plat platform.Platform, mcp *McpControl, ptSvc *pt.Service) *Handler {
+func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store, moveSvc *automove.Service, policySvc *seedpolicy.Service, speedSvc *speedpolicy.Service, cfg *config.Config, plat platform.Platform, mcp *McpControl, ptSvc *pt.Service, trafficSvc *traffic.Service) *Handler {
 	return &Handler{
 		rpc:          manager,
 		hub:          hub,
@@ -72,6 +74,7 @@ func NewHandler(manager *rpc.Manager, hub *Hub, geo *GeoService, st *state.Store
 		seedpolicy:   policySvc,
 		speedpolicy:  speedSvc,
 		ptSvc:        ptSvc,
+		trafficSvc:   trafficSvc,
 		plat:         plat,
 		dataDir:      cfg.DataDir,
 		apiToken:     cfg.APIToken,
@@ -292,6 +295,8 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		// 保种契约（①）：只记录承诺，不触发暂停/删除
 		api.POST("/pt/contract", h.ptSetContract)
 		api.DELETE("/pt/contract/:hash", h.ptDeleteContract)
+		// 历史流量：统计面板的上下行折线图（range=24h|7d|30d）
+		api.GET("/traffic/history", h.trafficHistory)
 		// 远端→本地路径映射（打开目录/复制路径时的展示转换）
 		api.GET("/paths/map", h.listPathMappings)
 		// 系统命令

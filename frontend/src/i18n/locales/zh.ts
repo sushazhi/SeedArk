@@ -723,6 +723,22 @@ export default {
     bySite: '按站点分布',
     total: '总数',
   },
+  traffic: {
+    title: '历史流量',
+    down: '下载',
+    up: '上传',
+    range: {
+      '24h': '24 小时',
+      '7d': '7 天',
+      '30d': '30 天',
+    },
+    loading: '加载中…',
+    loadFailed: '流量历史加载失败',
+    retry: '重试',
+    empty: '还没采到数据',
+    peak: '峰值桶',
+    coverage: '本机从 {{time}} 起才开始记录，更早的时段没有数据',
+  },
   autoMove: {
     title: '自动文件管理',
     empty: '暂无规则，点击下方按钮添加',

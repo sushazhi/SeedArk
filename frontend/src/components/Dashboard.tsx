@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/stores/appStore'
 import { formatBytes, formatRatio } from '@/utils/format'
 import { SpeedHistory } from '@/components/StatusBar/SpeedHistory'
+import { TrafficHistory } from '@/components/Dashboard/TrafficHistory'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,7 @@ import {
 import { statusMeta } from '@/utils/status'
 import { isActiveTorrent } from '@/hooks/useFilter'
 
-// 统计仪表盘：全局概览 + 状态分布 + 速度历史 + 标签/站点流量
+// 统计仪表盘：全局概览 + 状态分布 + 历史流量 + 速度历史 + 标签/站点流量
 export function Dashboard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation()
   const torrents = useAppStore((s) => s.torrents)
@@ -88,6 +89,10 @@ export function Dashboard({ open, onClose }: { open: boolean; onClose: () => voi
             <div className="text-title2 font-semibold">{stats.active}</div>
           </div>
         </div>
+
+        {/* 历史流量：上下行折线，三档区间。放在「速度历史」之上——
+            速度历史只有最近两分钟（前端内存采样），这一张才是真历史 */}
+        <TrafficHistory />
 
         {/* 状态分布 + 速度历史 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
