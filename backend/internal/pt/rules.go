@@ -176,50 +176,31 @@ func scoreOf(ratio, eff float64) int {
 	return int(50*r + 50*e + 0.5)
 }
 
-// window30 返回近 30 天上传与是否为估算。
+// windowUpload 返回窗口内的上传量与这个量实际覆盖的天数。
 //
-// 采样基线只在真正覆盖到 30 天窗口时才当作「真实值」：首次运行当天，基线就是本次
-// 采样本身，增量恒为 0，会把刚上传过的种子误报成零上传（正是要避免的误导）。
-// 因此覆盖不足 30 天时按覆盖天数把增量折算到 30 天，并标记估算；折算后仍为 0
-// （例如刚开始采样且确实没有新增上传）就退回「累计上传 ÷ 做种天数 × 30」，
-// 宁可给带 ≈ 的估算，也不显示一个不带标注的 0。
-func (s *Service) window30(t *models.Torrent, now time.Time) (int64, bool) {
-	seedDays := float64(t.SecondsSeeding) / 86400
-	if seedDays < 1 && t.DoneDate > 0 {
-		seedDays = float64(now.Unix()-t.DoneDate) / 86400
+// 只报实测：拿采样里该种子最早一天的上传高水位当基线，今天的累计上传减去基线，
+// 就是这段窗口里真实上传的字节数。**不折算、不外推**——采样只有 5 天就只报这 5 天，
+// 由界面把天数标出来，而不是把 5 天的量乘成「30 天」。
+//
+// days=0 表示还没有一个完整自然日的采样（首次运行当天、或这颗种子刚进台账）：
+// 此时上传量无意义（增量恒为 0，却是「刚开始看」而不是「没有上传」），
+// 调用方要显示「—」而不是 0。计数器回退（重置/换下载器）同样按无数据处理。
+func (s *Service) windowUpload(t *models.Torrent, now time.Time) (up int64, days int) {
+	if t.HashString == "" {
+		return 0, 0
 	}
-	if base, at, ok := s.local.baseline30(t.HashString, now); ok && t.UploadedEver >= base {
-		delta := t.UploadedEver - base
-		coverage := now.Sub(at).Hours() / 24
-		if coverage >= 29 {
-			return delta, false
-		}
-		if coverage < 1 {
-			coverage = 1
-		}
-		est := float64(delta) / coverage * 30
-		if est > float64(t.UploadedEver) {
-			est = float64(t.UploadedEver)
-		}
-		if est > 0 {
-			return int64(est), true
-		}
+	base, at, ok := s.local.baseline30(t.HashString, now)
+	if !ok || t.UploadedEver < base {
+		return 0, 0
 	}
-	// 两种情况都落到累计折算：①基线高于累计（计数器被重置、采样错位）；
-	// ②覆盖不足且增量确为 0。都不能拿「0」当事实断言，只能给带 ≈ 的估算。
-	if t.UploadedEver <= 0 {
-		return 0, false
+	days = int(now.Sub(at).Hours() / 24)
+	if days < 1 {
+		return 0, 0
 	}
-	if seedDays < 1 {
-		// 刚开始做种：累计上传就是目前全部，折算成 30 天会严重高估，直接按原值
-		return t.UploadedEver, true
+	if days > 30 {
+		days = 30
 	}
-	est := float64(t.UploadedEver) / seedDays * 30
-	if est > float64(t.UploadedEver) && seedDays < 30 {
-		// 做种不足 30 天时，上限是「累计上传」，不能再往上折算
-		est = float64(t.UploadedEver)
-	}
-	return int64(est), true
+	return t.UploadedEver - base, days
 }
 
 // invalidAnnouncePatterns 「站点已删种」的宣告原文特征。
@@ -287,11 +268,17 @@ type calcCtx struct {
 	hostHealthy map[string]bool
 	// today 今日相对前一自然日的上传增量与可比性
 	today TodayDelta
+	// bonus 按展示名预计算好的时魔集合量（ΣA/颗数/做种体积），由 buildRefs 在
+	// 逐行计算前填入。概览的「实际每小时」卡片直接读它，不再按行反推——
+	// 集合量必须来自同一遍遍历，散在行里现算就会前后不一致。
+	bonus map[string]bonusCtx
 	// siteNames 种子 ID → 该种子的站点名数组，取自 manager.GetTorrentSites。
 	// 与侧栏「站点」筛选、自动化「分组限速」同源：三处的站点名必须字面一致，
 	// 否则用户在同一颗种子上会看到两个不同的站名，没法对齐。
 	// 取不到（RPC 失败）时为 nil，此时退回 siteOf 的 tracker 主机名。
 	siteNames map[int64][]string
+	// scarceSeeders 稀缺判据阈值（做种人数低于它视为稀缺），来自 PT 设置
+	scarceSeeders int
 }
 
 // displaySite 站点展示名。
@@ -413,10 +400,12 @@ func contractOf(hash string, cc *calcCtx) (until int64, daysLeft int, breach, ha
 
 // refOf 把一颗种子 + 当前站点规则快照成台账行。
 // 站点名走 displaySite：优先与侧栏/分组限速同源的映射，保证三处字面一致。
-func (s *Service) refOf(t *models.Torrent, profiles []state.SiteProfile, cc *calcCtx) TorrentRef {
+// bonusBySite 是同一份快照预计算好的每站集合量（ΣA/颗数/做种体积），
+// 由 buildRefs 传入——单颗的时魔差值必须除以「全集」，不能在行内现算。
+func (s *Service) refOf(t *models.Torrent, profiles []state.SiteProfile, cc *calcCtx, bonusBySite map[string]bonusCtx) TorrentRef {
 	now := cc.now
 	display, p, hasProfile := displaySite(t, cc, profiles)
-	up30, estimated := s.window30(t, now)
+	up, days := s.windowUpload(t, now)
 	seedDays := float64(t.SecondsSeeding) / 86400
 	if seedDays < 1 && t.DoneDate > 0 {
 		seedDays = float64(now.Unix()-t.DoneDate) / 86400
@@ -424,10 +413,31 @@ func (s *Service) refOf(t *models.Torrent, profiles []state.SiteProfile, cc *cal
 	if seedDays < 0 {
 		seedDays = 0
 	}
-	eff := efficiencyOf(up30, t.TotalSize, 30)
+	// 效率按实际覆盖天数算，而不是固定 30 天：窗口只有 5 天时拿 30 当分母会把效率压低 6 倍
+	eff := efficiencyOf(up, t.TotalSize, float64(days))
 	rel, reason := releaseAtFor(t, p, hasProfile)
 	invalid, invalidReason := invalidSeedOf(t, cc)
 	cUntil, cLeft, cBreach, hasC := contractOf(t.HashString, cc)
+
+	// —— v3：稀缺度 / 年龄 / 时魔 / 释放安全 ——
+	seeders, leechers := swarmCounts(t)
+	threshold := cc.scarceSeeders
+	swarm := swarmOf(seeders, threshold)
+	ageDays, ageSource := ageOf(t, now)
+	// 时魔按引擎分派：nexusphp 档给「删掉这颗损失多少」的精确差值（需要本站 ΣA/颗数），
+	// manual 档把抄录的站点时魔摊到体积，none 不显示。口径文案一并带回：
+	// 同一列「时魔·GB」在不同站是不同东西，必须写清是哪一种。
+	bonusHour, bonusGb, bonusMethod, bonusKey := bonusOf(t, p, ageDays, seeders, bonusBySite[display])
+	// 义务是否满足：与释放日历同一判据（规则里的早晚两项都过），
+	// 外加 H&R 豁免分享率（上传量 ÷ 种子体积）
+	met := obligationMet(t, p, hasProfile)
+	safe, note := releaseSafety(met, swarm, seeders, hasProfile)
+	// 保种契约未到期的一律不建议释放：用户自己承诺过的事优先于任何估算
+	if hasC && cLeft > 0 {
+		safe = false
+		note = "保种契约还剩 " + itoa(cLeft) + " 天"
+	}
+
 	return TorrentRef{
 		ID:               t.ID,
 		Name:             t.Name,
@@ -438,7 +448,7 @@ func (s *Service) refOf(t *models.Torrent, profiles []state.SiteProfile, cc *cal
 		Size:             t.TotalSize,
 		SeedDays:         seedDays,
 		Ratio:            t.UploadRatio,
-		Uploaded30:       up30,
+		Uploaded30:       up,
 		Efficiency:       eff,
 		Score:            scoreOf(t.UploadRatio, eff),
 		LastUpload:       t.ActivityDate,
@@ -448,7 +458,21 @@ func (s *Service) refOf(t *models.Torrent, profiles []state.SiteProfile, cc *cal
 		HRDeadline:       hrDeadlineFor(t, p, hasProfile),
 		ReleaseAt:        rel,
 		Reason:           reason,
-		Estimated:        estimated,
+		WindowDays:       days,
+		Seeders:          seeders,
+		Leechers:         leechers,
+		Scarcity:         scarcityOf(seeders),
+		Swarm:            swarm,
+		SafeToRelease:    safe,
+		ReleaseNote:      note,
+		AgeDays:          ageDays,
+		AgeSource:        ageSource,
+		BonusPerHour:     bonusHour,
+		BonusPerGb:       bonusGb,
+		BonusMethod:      bonusMethod,
+		BonusMethodKey:   bonusKey,
+		SavePath:         savePathOf(t),
+		ContentPath:      t.ContentPath,
 		IdleDays:         idleDaysOf(t.HashString, cc),
 		UploadedToday:    cc.today.Known[t.HashString],
 		TodayQuality:     todayQualityOf(t.HashString, cc),

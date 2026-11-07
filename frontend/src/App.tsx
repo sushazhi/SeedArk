@@ -7,7 +7,6 @@ import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { AuthTokenDialog } from '@/components/AuthTokenDialog'
 import { CreateTorrentDialog } from '@/components/CreateTorrentDialog'
 import { PTDialog } from '@/components/PT/PTDialog'
-import { Dashboard } from '@/components/Dashboard'
 import { DesktopSidebar, MobileDrawer, STATUS_ITEMS } from '@/components/Sidebar'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
 import { SettingsModal } from '@/components/SettingsModal'
@@ -84,8 +83,8 @@ export default function App() {
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [dashboardOpen, setDashboardOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  // 统计并进保种台后只剩一个入口：一颗弹窗、一个 open 状态
   const [ptOpen, setPtOpen] = useState(false)
   const [cleanOpen, setCleanOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -385,7 +384,6 @@ export default function App() {
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenAdd={() => setAddOpen(true)}
-          onOpenDashboard={() => setDashboardOpen(true)}
           onOpenCreate={() => setCreateOpen(true)}
           onOpenPT={() => setPtOpen(true)}
           onOpenLabels={() => {
@@ -396,7 +394,7 @@ export default function App() {
           filteredIds={filteredIds}
         />
         {/* 分类标题行仅移动端保留（桌面端排序/视图/刷新已并入顶栏） */}
-        {isMobile && <ListHeader count={filtered.length} isMobile onOpenDashboard={() => setDashboardOpen(true)} onOpenCreate={() => setCreateOpen(true)} />}
+        {isMobile && <ListHeader count={filtered.length} isMobile onOpenCreate={() => setCreateOpen(true)} />}
       </div>
 
       {/* 底部停靠栏 */}
@@ -436,7 +434,6 @@ export default function App() {
         initialFiles={addInitial?.files}
         initialText={addInitial?.text}
       />
-      <Dashboard open={dashboardOpen} onClose={() => setDashboardOpen(false)} />
       <CreateTorrentDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <BatchCleanDialog open={cleanOpen} onClose={() => setCleanOpen(false)} />
       <TorrentDetail torrent={detailTorrent} onClose={() => setDetailTorrent(null)} onOpenChange={(open) => { if (!open) setDetailTorrent(null) }} isMobile={isMobile} />

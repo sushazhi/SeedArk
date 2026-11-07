@@ -376,7 +376,7 @@ func TestParallelDownloadSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	var progressCalls int
-	outcomes, err := parallelDownload(context.Background(), client, f, src, probe, func(written, total int64, done, all int, label string) {
+	outcomes, err := parallelDownload(context.Background(), client, f, src, probe, func(written, total int64, done, all int, _ lineInfo) {
 		progressCalls++
 		if done > all {
 			t.Errorf("已完成分片数 %d 超过总数 %d", done, all)
@@ -607,7 +607,7 @@ func TestFetchFPKFallbackToSequential(t *testing.T) {
 	if probe.rangeOK {
 		t.Fatal("该服务器不应支持 Range")
 	}
-	if err := sequentialDownload(context.Background(), updateClient(), f, src, probe, nil); err != nil {
+	if _, err := sequentialDownload(context.Background(), updateClient(), f, src, probe, nil); err != nil {
 		t.Fatalf("回退单流下载失败: %v", err)
 	}
 	f.Close()
@@ -641,7 +641,7 @@ func TestFetchFPKSuccess(t *testing.T) {
 	info := testReleaseInfo(payload)
 	dest := filepath.Join(dir, "x.fpk")
 	var gotPct []int
-	err := fetchFPKWithMirrors(context.Background(), info.FPKURL, dest, info, []string{m.URL + "/"}, func(written, total int64, done, all int, label string) {
+	err := fetchFPKWithMirrors(context.Background(), info.FPKURL, dest, info, []string{m.URL + "/"}, func(written, total int64, done, all int, _ lineInfo) {
 		if total > 0 {
 			gotPct = append(gotPct, int(written*50/total))
 		}
@@ -696,7 +696,7 @@ func TestFetchFPKDigestRules(t *testing.T) {
 
 	// 直连（无镜像前缀）：无摘要也能通过，仅告警
 	directDest := filepath.Join(t.TempDir(), "direct.fpk")
-	if err := fetchFPK(context.Background(), m.URL+"/x", directDest, true, info, nil); err != nil {
+	if _, err := fetchFPK(context.Background(), m.URL+"/x", directDest, true, info, nil); err != nil {
 		t.Fatalf("直连无摘要应降级告警而非失败: %v", err)
 	}
 	// 经代理：没有摘要必须拒绝
@@ -798,12 +798,28 @@ func TestUpdateProgressMessage(t *testing.T) {
 
 	h.svc.mu.Lock()
 	prog, msg, failed := h.svc.progress, h.svc.message, h.svc.failed
+	line, lineKind, directProbe := h.svc.line, h.svc.lineKind, h.svc.directProbe
+	lines := append([]lineUsage(nil), h.svc.lines...)
 	h.svc.mu.Unlock()
 	if failed {
 		t.Fatalf("下载应成功，实际: %s", msg)
 	}
 	if prog != 100 {
 		t.Fatalf("成功后进度应为 100，实际 %d", prog)
+	}
+	// 完成文案要讲清「走的是哪条线路」，而不是只有一句「下载完成」
+	if !strings.Contains(msg, "已通过「") || !strings.Contains(msg, "下载完成") {
+		t.Errorf("完成文案应说明实际线路，实际: %q", msg)
+	}
+	// 本用例的直连地址是 example.invalid，探测必然落到唯一的加速源上
+	if !strings.HasPrefix(line, "加速源 1/1（") || lineKind != lineKindMirror {
+		t.Errorf("本次线路应为唯一的加速源，实际 line=%q kind=%q", line, lineKind)
+	}
+	if directProbe != "timeout" {
+		t.Errorf("直连探测未成功时应记 timeout，实际 %q", directProbe)
+	}
+	if len(lines) == 0 || lines[0].Bytes != int64(len(payload)) || lines[0].Kind != lineKindMirror {
+		t.Errorf("应汇总出加速源的整包用量，实际 %+v", lines)
 	}
 	_ = atomic.LoadInt32
 }
@@ -814,7 +830,8 @@ func fetchFPKWithMirrors(ctx context.Context, rawURL, dest string, info *release
 	prev := UpdateMirrors
 	UpdateMirrors = mirrors
 	defer func() { UpdateMirrors = prev }()
-	return fetchFPK(ctx, rawURL, dest, false, info, onProgress)
+	_, err := fetchFPK(ctx, rawURL, dest, false, info, onProgress)
+	return err
 }
 
 // --- 慢镜像：墙钟改派 / 速度降级 / 增量自检回退 -------------------------------
@@ -974,7 +991,7 @@ func TestFetchFPKFallbackWhenParallelSlower(t *testing.T) {
 	info := testReleaseInfo(payload)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	if err := fetchFPK(ctx, info.FPKURL, dest, false, info, nil); err != nil {
+	if _, err := fetchFPK(ctx, info.FPKURL, dest, false, info, nil); err != nil {
 		t.Fatalf("回退单流后应成功，实际: %v", err)
 	}
 	got, err := os.ReadFile(dest)
@@ -983,5 +1000,87 @@ func TestFetchFPKFallbackWhenParallelSlower(t *testing.T) {
 	}
 	if sha256Hex(got) != sha256Hex(payload) {
 		t.Fatal("回退后内容不一致")
+	}
+}
+
+// --- 线路展示（直连 / 加速源 N/M（host）） ---------------------------------
+
+// lineName 要让人一眼看出「走的是直连还是第几个加速源」；三种形态都要对：
+// 有直连候选（候选 0 是直连）、noDirect（候选 0 即第一个加速源）、只有直连。
+func TestSourceSetLineName(t *testing.T) {
+	mirrors := []string{"https://gh-proxy.com/", "https://ghfast.top/"}
+	raw := "https://github.com/sushazhi/x/releases/download/v1/x.fpk"
+
+	cases := []struct {
+		name string
+		src  sourceSet
+		i    int
+		want string
+		kind string
+		host string
+	}{
+		{"直连候选", sourceSet{rawURL: raw, prefixes: mirrors}, 0, "直连 GitHub", lineKindDirect, "github.com"},
+		{"第一个加速源", sourceSet{rawURL: raw, prefixes: mirrors}, 1, "加速源 1/2（gh-proxy.com）", lineKindMirror, "gh-proxy.com"},
+		{"第二个加速源", sourceSet{rawURL: raw, prefixes: mirrors}, 2, "加速源 2/2（ghfast.top）", lineKindMirror, "ghfast.top"},
+		{"候选轮转回第一个", sourceSet{rawURL: raw, prefixes: mirrors}, 3, "加速源 1/2（gh-proxy.com）", lineKindMirror, "gh-proxy.com"},
+		{"无直连时候选 0 是加速源", sourceSet{rawURL: raw, prefixes: mirrors, noDirect: true}, 0, "加速源 1/2（gh-proxy.com）", lineKindMirror, "gh-proxy.com"},
+		{"无直连时候选 1", sourceSet{rawURL: raw, prefixes: mirrors, noDirect: true}, 1, "加速源 2/2（ghfast.top）", lineKindMirror, "ghfast.top"},
+		{"只有直连（无加速源）", sourceSet{rawURL: raw}, 0, "直连 GitHub", lineKindDirect, "github.com"},
+	}
+	for _, c := range cases {
+		info := c.src.lineInfo(c.i)
+		if info.Name != c.want || info.Kind != c.kind || info.Host != c.host {
+			t.Errorf("%s: lineInfo(%d) = %+v，期望 name=%q kind=%q host=%q",
+				c.name, c.i, info, c.want, c.kind, c.host)
+		}
+	}
+}
+
+// 用量汇总：按分片归属统计各线路的字节与片数，并统计换源重试过的分片数。
+func TestSummarizeUsage(t *testing.T) {
+	payload := fakePayload(3*downloadChunkSize + 1234)
+	size := int64(len(payload))
+	chunks := planChunks(size, chooseChunkSize(size))
+	if len(chunks) != 4 {
+		t.Fatalf("夹具应有 4 个分片，实际 %d", len(chunks))
+	}
+	src := sourceSet{
+		rawURL:   "https://github.com/sushazhi/x/releases/download/v1/x.fpk",
+		prefixes: []string{"https://gh-proxy.com/", "https://ghfast.top/"},
+	}
+	outcomes := []chunkOutcome{
+		{index: 0, source: 0, attempt: 0}, // 直连
+		{index: 1, source: 1, attempt: 1}, // 换过一次源才成功
+		{index: 2, source: 1, attempt: 0},
+		{index: 99, source: 2, attempt: 0}, // 越界分片：必须被忽略而不是 panic
+	}
+	lines := summarizeUsage(src, size, outcomes)
+	if len(lines) != 2 {
+		t.Fatalf("应汇总出 2 条线路，实际 %d: %+v", len(lines), lines)
+	}
+	if lines[0].Name != "直连 GitHub" || lines[0].Chunks != 1 || lines[0].Bytes != chunks[0].size() {
+		t.Errorf("直连用量不对: %+v（期望 1 片 %d 字节）", lines[0], chunks[0].size())
+	}
+	wantMirrorBytes := chunks[1].size() + chunks[2].size()
+	if lines[1].Name != "加速源 1/2（gh-proxy.com）" || lines[1].Chunks != 2 || lines[1].Bytes != wantMirrorBytes {
+		t.Errorf("加速源用量不对: %+v（期望 2 片 %d 字节）", lines[1], wantMirrorBytes)
+	}
+	if got := countRetried(outcomes); got != 1 {
+		t.Errorf("换源重试分片数应为 1，实际 %d", got)
+	}
+	if got := linesBrief(lines); !strings.Contains(got, "直连 GitHub") || !strings.Contains(got, "gh-proxy.com") {
+		t.Errorf("线路短说明应同时含直连与加速源，实际 %q", got)
+	}
+	if got := linesBrief(lines[:1]); got != "直连 GitHub" {
+		t.Errorf("只有一条线路时不该带体积，实际 %q", got)
+	}
+
+	// 单流路径的用量：整包算在同一条线路上
+	seq := sequentialUsage(src, size, 1)
+	if len(seq) != 1 || seq[0].Bytes != size || seq[0].Name != "加速源 1/2（gh-proxy.com）" {
+		t.Errorf("单流用量不对: %+v", seq)
+	}
+	if got := sequentialUsage(src, size, -1); got != nil {
+		t.Errorf("全部失败时应没有用量，实际 %+v", got)
 	}
 }

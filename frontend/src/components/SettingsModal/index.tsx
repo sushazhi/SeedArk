@@ -16,6 +16,7 @@ import { serverApi, sessionApi, torrentApi, updateApi, type UpdateCheckResult, t
 import { AutoMoveManager } from '@/components/AutoMoveManager'
 import { McpManager } from '@/components/McpManager'
 import { SeedPolicyManager } from '@/components/SeedPolicyManager'
+import { UpdateLineInfo } from '@/components/UpdateLineInfo'
 import { QBFields, QBSaveBar, useQBDraft } from './QBSettings'
 import { NumInput, PaneNav, Row, ScrollArea, Section, SmallSelect } from './controls'
 import { usePlatform } from '@/platform'
@@ -319,11 +320,18 @@ function AboutSection({ transmissionVersion, framed = true }: { transmissionVers
                     <div className="h-full bg-primary transition-all" style={{ width: `${updStatus?.progress ?? 0}%` }} />
                   </div>
                   <p className="mt-1 text-footnote">{updStatus?.progress ?? 0}% · {updStatus?.message}</p>
+                  {/* 线路：直连 GitHub 还是加速源 N/M（host），完成后另附各线路体积 */}
+                  <div className="mt-1">
+                    <UpdateLineInfo status={updStatus} />
+                  </div>
                 </div>
               )}
               {failed && <p className="text-red-500 text-footnote">{updStatus?.message || t('session.updateFailed')}</p>}
+              {failed && <UpdateLineInfo status={updStatus} />}
               {done || readyWithoutInstall ? (
                 <div className="space-y-1">
+                  {/* 完成后仍要能看到本次线路，否则线路信息只在下载过程中可见 */}
+                  <UpdateLineInfo status={updStatus} />
                   <Button size="sm" className="h-8 text-footnote" onClick={() => void downloadFpk()}>
                     {t('session.downloadFpk')}
                   </Button>

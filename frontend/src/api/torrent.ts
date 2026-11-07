@@ -192,6 +192,15 @@ export interface UpdateCheckResult {
   downloadReady: boolean
 }
 
+// 一条下载线路在本次更新里的实际用量（后端 summarizeUsage 汇总）
+export interface UpdateLineUsage {
+  name: string
+  kind: string // direct | mirror
+  host: string
+  bytes: number
+  chunks: number
+}
+
 export interface UpdateStatus {
   updating: boolean
   failed: boolean
@@ -200,6 +209,13 @@ export interface UpdateStatus {
   latestVersion: string
   fpkFilename: string
   downloadUrl?: string
+  // 线路：line=当前/最近使用的线路名（直连 GitHub / 加速源 1/4（gh-proxy.com）），
+  // lines=本次各线路实际用量；directProbe=ok|timeout|skipped（直连探测结论）
+  line?: string
+  lineKind?: string
+  directProbe?: string
+  retried?: number
+  lines?: UpdateLineUsage[]
 }
 
 // 从 Content-Disposition 提取文件名：中文名走 RFC 5987 的 filename*，退回普通 filename=

@@ -1,15 +1,23 @@
 import { client, request } from './client'
 import type {
+  PTActivity,
   PTCalendar,
   PTContract,
   PTContractRequest,
+  PTEviction,
+  PTExam,
+  PTExams,
   PTLedger,
+  PTLone,
   PTMatrix,
   PTOverview,
   PTPublishPreview,
   PTPublishRequest,
+  PTSettings,
   PTSiteProfile,
   PTSitesResponse,
+  PTSnapshot,
+  PTSnapshots,
   PTVaultDetail,
   PTVaultList,
   PTVaultReviveResult,
@@ -47,4 +55,22 @@ export const ptApi = {
   // 保种契约：只写「承诺」，不触发暂停/删除
   setContract: (body: PTContractRequest) => request<PTContract>(client.post('/pt/contract', body)),
   deleteContract: (hash: string) => request<{ deleted: boolean }>(client.delete(`/pt/contract/${encodeURIComponent(hash)}`)),
+
+  // —— v3：全部只输出建议或记录用户录入，没有任何一条会删种 ——
+  eviction: (freeGb?: number, limit?: number) =>
+    request<PTEviction>(
+      client.get('/pt/eviction', {
+        params: { ...(freeGb ? { freeGb } : {}), ...(limit ? { limit } : {}) },
+      }),
+    ),
+  activity: () => request<PTActivity>(client.get('/pt/activity')),
+  lone: () => request<PTLone>(client.get('/pt/lone')),
+  snapshots: () => request<PTSnapshots>(client.get('/pt/snapshots')),
+  addSnapshot: (body: Partial<PTSnapshot> & { site: string }) => request<PTSnapshot>(client.post('/pt/snapshots', body)),
+  deleteSnapshots: (site: string) => request<{ deleted: boolean }>(client.delete(`/pt/snapshots/${encodeURIComponent(site)}`)),
+  exams: () => request<PTExams>(client.get('/pt/exams')),
+  saveExam: (body: PTExam) => request<PTExam>(client.post('/pt/exams', body)),
+  deleteExam: (site: string) => request<{ deleted: boolean }>(client.delete(`/pt/exams/${encodeURIComponent(site)}`)),
+  settings: () => request<PTSettings>(client.get('/pt/settings')),
+  saveSettings: (body: PTSettings) => request<PTSettings>(client.post('/pt/settings', body)),
 }

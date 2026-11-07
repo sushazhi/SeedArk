@@ -52,7 +52,6 @@ import { BatchLimitDialog, BatchMoveDialog, RemoveTorrentDialog } from '@/compon
 interface Props {
   onOpenSettings: () => void
   onOpenAdd: () => void
-  onOpenDashboard: () => void
   onOpenCreate: () => void
   onOpenLabels: () => void
   onOpenPT: () => void
@@ -103,7 +102,7 @@ const THEME_PRESETS: { id: string; from: string; to: string }[] = [
 ]
 
 // 玻璃悬浮顶栏：单行 —— Logo + 搜索 + 批量操作（选中时出现在同行）+ 排序/视图/刷新 + 添加 + 头像
-export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashboard, onOpenCreate, onOpenLabels, onOpenPT, filteredIds, isMobile, onOpenDrawer }) => {
+export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenCreate, onOpenLabels, onOpenPT, filteredIds, isMobile, onOpenDrawer }) => {
   const { t } = useTranslation()
   const search = useAppStore((s) => s.filters.search)
   const filters = useAppStore((s) => s.filters)
@@ -290,7 +289,7 @@ export const TopBar: React.FC<Props> = ({ onOpenSettings, onOpenAdd, onOpenDashb
             此前这条常驻 9 颗图标按钮，顶栏永远处于"满配"状态，视觉上没有落点 */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* 排序 / 视图 / 刷新（桌面端并入顶栏，移动端在 ListHeader） */}
-          {!isMobile && <ListControls compact onOpenDashboard={onOpenDashboard} />}
+          {!isMobile && <ListControls compact />}
 
           {/* 保种台：桌面端留在顶栏，移动端移到底部胶囊。
               移动端顶栏右侧只剩一个窄条，还要容纳批量操作与头像；同一颗入口两处都在，

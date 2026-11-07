@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,8 @@ type Service struct {
 	manager *rpc.Manager
 	store   *state.Store
 	local   *store
+	// snaps 站点快照与考核目标（手工录入的站点侧数据）
+	snaps *snapStore
 
 	sampleMu sync.Mutex
 
@@ -40,7 +43,12 @@ func New(manager *rpc.Manager, st *state.Store, dataDir string) (*Service, error
 	if err != nil {
 		return nil, err
 	}
-	return &Service{manager: manager, store: st, local: ls}, nil
+	return &Service{
+		manager: manager,
+		store:   st,
+		local:   ls,
+		snaps:   newSnapStore(filepath.Join(dataDir, "pt")),
+	}, nil
 }
 
 // Run 后台循环：每 60s 采样一次上传高水位。采样失败只记日志，不影响面板。
@@ -113,15 +121,25 @@ func (s *Service) calc(ctx context.Context, now time.Time, torrents []*models.To
 		}
 	}
 	return &calcCtx{
-		now:         now,
-		contracts:   s.local.contractAll(),
-		lastInc:     lastInc,
-		seen:        seen,
-		coverage:    s.local.coverage(now),
-		hostHealthy: hostHealthy,
-		today:       s.local.todayDelta(now),
-		siteNames:   s.siteMap(ctx),
+		now:           now,
+		contracts:     s.local.contractAll(),
+		lastInc:       lastInc,
+		seen:          seen,
+		coverage:      s.local.coverage(now),
+		hostHealthy:   hostHealthy,
+		today:         s.local.todayDelta(now),
+		siteNames:     s.siteMap(ctx),
+		scarceSeeders: s.ptSettings().ScarceSeeders,
 	}
+}
+
+// ptSettings 取 PT 全局阈值；未配置时给默认值（稀缺阈值 10，取自 ptool 的经验值）。
+func (s *Service) ptSettings() state.PTSettings {
+	st := s.store.Get().PTSettings
+	if st.ScarceSeeders <= 0 {
+		st.ScarceSeeders = defaultScarceSeeders
+	}
+	return st
 }
 
 // buildRefs 计算全部台账行（概览/日历/台账/同内容共用同一份计算）。
@@ -132,14 +150,97 @@ func (s *Service) buildRefs(ctx context.Context) ([]TorrentRef, []state.SiteProf
 		return nil, nil, time.Time{}, nil, err
 	}
 	cc := s.calc(ctx, now, torrents)
+	// 先按展示名把「本站集合量」预计算一遍，再逐颗快照：nexusphp 档的 ΣA/颗数、
+	// manual 档的做种体积都必须来自同一遍遍历——分散到每行现算，先算的行会把
+	// 后算的行漏进或重复算进分母，B 就对不上账了。
+	bonusBySite := bonusCtxBySite(torrents, profiles, cc, now)
+	cc.bonus = bonusBySite
 	refs := make([]TorrentRef, 0, len(torrents))
 	for _, t := range torrents {
 		if t == nil {
 			continue
 		}
-		refs = append(refs, s.refOf(t, profiles, cc))
+		refs = append(refs, s.refOf(t, profiles, cc, bonusBySite))
 	}
 	return refs, profiles, now, cc, nil
+}
+
+// bonusCtxBySite 按展示名预计算每站的时魔集合量（nexusphp 的 ΣA/颗数 + manual 的做种体积）。
+//
+// 口径与站方对齐：mybonus.php 只给 `peers.seeder='yes'` 的 peer 计时魔——
+// 下载中（left>0）不是 seeder，暂停的 peer 不在线也不算。所以这里只统计
+// statusOf==seeding 的种子，与 bonusOf 单颗行的「未在做种给 0」同一把尺子。
+//
+// ΣA 用 aValueOf（不带 perseeding 的 A_t）：perseeding 只出现在 B 的第二项，
+// 混进 ΣA 会把 atan(ΣA/L) 整体放大——这是复刻公式最容易犯的错。
+// bonusActualOf 单站的「实际每小时」时魔：nexusphp = 本地复刻 B(ΣA,颗数)（需参数齐全），
+// manual = 抄录值。ok=false 表示该站配了却算不出（参数不齐）或没配——
+// 调用方据此显示「—」，绝不把「不知道」冒充 0。
+// 概览的时魔卡片（BonusCap.Sites）与站点分布表的时魔列共用这一个实现，
+// 两处数字不同就是 bug。
+func (s *Service) bonusActualOf(p state.SiteProfile, cc *calcCtx) (perHour, capPerHour float64, engine string, ok bool) {
+	engine = state.BonusEngineOf(p)
+	switch engine {
+	case state.BonusEngineNexusPHP:
+		bc, has := cc.bonus[p.Name]
+		if !has || !bc.hasParams {
+			return 0, 0, engine, false
+		}
+		perHour = bonusTotalFrom(p, bc.sumA, bc.perCount)
+		if c, _, cok := bonusCap(p); cok {
+			capPerHour = c
+		}
+		return perHour, capPerHour, engine, true
+	case state.BonusEngineManual:
+		if p.BonusManualPerHour <= 0 {
+			return 0, 0, engine, false
+		}
+		return p.BonusManualPerHour, 0, engine, true
+	default:
+		return 0, 0, engine, false
+	}
+}
+
+func bonusCtxBySite(torrents []*models.Torrent, profiles []state.SiteProfile, cc *calcCtx, now time.Time) map[string]bonusCtx {
+	out := map[string]bonusCtx{}
+	for _, p := range profiles {
+		if !p.Enabled {
+			continue
+		}
+		_, ok := bonusParamsOf(p)
+		// 官种正则每站编译一次（每颗现编译会拖慢全量遍历）。编译不过就降级成「不区分官种」，
+		// 并在 bonusCtx 上留标记——静默按 0 颗算会让用户以为站点改了规则。
+		re, bad := compileOfficialPattern(p.BonusOfficialPattern)
+		out[p.Name] = bonusCtx{hasParams: ok, officialRe: re, officialBad: bad}
+	}
+	for _, t := range torrents {
+		if t == nil || t.TotalSize <= 0 {
+			continue
+		}
+		name, p, _ := displaySite(t, cc, profiles)
+		if name == "" {
+			continue
+		}
+		bc, seen := out[name]
+		if !seen {
+			bc = bonusCtx{}
+		}
+		if statusOf(t) == StatusSeeding {
+			if bc.hasParams {
+				seeders, _ := swarmCounts(t)
+				ageDays, _ := ageOf(t, now)
+				bc.sumA += aValueOf(t, p, ageDays, seeders)
+				bc.count++
+				// 数量项按站点口径计数：站点只数官种/限体积时这一步会小于 count
+				if countedForPerSeeding(t, p, bc.officialRe) {
+					bc.perCount++
+				}
+			}
+			bc.siteSeedBytes += t.TotalSize
+		}
+		out[name] = bc
+	}
+	return out
 }
 
 // siteCacheTTL 站点名映射的缓存时长。与自动化「分组限速」用同一个 TTL：
@@ -166,6 +267,47 @@ func (s *Service) siteMap(ctx context.Context) map[int64][]string {
 
 func nowUnix() int64 { return time.Now().Unix() }
 
+// profileFor 按展示名找回该站点的规则。
+// refOf 内部已按 tracker 匹配过一次，但概览/淘汰建议只拿到 ref，需要这条回来取
+// 公式参数与义务阈值；名字对不上时退回按展示名再匹配一次。
+func (s *Service) profileFor(site string, profiles []state.SiteProfile) state.SiteProfile {
+	for _, p := range profiles {
+		if p.Enabled && p.Name == site {
+			return p
+		}
+	}
+	if p, ok := matchProfile(profiles, site); ok {
+		return p
+	}
+	return state.SiteProfile{}
+}
+
+// siteBonus 概览汇总用的「单站时魔上限 + 该站引擎」。上限取 bonusCap 的返回值：
+// atan 站 = B0 + perseeding×maxseeding，manual 站 = 抄录值，**log 站 = 0（它没有上限）**。
+type siteBonus struct {
+	perHour float64
+	engine  string
+}
+
+// bonusCapsOf 把各站上限汇成概览卡片要的那几个量：最高的那条上限 + 站名 + 引擎，
+// 以及「有几个站配了口径」。
+//
+// 「配了口径」与「有上限」必须分开判：log 曲线的站没有上限（perHour=0），
+// 若拿 0 去参与「取最大值」的比较，Configured 会永远停在 false —— 界面就会在
+// 已经算出 TotalPerHour 的情况下说「还没有站点配时魔口径」，而同一屏的站点分布表
+// 又是正常数字。Configured 的语义只是「有没有配」，与上限是否存在无关。
+func bonusCapsOf(sites map[string]siteBonus) (perHour float64, configured bool, bestSite, engine string, count int) {
+	for site, b := range sites {
+		count++
+		if b.perHour > perHour {
+			perHour = b.perHour
+			bestSite = site
+			engine = b.engine
+		}
+	}
+	return perHour, count > 0, bestSite, engine, count
+}
+
 // Overview 概览
 func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 	refs, profiles, now, cc, err := s.buildRefs(ctx)
@@ -189,6 +331,11 @@ func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 	var effSum float64
 	var effN int
 	bySite := map[string]*SiteStat{}
+	// 时魔按**站**收集，不在这里合并：各站的「点」不可通约（NPHP 公式上限、抄录的站点
+	// 时魔、压根没有时魔的站），求一个全局最大值等于把馒头和黄星站比大小。
+	// 循环结束后只挑「最高的那条」并把站名一起带出去，界面就能说清这个数是哪站的。
+	bonusBySite := map[string]siteBonus{}
+	ratioSize := map[string]float64{}
 	upcoming := map[string]*UpcomingDay{}
 	siteQual := map[string][]DeltaQuality{}
 	var allQual []DeltaQuality
@@ -196,6 +343,27 @@ func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 		o.TorrentCount++
 		o.TotalSize += r.Size
 		o.Uploaded30 += r.Uploaded30
+		// 上传量列的窗口取各行的最大值：种子全是刚加的时采样可能已跑满 30 天，
+		// 但这一列一天数据都没有，标题不能写「近 30 天」
+		if r.WindowDays > o.WindowDays {
+			o.WindowDays = r.WindowDays
+		}
+		// v3 稀缺汇总：unknown 单独计，不并进 scarce 也不并进 abundant
+		switch r.Swarm {
+		case SwarmScarce:
+			o.Scarcity.ScarceCount++
+			o.Scarcity.ScarceBytes += r.Size
+		case SwarmUnknown:
+			o.Scarcity.UnknownCount++
+		}
+		// 时魔：只收本行所属站那条口径（拿不到规则时不收，不等于 0）
+		if p := s.profileFor(r.Site, profiles); p.Name != "" {
+			if _, seen := bonusBySite[p.Name]; !seen {
+				if perHour, engine, ok := bonusCap(p); ok {
+					bonusBySite[p.Name] = siteBonus{perHour: perHour, engine: engine}
+				}
+			}
+		}
 		if r.Status == StatusSeeding {
 			o.SeedCount++
 		}
@@ -253,17 +421,63 @@ func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 		st.Size += r.Size
 		st.Uploaded30 += r.Uploaded30
 		st.UploadedToday += r.UploadedToday
+		// 站点累计分享率 = Σ(ratio_i×size_i)/Σsize_i = ΣuploadedEver/Σsize。
+		// r.Ratio 是客户端的**累计**分享率（uploadedEver/size），体积加权后就是
+		// 该站在客户端口径下的真实分享率——比原来用「近30天增量÷体积」近似靠谱：
+		// 采样刚起步时那个式子只会算出假 0.00，用户还以为时魔列前面挂了个多余的数。
+		ratioSize[site] += r.Ratio * float64(r.Size)
 		siteQual[site] = append(siteQual[site], r.TodayQuality)
 		allQual = append(allQual, r.TodayQuality)
 	}
 	if effN > 0 {
 		o.AvgEfficiency = round1(effSum / float64(effN))
 	}
+	// 时魔上限：取各站里最高的那条，并把站名与引擎一起带出。
+	o.BonusCap.PerHour, o.BonusCap.Configured, o.BonusCap.BestSite, o.BonusCap.Engine, o.BonusCap.ConfigCount =
+		bonusCapsOf(bonusBySite)
+	// 实际口径：上限（PerHour）是「一颗不多正好打满」的数，用户拿它跟站点页
+	// 「你当前每小时能获取 108.345」对不上就会以为面板错了。这里按站算
+	// 实际值（nexusphp = 本地复刻 B(ΣA,颗数)；manual = 抄录值）求合计，
+	// 上限与 ΣA 对账退到每站明细里。
+	for i := range profiles {
+		p := profiles[i]
+		if !p.Enabled {
+			continue
+		}
+		sc := BonusSiteCard{Site: p.Name, Verified: p.RuleCheckedAt > 0}
+		if bc, ok := cc.bonus[p.Name]; ok {
+			sc.Count = bc.count
+			sc.LocalSumA = bc.sumA
+		}
+		ph, cap, eng, ok := s.bonusActualOf(p, cc)
+		if !ok {
+			continue // 参数不齐/未配置：算不出实际值，宁可缺席也不编
+		}
+		sc.Engine = eng
+		sc.PerHour = ph
+		sc.CapPerHour = cap
+		if p.BonusASumObserved > 0 {
+			sc.ObservedA = p.BonusASumObserved
+		}
+		o.BonusCap.TotalPerHour += sc.PerHour
+		o.BonusCap.Sites = append(o.BonusCap.Sites, sc)
+	}
 	for _, st := range bySite {
 		if st.Size > 0 {
-			// 站点分享率用该站总体积与总上传近似（不是站方数据）
-			up := st.Uploaded30
-			st.Ratio = round2(float64(up) / float64(st.Size))
+			// 站点分享率：客户端口径的**累计**分享率（ΣuploadedEver/Σsize，非站方数据）。
+			// 客户端说没传过就是 0.00——这是真实的 0，不是采样不足的假 0。
+			st.Ratio = round2(ratioSize[st.Site] / float64(st.Size))
+		}
+		// v3.1 时魔列：站点分布表每站一行「实际每小时」。
+		// 注意 cc.bonus 以**规则名**为键，profileFor 可能返回名字对不上的规则
+		// （站点 m-team ↔ 规则名 mt），所以这里必须按 p.Name 取，不能按站点名。
+		if p := s.profileFor(st.Site, profiles); p.Name != "" {
+			if ph, cap, engine, ok := s.bonusActualOf(p, cc); ok {
+				st.BonusSet = true
+				st.BonusPerHour = ph
+				st.BonusCapPerHour = cap
+				st.BonusEngine = engine
+			}
 		}
 		// ⑦ 超预算只标记，不触发任何清理
 		if st.BudgetBytes > 0 && st.Size > st.BudgetBytes {
@@ -288,9 +502,13 @@ func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 	m, err := s.Matrix(ctx)
 	if err == nil && m != nil {
 		o.GroupCount = m.Summary.Groups
-		o.DuplicateBytes = m.Summary.DuplicateBytes
+		o.ReclaimableBytes = m.Summary.ReclaimableBytes
+		o.SharedGroups = m.Summary.SharedGroups
 	}
 	o.Warnings = overviewWarnings(o)
+	// v3 磁盘余量：取活动下载器里种子最集中的那个保存路径。
+	// 查不到就留零值（界面不显示），不能因为「查不到」就当成「空间充足」。
+	o.Disk = s.diskStat(ctx, refs)
 	// 今日增量口径：只在有前一日基线时才算，且明确标注可比性
 	o.UploadedToday = cc.today.Total
 	o.TodayQuality = mergeTodayQuality(allQual)
@@ -303,7 +521,7 @@ func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 func todayNote(t TodayDelta, q DeltaQuality) string {
 	switch q {
 	case DeltaExact:
-		return fmt.Sprintf("与 %s 逐颗对比得到", t.PrevDay)
+		return fmt.Sprintf("与 %s 逐个对比得到", t.PrevDay)
 	case DeltaPartial:
 		return fmt.Sprintf("相对 %s：部分种子当日新加或未被采到，合计偏小", t.PrevDay)
 	case DeltaRollback:
@@ -321,22 +539,26 @@ func overviewWarnings(o *Overview) []string {
 	out := []string{}
 	if o.Coverage.Days < 29 {
 		from := o.Coverage.From
-		if from == "" {
-			from = "尚未开始采样"
+		switch {
+		case from == "":
+			out = append(out, "还未开始采样，上传量暂无数据（采样满 1 天后开始统计）")
+		case o.Coverage.Days == 0:
+			out = append(out, fmt.Sprintf("采样不足 1 天（%s 起），上传量暂无数据", from))
+		default:
+			out = append(out, fmt.Sprintf("采样仅覆盖 %d 天（%s 起），上传量最多统计这 %d 天", o.Coverage.Days, from, o.Coverage.Days))
 		}
-		out = append(out, fmt.Sprintf("采样仅覆盖 %d 天（%s 起），近 30 天上传为折算估算值", o.Coverage.Days, from))
 	}
 	if o.InvalidCount > 0 {
-		out = append(out, fmt.Sprintf("%d 颗种子的站点已判为未注册（站点已删种），占 %s", o.InvalidCount, humanGB(o.InvalidBytes)))
+		out = append(out, fmt.Sprintf("%d 个种子的站点已判为未注册（站点已删种），占 %s", o.InvalidCount, humanBytes(o.InvalidBytes)))
 	}
 	if o.IdleCount > 0 {
-		out = append(out, fmt.Sprintf("%d 颗种子连续 %d 天以上没有上传增长，占 %s", o.IdleCount, idleThresholdDays, humanGB(o.IdleBytes)))
+		out = append(out, fmt.Sprintf("%d 个种子连续 %d 天以上没有上传增长，占 %s", o.IdleCount, idleThresholdDays, humanBytes(o.IdleBytes)))
 	}
 	if o.ContractBreach > 0 {
-		out = append(out, fmt.Sprintf("%d 颗种子的保种契约已过期未解除", o.ContractBreach))
+		out = append(out, fmt.Sprintf("%d 个种子的保种契约已过期未解除", o.ContractBreach))
 	}
 	if o.OverBudgetCount > 0 {
-		out = append(out, fmt.Sprintf("%d 个站点超出保种预算，合计超出 %s", o.OverBudgetCount, humanGB(o.OverBudgetBytes)))
+		out = append(out, fmt.Sprintf("%d 个站点超出保种预算，合计超出 %s", o.OverBudgetCount, humanBytes(o.OverBudgetBytes)))
 	}
 	return out
 }
@@ -361,7 +583,13 @@ func (s *Service) Ledger(ctx context.Context) (*Ledger, error) {
 		l.Totals.Count++
 		l.Totals.Size += r.Size
 		l.Totals.Uploaded30 += r.Uploaded30
-		if r.Uploaded30 <= 0 {
+		// 表头写「近 N 天」用的天数取各行最大值：这一列实际有多少天数据就写多少天
+		if r.WindowDays > l.Totals.WindowDays {
+			l.Totals.WindowDays = r.WindowDays
+		}
+		// 零上传只统计真正看到过的窗口：WindowDays=0 是「刚开始采样、还没看到」，
+		// 把它算成零上传会让新装用户整列飘红
+		if r.WindowDays > 0 && r.Uploaded30 <= 0 {
 			l.Totals.ZeroUpload++
 		}
 		if r.IdleDays >= idleThresholdDays {
@@ -505,59 +733,8 @@ func (s *Service) Matrix(ctx context.Context) (*Matrix, error) {
 	if err != nil {
 		return nil, err
 	}
-	groups := map[string]*ContentGroup{}
-	for _, r := range refs {
-		key := normalizeName(r.Name)
-		if key == "" {
-			continue
-		}
-		g, ok := groups[key]
-		if !ok {
-			g = &ContentGroup{Key: key, Name: r.Name, Copies: []ContentCopy{}}
-			groups[key] = g
-		}
-		if r.Size > g.Size {
-			g.Size = r.Size
-			g.Name = r.Name
-		}
-		g.Copies = append(g.Copies, ContentCopy{
-			ID: r.ID, Site: r.Site, ServerName: r.ServerName, Kind: r.Kind,
-			Status: r.Status, Size: r.Size, Uploaded: r.Uploaded30, Labels: r.Labels,
-		})
-	}
-	m := &Matrix{Groups: []ContentGroup{}}
-	for _, g := range groups {
-		if len(g.Copies) < 2 {
-			continue
-		}
-		seen := map[string]int{}
-		for _, c := range g.Copies {
-			g.TotalBytes += c.Size
-			seen[c.ServerName+"|"+c.Kind]++
-		}
-		for _, n := range seen {
-			if n > 1 {
-				g.SameDownloader = true
-				break
-			}
-		}
-		dup := g.TotalBytes - g.Size
-		if dup < 0 {
-			dup = 0
-		}
-		g.DuplicateBytes = dup
-		sort.SliceStable(g.Copies, func(i, j int) bool { return g.Copies[i].Size > g.Copies[j].Size })
-		m.Groups = append(m.Groups, *g)
-	}
-	sort.SliceStable(m.Groups, func(i, j int) bool { return m.Groups[i].DuplicateBytes > m.Groups[j].DuplicateBytes })
-	if len(m.Groups) > 50 {
-		m.Groups = m.Groups[:50]
-	}
-	for _, g := range m.Groups {
-		m.Summary.DuplicateBytes += g.DuplicateBytes
-	}
-	m.Summary.Groups = len(m.Groups)
-	return m, nil
+	// 分组与判定逻辑在 matrix.go（纯函数，可单测）
+	return matrixOf(refs), nil
 }
 
 // DetectedSites 当前快照里的站点分布（用于一键生成规则）
@@ -746,6 +923,7 @@ func (s *Service) Capture(ctx context.Context, id int64) error {
 			SavePath:     t.DownloadDir,
 			HasTorrent:   false,
 			CanRevive:    true,
+			Reason:       "manual",
 		},
 		Magnet: magnetOf(t),
 	}
@@ -754,6 +932,25 @@ func (s *Service) Capture(ctx context.Context, id int64) error {
 	}
 	// v1 不做 .torrent 导出（驱动接口暂未暴露），留档磁力即可复活
 	return s.local.vaultPut(rec)
+}
+
+// CaptureReason 删种前留档并记录删除原因（做种策略自动删种用）。
+//
+// 策略此前直接 RemoveTorrents，被自动删掉的种子根本不进档案库——而自动删
+// 往往一次几十颗，恰恰最需要「后悔药」。留档失败只返回错误、由调用方决定
+// 是否仍然删除（与手动删种的「不阻断」策略一致）。
+func (s *Service) CaptureReason(ctx context.Context, id int64, reason, note string) error {
+	if err := s.Capture(ctx, id); err != nil {
+		return err
+	}
+	if reason == "" {
+		return nil
+	}
+	t, err := s.manager.GetTorrentDetail(ctx, id)
+	if err != nil || t == nil || t.HashString == "" {
+		return nil
+	}
+	return s.local.vaultSetReason(t.HashString, reason, note)
 }
 
 // magnetOf 优先用下载器给的磁力；没有就用 infohash + tracker 重建。
@@ -940,7 +1137,7 @@ func buildBBCode(req PublishRequest) string {
 	b.WriteString(bbcLine("音频", req.Audio))
 	b.WriteString(bbcLine("字幕", req.Subtitle))
 	if req.SizeBytes > 0 {
-		b.WriteString(bbcLine("大小", humanGB(req.SizeBytes)))
+		b.WriteString(bbcLine("大小", humanBytes(req.SizeBytes)))
 	}
 	if strings.TrimSpace(req.Description) != "" {
 		b.WriteString("\n" + req.Description + "\n")
@@ -954,12 +1151,33 @@ func buildBBCode(req PublishRequest) string {
 	return b.String()
 }
 
-func humanGB(bytes int64) string {
-	gb := float64(bytes) / float64(1<<30)
-	if gb >= 100 {
-		return strconv.Itoa(int(gb+0.5)) + " GB"
+// humanBytes 体积的人类可读写法：与前端 formatBytes 同一套口径——1024 进制、
+// 自动升到「装得下它的最小单位」、小于 100 保留两位小数、大于等于 100 取整。
+//
+// 曾用名 humanGB 且恒以 GB 输出，于是预警里出现「占 21180 GB」这种读不出量级的数字
+// （其实是 20.68 TB）。文案层面的单位必须和台账/概览的数字同口径，否则同一份数据
+// 在两处显示成两种量级。
+func humanBytes(bytes int64) string {
+	if bytes <= 0 {
+		return "0 B"
 	}
-	return strconv.FormatFloat(gb, 'f', 2, 64) + " GB"
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
+	v := float64(bytes)
+	i := 0
+	for v >= 1024 && i < len(units)-1 {
+		v /= 1024
+		i++
+	}
+	// 四舍五入可能把显示值顶到 1024（1023.6 GB →「1024 GB」），再进一档，
+	// 保证单位始终是「装得下这个值的最小单位」（与前端同一处修正）。
+	if i > 0 && i < len(units)-1 && v >= 1023.5 {
+		v /= 1024
+		i++
+	}
+	if i == 0 || v >= 100 {
+		return strconv.Itoa(int(v+0.5)) + " " + units[i]
+	}
+	return strconv.FormatFloat(v, 'f', 2, 64) + " " + units[i]
 }
 
 // Kit 生成发布资料包 zip：bbcode.txt、mediainfo.txt、checklist.txt（有种子时附 .torrent）

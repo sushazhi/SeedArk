@@ -58,52 +58,61 @@ func ErrorWithCode(code, msg string) ApiResponse {
 
 // Torrent 种子数据（与前端 TS 类型对齐）
 type Torrent struct {
-	ID                  int64    `json:"id"`
-	Name                string   `json:"name"`
-	HashString          string   `json:"hashString"`
-	Creator             string   `json:"creator"`
-	TotalSize           int64    `json:"totalSize"`
-	SizeWhenDone        int64    `json:"sizeWhenDone"`
-	PercentDone         float64  `json:"percentDone"`
-	Status              int64    `json:"status"`
-	RateDownload        int64    `json:"rateDownload"`
-	RateUpload          int64    `json:"rateUpload"`
-	ETA                 int64    `json:"eta"`
-	UploadedEver        int64    `json:"uploadedEver"`
-	DownloadedEver      int64    `json:"downloadedEver"`
-	UploadRatio         float64  `json:"uploadRatio"`
-	SecondsSeeding      int64    `json:"secondsSeeding"`
-	Error               int64    `json:"error"`
-	ErrorString         string   `json:"errorString"`
-	Labels              []string `json:"labels"`
-	QueuePosition       int64    `json:"queuePosition"`
-	PeersConnected      int64    `json:"peersConnected"`
-	PeersSendingToUs    int64    `json:"peersSendingToUs"`
-	PeersGettingFromUs  int64    `json:"peersGettingFromUs"`
-	DownloadDir         string   `json:"downloadDir"`
-	AddedDate           int64    `json:"addedDate"`
-	DoneDate            int64    `json:"doneDate"`
-	ActivityDate        int64    `json:"activityDate"`
-	IsFinished          bool     `json:"isFinished"`
-	IsStalled           bool     `json:"isStalled"`
-	IsPrivate           bool     `json:"isPrivate"`
-	MagnetLink          string   `json:"magnetLink"`
-	FileCount           int64    `json:"fileCount"`
-	HaveValid           int64    `json:"haveValid"`
-	HaveUnchecked       int64    `json:"haveUnchecked"`
-	LeftUntilDone       int64    `json:"leftUntilDone"`
-	Comment             string   `json:"comment"`
-	PeerLimit           int64    `json:"peerLimit"`
-	SeedIdleLimit       int64    `json:"seedIdleLimit"`
-	SeedIdleMode        int64    `json:"seedIdleMode"`
-	SeedRatioLimit      float64  `json:"seedRatioLimit"`
-	SeedRatioMode       int64    `json:"seedRatioMode"`
-	BandwidthPriority   int64    `json:"bandwidthPriority"`
-	DownloadLimited     bool     `json:"downloadLimited"`
-	DownloadLimit       int64    `json:"downloadLimit"`
-	UploadLimited       bool     `json:"uploadLimited"`
-	UploadLimit         int64    `json:"uploadLimit"`
-	HonorsSessionLimits bool     `json:"honorsSessionLimits"`
+	ID                 int64    `json:"id"`
+	Name               string   `json:"name"`
+	HashString         string   `json:"hashString"`
+	Creator            string   `json:"creator"`
+	TotalSize          int64    `json:"totalSize"`
+	SizeWhenDone       int64    `json:"sizeWhenDone"`
+	PercentDone        float64  `json:"percentDone"`
+	Status             int64    `json:"status"`
+	RateDownload       int64    `json:"rateDownload"`
+	RateUpload         int64    `json:"rateUpload"`
+	ETA                int64    `json:"eta"`
+	UploadedEver       int64    `json:"uploadedEver"`
+	DownloadedEver     int64    `json:"downloadedEver"`
+	UploadRatio        float64  `json:"uploadRatio"`
+	SecondsSeeding     int64    `json:"secondsSeeding"`
+	Error              int64    `json:"error"`
+	ErrorString        string   `json:"errorString"`
+	Labels             []string `json:"labels"`
+	QueuePosition      int64    `json:"queuePosition"`
+	PeersConnected     int64    `json:"peersConnected"`
+	PeersSendingToUs   int64    `json:"peersSendingToUs"`
+	PeersGettingFromUs int64    `json:"peersGettingFromUs"`
+	DownloadDir        string   `json:"downloadDir"`
+	AddedDate          int64    `json:"addedDate"`
+	// DateCreated 种子文件的创建（发布）时间，0 = 上游没提供。
+	// 与 AddedDate 的区别很关键：老种新加时 AddedDate 是「我刚加它的时间」，
+	// 拿它当周龄会把种子真实年龄估小（时魔因此低估）。TR 由 dateCreated 给出，
+	// qB 只有能从 .torrent 解析到时才有；取不到时保种台退回 AddedDate 并标注来源。
+	DateCreated int64 `json:"dateCreated"`
+	// ContentPath 内容在磁盘上的完整路径（qB 的 content_path；TR 由 downloadDir + name 拼出）。
+	// 同内容分组靠它判断「几个种子是不是指向同一份数据」——只看名称与体积分不出
+	// 「辅种共用一份数据」与「真的存了两份」，而这两者对「能不能省盘」的结论正好相反。
+	ContentPath         string  `json:"contentPath,omitempty"`
+	DoneDate            int64   `json:"doneDate"`
+	ActivityDate        int64   `json:"activityDate"`
+	IsFinished          bool    `json:"isFinished"`
+	IsStalled           bool    `json:"isStalled"`
+	IsPrivate           bool    `json:"isPrivate"`
+	MagnetLink          string  `json:"magnetLink"`
+	FileCount           int64   `json:"fileCount"`
+	HaveValid           int64   `json:"haveValid"`
+	HaveUnchecked       int64   `json:"haveUnchecked"`
+	LeftUntilDone       int64   `json:"leftUntilDone"`
+	Comment             string  `json:"comment"`
+	PeerLimit           int64   `json:"peerLimit"`
+	SeedIdleLimit       int64   `json:"seedIdleLimit"`
+	SeedIdleMode        int64   `json:"seedIdleMode"`
+	SeedRatioLimit      float64 `json:"seedRatioLimit"`
+	SeedRatioMode       int64   `json:"seedRatioMode"`
+	BandwidthPriority   int64   `json:"bandwidthPriority"`
+	DownloadLimited     bool    `json:"downloadLimited"`
+	DownloadLimit       int64   `json:"downloadLimit"`
+	UploadLimited       bool    `json:"uploadLimited"`
+	UploadLimit         int64   `json:"uploadLimit"`
+	HonorsSessionLimits bool    `json:"honorsSessionLimits"`
 
 	// 带宽组（Transmission 4.x），列表与详情均返回（raw RPC 合并）
 	Groups []string `json:"groups,omitempty"`

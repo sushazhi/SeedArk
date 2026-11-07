@@ -22,15 +22,45 @@ const (
 type Service struct {
 	manager *rpc.Manager
 	store   *state.Store
+	// archiver 删种前留档（可为 nil）。做种策略是唯一会**批量**删种的地方，
+	// 不留档就等于把「删除后悔药」在损失最大的场景里关掉了。
+	archiver Archiver
 
 	// tickMu 串行化一轮执行：后台定时 tick 与「立即执行」接口可能同时触发，
 	// 并发跑会让同一批种子被下发两次删除、已处理标记互相覆盖
 	tickMu sync.Mutex
 }
 
+// Archiver 删种前留档的能力（由 pt.Service 实现）。
+// 用接口而不是直接依赖 pt 包：seedpolicy 不必为「留档」把整个 PT 中心拖进来，
+// 单测也能塞假实现。
+type Archiver interface {
+	CaptureReason(ctx context.Context, id int64, reason, note string) error
+}
+
 // New 创建做种策略服务
 func New(manager *rpc.Manager, store *state.Store) *Service {
 	return &Service{manager: manager, store: store}
+}
+
+// SetArchiver 注入留档能力（main 在 pt.Service 建好之后调用；可为 nil）
+func (s *Service) SetArchiver(a Archiver) { s.archiver = a }
+
+// archive 删种前逐颗留档，原因记为 policy + 规则名。
+// 失败只记日志、不阻断删除：这与手动删种的既定策略一致（留档是保险，
+// 不是删除的前置条件），而且在这里硬失败会让「该删的没删」把策略卡死。
+func (s *Service) archive(ctx context.Context, items []planItem, rule *state.SeedPolicyRule) {
+	if s.archiver == nil {
+		return
+	}
+	for _, it := range items {
+		if it.torrent == nil {
+			continue
+		}
+		if err := s.archiver.CaptureReason(ctx, it.torrent.ID, "policy", rule.Name); err != nil {
+			slog.Warn("做种策略：留档失败（继续删除）", "rule", rule.Name, "torrent", it.torrent.Name, "err", err)
+		}
+	}
 }
 
 // Result 一轮执行的统计，供「立即执行」接口回显
@@ -366,8 +396,10 @@ func (s *Service) execute(ctx context.Context, plan []planItem, result *Result) 
 		case state.PolicyActionPause:
 			err = s.manager.StopTorrents(ctx, ids)
 		case state.PolicyActionDelete:
+			s.archive(ctx, items, rule)
 			err = s.manager.RemoveTorrents(ctx, ids, false)
 		case state.PolicyActionDeleteData:
+			s.archive(ctx, items, rule)
 			err = s.manager.RemoveTorrents(ctx, ids, true)
 		default:
 			result.Failed += len(items)

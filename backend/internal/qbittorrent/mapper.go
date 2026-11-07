@@ -77,6 +77,7 @@ func (c *Client) mapTorrent(t torrentInfo) *models.Torrent {
 		PeersGettingFromUs: sumNonNegative(t.NumLeechs),
 		DownloadDir:        t.SavePath,
 		AddedDate:          t.AddedOn,
+		ContentPath:        t.ContentPath,
 		DoneDate:           t.CompletionOn,
 		ActivityDate:       t.LastActivity,
 		IsFinished:         t.Progress >= 1,

@@ -295,6 +295,19 @@ func (h *Handler) Register(r *gin.Engine, prefix string) {
 		// 保种契约（①）：只记录承诺，不触发暂停/删除
 		api.POST("/pt/contract", h.ptSetContract)
 		api.DELETE("/pt/contract/:hash", h.ptDeleteContract)
+		// v3：淘汰建议 / 站点快照 / 考核目标 / PT 全局阈值
+		// 全部只读或「记录用户录入」：没有任何一条会删种或上站
+		api.GET("/pt/eviction", h.ptEviction)
+		api.GET("/pt/activity", h.ptActivity)
+		api.GET("/pt/lone", h.ptLone)
+		api.GET("/pt/snapshots", h.ptSnapshots)
+		api.POST("/pt/snapshots", h.ptAddSnapshot)
+		api.DELETE("/pt/snapshots/:site", h.ptDeleteSnapshots)
+		api.GET("/pt/exams", h.ptExams)
+		api.POST("/pt/exams", h.ptSaveExam)
+		api.DELETE("/pt/exams/:site", h.ptDeleteExam)
+		api.GET("/pt/settings", h.ptGetSettings)
+		api.POST("/pt/settings", h.ptSaveSettings)
 		// 历史流量：统计面板的上下行折线图（range=24h|7d|30d）
 		api.GET("/traffic/history", h.trafficHistory)
 		// 远端→本地路径映射（打开目录/复制路径时的展示转换）

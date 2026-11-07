@@ -60,10 +60,12 @@ export function SpeedHistory({ torrentId }: { torrentId?: number }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
         {/* 网格线 */}
         {[0.25, 0.5, 0.75].map((r) => (
-          <line key={r} x1="0" y1={H * r} x2={W} y2={H * r} stroke="rgba(128,128,128,0.15)" strokeWidth="1" />
+          <line key={r} x1="0" y1={H * r} x2={W} y2={H * r} stroke="rgba(128,128,128,0.15)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         ))}
-        <path d={toPath('down')} fill="none" strokeWidth="2" strokeLinejoin="round" className="stroke-green-600 dark:stroke-green-400" />
-        <path d={toPath('up')} fill="none" strokeWidth="2" strokeLinejoin="round" className="stroke-blue-600 dark:stroke-blue-400" />
+        {/* non-scaling-stroke：这张图在统计页签里和状态栏里宽度差好几倍，
+            线宽留在坐标系里就成了「越宽越粗」 */}
+        <path d={toPath('down')} fill="none" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" className="stroke-green-600 dark:stroke-green-400" />
+        <path d={toPath('up')} fill="none" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" className="stroke-blue-600 dark:stroke-blue-400" />
       </svg>
       <div className="flex justify-between text-footnote mt-1">
         <span className="text-green-600 dark:text-green-400">

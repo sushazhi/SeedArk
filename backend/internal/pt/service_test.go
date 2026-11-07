@@ -298,81 +298,93 @@ func TestScoreOf(t *testing.T) {
 	}
 }
 
-// ---------- 6. window30 ----------
+// ---------- 6. windowUpload ----------
 
-func TestWindow30(t *testing.T) {
+func TestWindowUpload(t *testing.T) {
 	now := time.Now()
 	const hash = "0123456789abcdef0123456789abcdef01234567"
 
-	t.Run("无采样时按做种天数折算并标记估算", func(t *testing.T) {
+	t.Run("无采样时无数据，不折算", func(t *testing.T) {
 		svc := newTestService(t)
 		tr := &models.Torrent{HashString: hash, UploadedEver: 900, SecondsSeeding: 15 * 86400}
-		got, estimated := svc.window30(tr, now)
-		if got != 900 || !estimated {
-			t.Fatalf("window30() = (%d, %v), want (900, true)", got, estimated)
+		got, days := svc.windowUpload(tr, now)
+		if got != 0 || days != 0 {
+			t.Fatalf("windowUpload() = (%d, %d), want (0, 0)", got, days)
 		}
 	})
 
-	t.Run("做种不足一天时直接给累计上传", func(t *testing.T) {
+	t.Run("只有今天的采样时不足一天，按无数据处理", func(t *testing.T) {
 		svc := newTestService(t)
-		tr := &models.Torrent{HashString: hash, UploadedEver: 100, DoneDate: now.Add(-2 * time.Hour).Unix()}
-		got, estimated := svc.window30(tr, now)
-		if got != 100 || !estimated {
-			t.Fatalf("window30() = (%d, %v), want (100, true)", got, estimated)
+		// 首次运行当天：基线就是本次采样，增量恒为 0，是「刚开始看」而不是「没上传」
+		svc.local.recordSample(now, map[string]int64{hash: 1500})
+		tr := &models.Torrent{HashString: hash, UploadedEver: 1500, SecondsSeeding: 15 * 86400}
+		got, days := svc.windowUpload(tr, now)
+		if got != 0 || days != 0 {
+			t.Fatalf("windowUpload() = (%d, %d), want (0, 0)", got, days)
 		}
 	})
 
-	t.Run("累计上传为 0 时返回 0 且非估算", func(t *testing.T) {
+	t.Run("窗口内实测增量按实际天数报出", func(t *testing.T) {
 		svc := newTestService(t)
-		tr := &models.Torrent{HashString: hash}
-		got, estimated := svc.window30(tr, now)
-		if got != 0 || estimated {
-			t.Fatalf("window30() = (%d, %v), want (0, false)", got, estimated)
+		if n := svc.local.recordSample(now.AddDate(0, 0, -5), map[string]int64{hash: 1000}); n != 1 {
+			t.Fatalf("recordSample() = %d, want 1", n)
+		}
+		tr := &models.Torrent{HashString: hash, UploadedEver: 1500, SecondsSeeding: 15 * 86400}
+		got, days := svc.windowUpload(tr, now)
+		if got != 500 || days != 5 {
+			t.Fatalf("windowUpload() = (%d, %d), want (500, 5)", got, days)
 		}
 	})
 
-	t.Run("采样覆盖满 30 天时取真实增量且非估算", func(t *testing.T) {
+	t.Run("采样覆盖满 30 天时天数封顶 30", func(t *testing.T) {
 		svc := newTestService(t)
-		// 基线放在 30 天前：窗口覆盖足够时才把增量当作真实值
+		// 基线放在 30 天前：更早的采样已被窗口裁掉，天数不会超过 30
 		if n := svc.local.recordSample(now.AddDate(0, 0, -30), map[string]int64{hash: 1000}); n != 1 {
 			t.Fatalf("recordSample() = %d, want 1", n)
 		}
 		tr := &models.Torrent{HashString: hash, UploadedEver: 1500, SecondsSeeding: 15 * 86400}
-		got, estimated := svc.window30(tr, now)
-		if got != 500 || estimated {
-			t.Fatalf("window30() = (%d, %v), want (500, false)", got, estimated)
+		got, days := svc.windowUpload(tr, now)
+		if got != 500 || days != 30 {
+			t.Fatalf("windowUpload() = (%d, %d), want (500, 30)", got, days)
 		}
 	})
 
-	t.Run("采样覆盖不足时折算并标记估算，避免首日误报零上传", func(t *testing.T) {
+	t.Run("窗口内实测零上传就是 0", func(t *testing.T) {
 		svc := newTestService(t)
-		// 首次运行当天：基线就是本次采样，增量必然为 0，不能当成「近 30 天真实值」
-		svc.local.recordSample(now, map[string]int64{hash: 1500})
+		svc.local.recordSample(now.AddDate(0, 0, -3), map[string]int64{hash: 1500})
 		tr := &models.Torrent{HashString: hash, UploadedEver: 1500, SecondsSeeding: 15 * 86400}
-		got, estimated := svc.window30(tr, now)
-		if got != 1500 || !estimated {
-			t.Fatalf("window30() = (%d, %v), want (1500, true)", got, estimated)
+		got, days := svc.windowUpload(tr, now)
+		if got != 0 || days != 3 {
+			t.Fatalf("windowUpload() = (%d, %d), want (0, 3)", got, days)
 		}
 	})
 
-	t.Run("基线高于累计上传（计数器重置）时退回折算估算", func(t *testing.T) {
+	t.Run("基线高于累计上传（计数器重置）时按无数据处理", func(t *testing.T) {
 		svc := newTestService(t)
-		svc.local.recordSample(now, map[string]int64{hash: 2000})
+		svc.local.recordSample(now.AddDate(0, 0, -4), map[string]int64{hash: 2000})
 		tr := &models.Torrent{HashString: hash, UploadedEver: 1500, SecondsSeeding: 15 * 86400}
-		// 增量算不出（负值）时不能断言「零上传」，只能给带上限的折算值
-		got, estimated := svc.window30(tr, now)
-		if got != 1500 || !estimated {
-			t.Fatalf("window30() = (%d, %v), want (1500, true)", got, estimated)
+		got, days := svc.windowUpload(tr, now)
+		if got != 0 || days != 0 {
+			t.Fatalf("windowUpload() = (%d, %d), want (0, 0)", got, days)
 		}
 	})
 
-	t.Run("基线里没有该 hash 时退化为估算", func(t *testing.T) {
+	t.Run("基线里没有该 hash 时无数据", func(t *testing.T) {
 		svc := newTestService(t)
-		svc.local.recordSample(now, map[string]int64{"ffffffff": 1})
+		svc.local.recordSample(now.AddDate(0, 0, -4), map[string]int64{"ffffffff": 1})
 		tr := &models.Torrent{HashString: hash, UploadedEver: 900, SecondsSeeding: 15 * 86400}
-		got, estimated := svc.window30(tr, now)
-		if got != 900 || !estimated {
-			t.Fatalf("window30() = (%d, %v), want (900, true)", got, estimated)
+		got, days := svc.windowUpload(tr, now)
+		if got != 0 || days != 0 {
+			t.Fatalf("windowUpload() = (%d, %d), want (0, 0)", got, days)
+		}
+	})
+
+	t.Run("没有 hash 的种子不参与统计", func(t *testing.T) {
+		svc := newTestService(t)
+		tr := &models.Torrent{UploadedEver: 900}
+		got, days := svc.windowUpload(tr, now)
+		if got != 0 || days != 0 {
+			t.Fatalf("windowUpload() = (%d, %d), want (0, 0)", got, days)
 		}
 	})
 }
@@ -460,6 +472,22 @@ func TestBaseline30(t *testing.T) {
 	ls2.sample.Days[old] = &sampleDay{Up: map[string]int64{"h1": 7}}
 	if _, _, ok := ls2.baseline30("h1", now); ok {
 		t.Error("只有 30 天窗口外的采样时不应命中")
+	}
+
+	// 基线按各自 hash 的最早一天算：h2 只在 2 天前出现，也不该因为
+	// 「错过了全库最早那天（h1 在 5 天前）」而取不到基线
+	ls3 := newTestLocal(t)
+	ls3.recordSample(now.AddDate(0, 0, -5), map[string]int64{"h1": 100})
+	ls3.recordSample(now.AddDate(0, 0, -2), map[string]int64{"h2": 200})
+	if v, _, ok := ls3.baseline30("h1", now); !ok || v != 100 {
+		t.Errorf("h1 基线 = (%d, %v), want (100, true)", v, ok)
+	}
+	v2, at2, ok2 := ls3.baseline30("h2", now)
+	if !ok2 || v2 != 200 {
+		t.Fatalf("h2 基线 = (%d, %v), want (200, true)", v2, ok2)
+	}
+	if got := at2.Format("2006-01-02"); got != dayKey(now.AddDate(0, 0, -2)) {
+		t.Errorf("h2 基线日期 = %s, want %s", got, dayKey(now.AddDate(0, 0, -2)))
 	}
 }
 

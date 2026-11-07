@@ -83,9 +83,9 @@ func registerTools(srv *mcp.Server, s *Server, sig driverSig) {
 	ptOK := s != nil && s.ptSvc != nil
 	addToolIf(srv, ptOK, &mcp.Tool{
 		Name: "pt_seed_ledger",
-		Description: "保种资产台账：逐颗种子给出体积、分享率、近 30 天上传、上传效率（MB/GB·日）、保种分 0-100、" +
+		Description: "保种资产台账：逐个种子给出体积、分享率、近 30 天上传、上传效率（MB/GB·日）、保种分 0-100、" +
 			"连续无上传天数、站点是否已删种（无效做种）、保种契约剩余天数，并按站点汇总。" +
-			"用于回答「哪些种子在真正上传」「哪个站最费盘」。近 30 天上传在采样不足 30 天时是折算估算值",
+			"用于回答「哪些种子在真正上传」「哪个站最费盘」。上传量只报实测增量，windowDays 说明统计了几天，0 表示尚无数据",
 	}, s.ptSeedLedger)
 	addToolIf(srv, ptOK, &mcp.Tool{
 		Name: "pt_release_calendar",

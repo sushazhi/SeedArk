@@ -4,6 +4,7 @@ import { client } from '@/api/client'
 import { updateApi, type UpdateCheckResult, type UpdateStatus } from '@/api/torrent'
 import type { ApiResponse } from '@/types'
 import { usePlatform } from '@/platform'
+import { UpdateLineInfo } from '@/components/UpdateLineInfo'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -192,15 +193,22 @@ export function AppUpdatePrompt() {
             <p className="mt-1 text-footnote text-gray-500 dark:text-gray-400">
               {updStatus?.progress ?? 0}% · {updStatus?.message}
             </p>
-            {/* 分片并发下载：进度文案由后端按「镜像 + x/y 切片」给出，
+            {/* 线路：直连 GitHub 还是加速源 N/M（host），完成后另附各线路体积 */}
+            <div className="mt-1">
+              <UpdateLineInfo status={updStatus} />
+            </div>
+            {/* 分片并发下载：进度文案由后端按「线路 + x/y 切片」给出，
                 这里补充一条可操作提示，避免失败后用户不知道该做什么 */}
             <p className="mt-1 text-caption1 text-gray-400 dark:text-gray-500">{t('session.updateRetryHint')}</p>
           </div>
         )}
         {failed && <p className="text-body text-red-500">{updStatus?.message || t('session.updateFailed')}</p>}
+        {failed && <UpdateLineInfo status={updStatus} />}
 
         {done || readyWithoutInstall ? (
           <div className="space-y-1">
+            {/* 完成后仍要能看到「这次走的是哪条线路」，否则线路信息只在下载过程中可见 */}
+            <UpdateLineInfo status={updStatus} />
             <Button size="sm" className="h-8 text-footnote w-full" onClick={() => void downloadFpk()}>
               {t('session.downloadFpk')}
             </Button>

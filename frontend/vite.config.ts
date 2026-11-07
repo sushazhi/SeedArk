@@ -94,8 +94,16 @@ export default defineConfig({
       ...(process.env.DEV_WATCH_POLL === '1' ? { usePolling: true, interval: 300 } : {}),
     },
     proxy: {
-      '/api': { target: 'http://localhost:8200', changeOrigin: true },
-      '/mcp': { target: 'http://localhost:8200', changeOrigin: true },
+      // changeOrigin 必须为 false：后端的跨站写请求防护拿「Origin 的 host」与
+      // 「请求 Host」比对，相同才放行。changeOrigin: true 会把 Host 改写成
+      // localhost:8200，而浏览器发来的 Origin 仍是开发前端自己的地址——于是从
+      // localhost:5173 / 127.0.0.1:5173 之外任何地址（局域网 IP、主机名）打开
+      // dev 界面时，所有写请求都会 403「跨站请求已被拒绝」，表现为「能看不能改」
+      // （保存服务器、加种、改设置全失败）。
+      // 保留 Host 后，Origin 与 Host 同为开发者访问的那个地址，写请求正常放行，
+      // 且仍是严格同源语义：只有 dev 前端自己的源能通过，没有放松安全性。
+      '/api': { target: 'http://localhost:8200', changeOrigin: false },
+      '/mcp': { target: 'http://localhost:8200', changeOrigin: false },
       '/ws': { target: 'ws://localhost:8200', ws: true },
     },
   },

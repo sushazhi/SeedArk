@@ -13,7 +13,7 @@ import (
 // 设计边界：全部基于「下载器全量种子 + 本地采样账本」，不访问任何站点、不需要
 // 站点账号，也不修改任何种子——AI 客户端问「我的种子值多少、什么时候能删、
 // 删了还能不能找回」时，这里都能回答，而释放时间与效率一律是估算值，
-// 必须在返回值里带上 estimated / coverage 这类口径字段，不能让模型把估算当事实。
+// 必须在返回值里带上 windowDays / coverage 这类口径字段，不能让模型把估算当事实。
 
 // ---- pt_seed_ledger ----
 
@@ -35,7 +35,9 @@ type ptRow struct {
 	Ratio      float64 `json:"ratio"`
 	SeedDays   float64 `json:"seedDays"`
 	Uploaded30 int64   `json:"uploaded30dBytes"`
-	Estimated  bool    `json:"uploaded30dEstimated"`
+	// WindowDays 上传量统计了几天（0 = 采样不足一天，无数据）。上传量只报实测增量，
+	// 不折算；模型必须照 windowDays 说明口径，不能把 5 天的量当成 30 天。
+	WindowDays int     `json:"uploadedWindowDays"`
 	Efficiency float64 `json:"efficiencyMbPerGbDay"`
 	Score      int     `json:"keepScore"`
 	IdleDays   int     `json:"idleDays"`
@@ -95,7 +97,7 @@ func (s *Server) ptSeedLedger(ctx context.Context, _ *mcp.CallToolRequest, in pt
 		out = append(out, ptRow{
 			Hash: r.Hash, Name: r.Name, Site: r.Site, ServerName: r.ServerName,
 			Size: r.Size, Status: string(r.Status), Ratio: r.Ratio, SeedDays: r.SeedDays,
-			Uploaded30: r.Uploaded30, Estimated: r.Estimated, Efficiency: r.Efficiency,
+			Uploaded30: r.Uploaded30, WindowDays: r.WindowDays, Efficiency: r.Efficiency,
 			Score: r.Score, IdleDays: r.IdleDays, HRRisk: r.HRRisk,
 			UploadedToday: r.UploadedToday, TodayQuality: string(r.TodayQuality),
 			InvalidSeed: r.InvalidSeed, InvalidReason: r.InvalidReason,
@@ -125,7 +127,7 @@ func (s *Server) ptSeedLedger(ctx context.Context, _ *mcp.CallToolRequest, in pt
 			"from":       cov.From,
 			"full":       cov.Full,
 			"lastSample": cov.LastSample,
-			"note":       "采样不足 29 天时近 30 天上传为折算估算值",
+			"note":       "上传量只统计实测增量：days 是统计了几天，0 表示采样不足一天、暂无数据",
 		},
 		"matched":  matched,
 		"returned": len(out),
@@ -257,7 +259,8 @@ func (s *Server) ptContentMatrix(ctx context.Context, _ *mcp.CallToolRequest, in
 		}
 		out = append(out, map[string]any{
 			"key": g.Key, "name": g.Name, "sizeBytes": g.Size,
-			"totalBytes": g.TotalBytes, "duplicateBytes": g.DuplicateBytes,
+			"totalBytes": g.TotalBytes, "reclaimableBytes": g.ReclaimableBytes,
+			"verdict": string(g.Verdict), "sites": g.Sites, "multiServer": g.MultiServer,
 			"sameDownloader": g.SameDownloader, "copies": copies,
 		})
 	}

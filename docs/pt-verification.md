@@ -108,3 +108,34 @@
 - 改动全部落在 `backend/`、`frontend/src/`、`docs/`、`README.md`。
 - `git status`：9 个修改 + 8 个新增（`docs/mockups/`、`docs/pt-api-contract.md`、`docs/pt-feature-proposal.md`、`docs/pt-verification.md`、`backend/internal/pt/`、`backend/internal/api/pt.go`、`frontend/src/api/pt.ts`、`frontend/src/types/pt.ts`、`frontend/src/components/PT/`）；无临时文件残留。
 - 未提交任何 commit（按要求）。
+
+## 9. 后续变更：上传量改为实测增量（2026-10-31）
+
+用户要求「近 30 天上传改为实际上传量」，即放弃折算值。改动落在 `backend/internal/pt/{rules,store,types,service}.go`、`backend/internal/mcpserver/{tools,pt_tools}.go`、`frontend/src/types/pt.ts`、`frontend/src/components/PT/PTDialog.tsx`、`frontend/src/i18n/locales/{zh,en}.ts`、`frontend/src/demo/pt.ts`（接口契约与 README/CHANGELOG 同步）。
+
+口径（取代第 5 节 D1 的折算路径，D1 本身记录保留）：
+
+- `window30` → `windowUpload`：拿该 hash 在窗口内**最早一天**的上传高水位当基线，`UploadedEver − 基线` 即实测增量，**不折算、不外推**；`windowDays` 为这个数覆盖的天数（≤30），`efficiency` 按同一天数算。
+- `days = int(now − 基线日 00:00)`，不足 1 天即 `windowDays=0`（首次运行当天、种子刚进台账、计数器回退）：界面显示「—」，`zeroUpload` 不计入 —— 增量恒为 0 却是「刚开始看」，写成 0 会被读成「没有上传」。
+- `baseline30` 改为**逐 hash** 取各自最早一天（原实现取全库最早一天并要求该 hash 在其中）。这是端到端验证时发现的真实缺陷：h2 只在 2 天前出现、h1 在 5 天前出现时，h2 明明有基线却取不到，`windowDays` 恒为 0。
+- `estimated` 字段从 `TorrentRef` 与 MCP `ptRow` 中移除（`ptRow.uploaded30dEstimated` → `uploadedWindowDays`）；`SampleCoverage.Days` 语义改为「最早采样日到今天的跨度」，即本机采了多少天；`LedgerTotals`/`Overview` 增 `windowDays` = **各行 windowDays 的最大值**。前端不再打 `≈`。
+- 采样跨度与列窗口是两件事，所以留成两个字段：`coverage.days` 是采样能力（可能已满 30 天），`windowDays` 是这一列实际有多少天数据。取各行最大值而不是 coverage.days，是因为种子可能全是刚加的——那时采样已跑 30 天，这一列却一天数据都没有，标题不该写「近 30 天」；`windowDays=0` 时卡片/表头退回中性的「上传量」、值显示 `—`，概览告警与采样覆盖行文案也改成「上传量**最多**统计这 N 天」（该值下限为 0，不能断言等于 N 天）。
+
+单元测试：`TestWindow30` → `TestWindowUpload`（8 例：无采样、仅当日采样、5 天增量、30 天封顶、窗口内零上传、计数器回退、基线无该 hash、无 hash），`TestBaseline30` 增「逐 hash 取最早一天」用例。`go test ./...` 全绿，`tsc --noEmit` 与 `vite build` / `build:demo` 通过。
+
+真机端到端（`cmd/trmock -static -seed 20` + 真实 HTTP 路由 + 临时 `data_dir`，端口 8211）：
+
+| 用例 | 实测结果 |
+|:--|:--|
+| 只有当天采样 | `totals.windowDays=0`、`zeroUpload=0`、各行 `windowDays=0/uploaded30d=0`；告警「采样不足 1 天（2026-10-31 起），上传量暂无数据」 |
+| 造 5 天前基线（−1GB）、2 天前基线（−2GB）、5 天前基线高于累计（计数器回退） | A `windowDays=5 uploaded30d=1073741824`（efficiency 按 5 天算）、B `windowDays=2 uploaded30d=2147483648`、C `windowDays=0`（显示「—」） |
+| 汇总 | `totals.windowDays=5 uploaded30d=3221225472`；`overview.coverage.days=5`、`uploaded30d=3221225472`；站点表分台量与台账一致；`/pt/calendar` 不受影响 |
+
+前端展示核对：`build:demo` + 本地静态服务打开保种台，逐页签读 DOM 文本。概览卡片写「近 30 天上传 813 GB」、采样覆盖行写文案、台账汇总与列头同口径、行内不再出现 `≈`，全页无未解析的 i18n key（首轮曾发现新增文案层级放错——`uploadedHint`/`uploadedNoData` 落到 `pt.*` 而非 `pt.ledger.*`、`pt.card.uploadedWindow` 缺失——DOM 里直接显示原始 key，已修正并复核）。
+
+同日复验（开发服务器 `dev/launch-dev.ps1 -Mock`，:5173 前端 + :8200 后端，air 热重载已带上新代码）：
+
+- 起服务后立刻看台账：本机采样跨度 7 天，但 mock 每次启动都用 `rand.NewSource(time.Now())` 重新生成 infohash（`cmd/trmock/seed.go`），历史采样与今天的 28 颗种子零交集 → 每行 `windowDays=0`、`totals.windowDays=0`、`overview.windowDays=0`。界面因此显示中性的「上传量」+ 全列 `—`，而不是声称「近 7 天」——这正是上面「窗口取各行最大值」要解决的问题。
+- 往 `dev/data/pt/samples.json` 注入 3 天前基线（每颗取当前累计的 70%；`dev/` 已被 gitignore）并重启后端后：`totals.windowDays=3`、`uploaded30d=34903542264`、`zeroUpload=12`，28 行全为 `windowDays=3`；`coverage.days` 仍为 7。DOM 复核：列头与汇总写「近 3 天上传」（「共 28 颗 · 290 GB · 近 3 天上传 32.8 GB · 零上传 12 颗 · 连续无上传 12 颗」），行内无 title（3 = 表头天数），全页无未解析 key。
+
+

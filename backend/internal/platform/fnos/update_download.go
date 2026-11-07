@@ -97,6 +97,17 @@ const (
 //
 // 已淘汰：gh.dpik.top（实测仅 279 KB/s，且 API 侧 403）。
 // 这份列表是唯一事实来源：不再从安装包里读外部清单，改这里即可。
+//
+// 维护约定（改之前先看这段）：
+//   - 地址表只管「用户 NAS 上应用内一键更新」这一段链路；构建期（CI 下载 daemon /
+//     SeedArk / fpk 资产）用的是 fnos-transmission 仓库 tools/gh_mirror.py 的 MIRRORS，
+//     两处各自维护，改地址时都要改。
+//   - 之所以不读安装包里的清单：构建期在 CI 机房网络里测速，与用户家里的网络无关，
+//     测出来的顺序推不过去；而下面这套运行期机制（直连 3s 限时探测、分片级换源、
+//     连续失败降级、EWMA + 中位数速度降级、墙钟改派）本就比一次性测速更准。
+//   - 新增/删除镜像时：确认「镜像前缀 + 原始 GitHub 资源地址」可下载、支持 Range、
+//     且 ETag 与 GitHub 直连一致（分片会跨源拼接，ETag 不一致会整片丢弃）。改完跑
+//     go test ./internal/platform/fnos/ -short（TestUpdateMirrorsList 会校验列表形态）。
 var UpdateMirrors = []string{
 	"https://gh-proxy.com/",
 	"https://v4.gh-proxy.org/",
@@ -272,13 +283,168 @@ func (s sourceSet) count() int {
 	return len(s.prefixes) + 1
 }
 
-// label 来源的展示名（进度信息里用主机名，不泄露完整 URL）
+// label 来源的展示名（进度信息与日志里用主机名，不泄露完整 URL）。
+// 注意要从「镜像前缀」取主机名，而不是从前缀拼接后的完整 URL 取——后者会把
+// gh-proxy.com/https://github.com/... 整串带出来（这正是本函数此前的 bug）。
 func (s sourceSet) label(i int) string {
-	u := s.urlFor(i)
-	if u == s.rawURL {
-		return "github.com"
+	if n := len(s.prefixes); n > 0 && !s.isDirect(i) {
+		k := i
+		if !s.usesDirect() {
+			k = i + 1
+		}
+		return hostOf(s.prefixes[(k-1)%n])
 	}
-	return strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://"), "/")
+	return "github.com"
+}
+
+// hostOf 从镜像前缀里取主机名：https://gh-proxy.com/ -> gh-proxy.com
+func hostOf(prefix string) string {
+	u := strings.TrimPrefix(strings.TrimPrefix(prefix, "https://"), "http://")
+	if i := strings.IndexAny(u, "/?#"); i >= 0 {
+		u = u[:i]
+	}
+	return u
+}
+
+// 线路类别：界面上用不同徽标区分「直连」与「加速源」
+const (
+	lineKindDirect = "direct"
+	lineKindMirror = "mirror"
+)
+
+// isDirect 候选 i 是否为 GitHub 直连（候选 0）。
+// 没有加速源时唯一候选就是直连地址本身；noDirect 时全部是加速源。
+func (s sourceSet) isDirect(i int) bool {
+	if len(s.prefixes) == 0 {
+		return true
+	}
+	return s.usesDirect() && i <= 0
+}
+
+// lineName 候选 i 的可读线路名：直连 GitHub / 加速源 1/4（gh-proxy.com）。
+// 展示用；日志、健康度仍用主机名（label）。
+func (s sourceSet) lineName(i int) string {
+	if s.isDirect(i) {
+		return "直连 GitHub"
+	}
+	n := len(s.prefixes)
+	if n == 0 {
+		return "加速源"
+	}
+	k := i
+	if !s.usesDirect() {
+		k = i + 1 // 无直连候选时，候选 0 就是第一个加速源
+	}
+	k = (k-1)%n + 1
+	return fmt.Sprintf("加速源 %d/%d（%s）", k, n, s.label(i))
+}
+
+// lineInfo 候选 i 的线路信息（进度回调与状态接口用）
+func (s sourceSet) lineInfo(i int) lineInfo {
+	return lineInfo{Name: s.lineName(i), Kind: s.lineKind(i), Host: s.label(i)}
+}
+
+// lineKind 线路类别（direct/mirror）
+func (s sourceSet) lineKind(i int) string {
+	if s.isDirect(i) {
+		return lineKindDirect
+	}
+	return lineKindMirror
+}
+
+// lineInfo 当前线路的可读信息。界面据此显示「直连」还是「加速源 N/M（host）」，
+// 不再只给一个主机名（用户看不出走的是直连还是中转）。
+type lineInfo struct {
+	Name string `json:"name"` // 直连 GitHub / 加速源 1/4（gh-proxy.com）
+	Kind string `json:"kind"` // direct | mirror
+	Host string `json:"host"` // github.com / gh-proxy.com
+}
+
+// lineUsage 一条线路在本次下载里的实际用量（展示「这次到底走了哪几条线路」）
+type lineUsage struct {
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
+	Host   string `json:"host"`
+	Bytes  int64  `json:"bytes"`
+	Chunks int    `json:"chunks"`
+}
+
+// downloadReport 一次下载的线路报告。失败时也会带上已经用到的线路，
+// 供界面说明「已尝试过哪些线路」。
+type downloadReport struct {
+	ProbeLine   string      `json:"probeLine"`   // 探测命中的线路
+	DirectProbe string      `json:"directProbe"` // ok | timeout | skipped
+	Lines       []lineUsage `json:"lines"`       // 实际承担分片/字节的线路
+	Retried     int         `json:"retried"`     // 曾经换源重试过的分片数
+}
+
+// summarizeUsage 按候选序号汇总分片用量。分片大小由 planChunks 决定（纯函数），
+// 因此可以只凭 chunkOutcome 重算，无需在下载循环里额外统计。
+func summarizeUsage(src sourceSet, size int64, outcomes []chunkOutcome) []lineUsage {
+	chunks := planChunks(size, chooseChunkSize(size))
+	if len(chunks) == 0 || len(outcomes) == 0 {
+		return nil
+	}
+	idx := make([]int, 0, len(outcomes))
+	bySource := make(map[int]*lineUsage)
+	for _, o := range outcomes {
+		if o.index < 0 || o.index >= len(chunks) {
+			continue
+		}
+		u, ok := bySource[o.source]
+		if !ok {
+			info := src.lineInfo(o.source)
+			u = &lineUsage{Name: info.Name, Kind: info.Kind, Host: info.Host}
+			bySource[o.source] = u
+			idx = append(idx, o.source)
+		}
+		u.Bytes += chunks[o.index].size()
+		u.Chunks++
+	}
+	sort.Ints(idx)
+	out := make([]lineUsage, 0, len(idx))
+	for _, i := range idx {
+		out = append(out, *bySource[i])
+	}
+	return out
+}
+
+// sequentialUsage 单流下载的线路用量：整包都来自同一条线路。
+// size 未知（探测没拿到长度）时只报线路名，字节数记 0，界面按"未知体积"展示。
+func sequentialUsage(src sourceSet, size int64, si int) []lineUsage {
+	if si < 0 {
+		return nil
+	}
+	info := src.lineInfo(si)
+	return []lineUsage{{Name: info.Name, Kind: info.Kind, Host: info.Host, Bytes: size}}
+}
+
+// countRetried 统计「不是一次就成功」的分片数（attempt>0 即曾经换源）。
+func countRetried(outcomes []chunkOutcome) int {
+	n := 0
+	for _, o := range outcomes {
+		if o.attempt > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// linesBrief 把线路用量拼成一句短说明：直连 GitHub 6.4MB、加速源 1/4（gh-proxy.com）9.6MB。
+// 只有一条线路时不带体积，避免啰嗦。
+func linesBrief(lines []lineUsage) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if len(lines) == 1 {
+			parts = append(parts, l.Name)
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %.1fMB", l.Name, float64(l.Bytes)/(1<<20)))
+	}
+	return strings.Join(parts, "、")
 }
 
 // probeResult Range 探测结果
@@ -440,7 +606,8 @@ type chunkOutcome struct {
 }
 
 // downloadProgress 进度回调：written/total 为已写字节与总字节，chunk 为刚完成的分片序号。
-type downloadProgress func(written, total int64, doneChunks, totalChunks int, label string)
+// line 是当前线路（直连 GitHub / 加速源 N/M（host）），界面据此显示走的是直连还是加速源。
+type downloadProgress func(written, total int64, doneChunks, totalChunks int, line lineInfo)
 
 // parallelDownload 并行分片下载到单个 .part 文件（WriteAt 按偏移写，不产生分片临时文件）。
 // 返回分片结果（含每个分片实际用的来源，测试用）。
@@ -603,7 +770,7 @@ func parallelDownload(ctx context.Context, client *http.Client, dst *os.File, sr
 	jobs := make(chan chunkRange)
 	outcomes := make([]chunkOutcome, len(chunks))
 	var lastLabel atomic.Value
-	lastLabel.Store(src.label(probe.source))
+	lastLabel.Store(src.lineInfo(probe.source))
 
 	var lastProgressAt atomic.Int64
 	emitProgress := func(force bool) {
@@ -615,8 +782,8 @@ func parallelDownload(ctx context.Context, client *http.Client, dst *os.File, sr
 			return
 		}
 		lastProgressAt.Store(now)
-		label, _ := lastLabel.Load().(string)
-		onProgress(written.Load(), probe.size, int(chunksDone.Load()), len(chunks), label)
+		line, _ := lastLabel.Load().(lineInfo)
+		onProgress(written.Load(), probe.size, int(chunksDone.Load()), len(chunks), line)
 	}
 
 	workers := downloadWorkers
@@ -646,7 +813,7 @@ func parallelDownload(ctx context.Context, client *http.Client, dst *os.File, sr
 					}
 					si := pickSource(cr.index, attempt)
 					url := src.urlFor(si)
-					lastLabel.Store(src.label(si))
+					lastLabel.Store(src.lineInfo(si))
 					started := time.Now()
 
 					// 每片独立 ctx：墙钟到点就 cancel，让这条连接立刻被放弃
@@ -801,7 +968,8 @@ func medianSpeed(speed []float64, samples []int, minSamples int) float64 {
 
 // sequentialDownload Range 不可用时的回退路径：单流顺序下载，镜像按顺序尝试、直连兜底。
 // 这是改造前的原逻辑，保留它保证「服务器不支持 Range 时功能不退化」。
-func sequentialDownload(ctx context.Context, client *http.Client, dst *os.File, src sourceSet, probe *probeResult, onProgress downloadProgress) error {
+// 返回实际成功的候选序号（-1 表示全部失败），供调用方展示「这次走的是哪条线路」。
+func sequentialDownload(ctx context.Context, client *http.Client, dst *os.File, src sourceSet, probe *probeResult, onProgress downloadProgress) (int, error) {
 	var lastErr error
 	// 优先用探测成功的那个来源，再按顺序试其余
 	order := make([]int, 0, src.count())
@@ -816,24 +984,24 @@ func sequentialDownload(ctx context.Context, client *http.Client, dst *os.File, 
 	}
 	for _, si := range order {
 		url := src.urlFor(si)
-		err := streamToFile(ctx, client, url, dst, src.label(si), onProgress)
+		err := streamToFile(ctx, client, url, dst, src.lineInfo(si), onProgress)
 		if err == nil {
-			return nil
+			return si, nil
 		}
-		lastErr = fmt.Errorf("%s: %w", src.label(si), err)
+		lastErr = fmt.Errorf("%s: %w", src.lineName(si), err)
 		slog.Warn("更新包顺序下载失败", "source", src.label(si), "err", err)
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return -1, ctx.Err()
 		}
 	}
 	if lastErr == nil {
 		lastErr = errors.New("没有可用的下载来源")
 	}
-	return lastErr
+	return -1, lastErr
 }
 
 // streamToFile 单流下载写入 dst（从头覆盖，失败时调用方负责清理 .part）
-func streamToFile(ctx context.Context, client *http.Client, url string, dst *os.File, label string, onProgress downloadProgress) error {
+func streamToFile(ctx context.Context, client *http.Client, url string, dst *os.File, line lineInfo, onProgress downloadProgress) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -878,7 +1046,7 @@ func streamToFile(ctx context.Context, client *http.Client, url string, dst *os.
 			}
 			if onProgress != nil && (total > 0 && time.Since(lastAt) > downloadQuietWindow) {
 				lastAt = time.Now()
-				onProgress(downloaded, total, 0, 0, label)
+				onProgress(downloaded, total, 0, 0, line)
 			}
 		}
 		if rerr == io.EOF {
@@ -895,7 +1063,7 @@ func streamToFile(ctx context.Context, client *http.Client, url string, dst *os.
 		return fmt.Errorf("下载长度不符: 期望 %d 字节, 实际 %d 字节", total, downloaded)
 	}
 	if onProgress != nil {
-		onProgress(downloaded, downloaded, 0, 0, label)
+		onProgress(downloaded, downloaded, 0, 0, line)
 	}
 	return nil
 }
@@ -921,7 +1089,10 @@ func sha256File(path string) (string, error) {
 //
 // 任何失败路径都会删除 .part 并把错误抛给调用方，调用方随即释放 updating 标志，
 // 因此用户点「一键更新」重试即可，不会被残留文件或卡住的标志挡住。
-func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *releaseInfo, onProgress downloadProgress) error {
+//
+// 返回线路报告（探测命中的线路、直连探测结论、各线路实际承担的字节）：界面据此
+// 显示「这次走的是直连还是加速源」。失败时报告里也会带上已经用到的线路。
+func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *releaseInfo, onProgress downloadProgress) (downloadReport, error) {
 	prefixes := mirrorOrder()
 	if direct {
 		prefixes = nil
@@ -929,13 +1100,20 @@ func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *relea
 	src := sourceSet{prefixes: prefixes, rawURL: rawURL}
 	client := updateClient()
 
+	// 直连探测结论默认按「无直连候选」处理，探测成功后改写为 ok；
+	// 探测没抢到候选 0 而落到加速源，说明直连被墙/超时。
+	rep := downloadReport{DirectProbe: "skipped"}
+	if src.usesDirect() {
+		rep.DirectProbe = "timeout"
+	}
+
 	tmp := dest + ".part"
 	// 先清掉上次失败留下的残件，再以 O_EXCL 创建：即便有人预置了同名软链，
 	// Remove 只删链接本身，O_EXCL 也不会跟随链接写到目标文件上
 	_ = os.Remove(tmp)
 	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return fmt.Errorf("创建临时文件失败: %w", err)
+		return rep, fmt.Errorf("创建临时文件失败: %w", err)
 	}
 	cleanup := func() {
 		_ = f.Close()
@@ -945,30 +1123,40 @@ func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *relea
 	probe, perr := probeRemote(ctx, client, src, updateUserAgent)
 	if perr != nil {
 		cleanup()
-		return fmt.Errorf("探测下载来源失败: %w", perr)
+		return rep, fmt.Errorf("探测下载来源失败: %w", perr)
 	}
+	if src.isDirect(probe.source) {
+		rep.DirectProbe = "ok"
+	}
+	rep.ProbeLine = src.lineName(probe.source)
 	if probe.size > 0 && info != nil && info.FPKSize > 0 && probe.size != info.FPKSize {
 		cleanup()
-		return fmt.Errorf("远端文件大小 %d 与发布信息 %d 不一致（加速源可能缓存了旧文件）", probe.size, info.FPKSize)
+		return rep, fmt.Errorf("远端文件大小 %d 与发布信息 %d 不一致（加速源可能缓存了旧文件）", probe.size, info.FPKSize)
 	}
 
 	if probe.rangeOK && probe.size > 0 {
-		if _, perr := parallelDownload(ctx, client, f, src, probe, onProgress); perr != nil {
+		outcomes, perr := parallelDownload(ctx, client, f, src, probe, onProgress)
+		// 失败的调用也会带回分片结果：先把线路用量落进报告，再决定怎么报错
+		rep.Lines = summarizeUsage(src, probe.size, outcomes)
+		rep.Retried = countRetried(outcomes)
+		if perr != nil {
 			// 并行被判「不如单流」是唯一允许回退的情形：单流确实可能更快。
 			// 真正的下载失败（分片重试耗尽）不回退——单流只会更慢，还会多等一轮。
 			if errors.Is(perr, errSlowParallel) && ctx.Err() == nil {
 				slog.Info("并行分片未提速，回退单流下载", "err", perr)
 				if rerr := f.Truncate(0); rerr != nil {
 					cleanup()
-					return rerr
+					return rep, rerr
 				}
-				if rerr := sequentialDownload(ctx, client, f, src, probe, onProgress); rerr != nil {
+				si, rerr := sequentialDownload(ctx, client, f, src, probe, onProgress)
+				if rerr != nil {
 					cleanup()
-					return rerr
+					return rep, rerr
 				}
+				rep.Lines, rep.Retried = sequentialUsage(src, probe.size, si), 0
 			} else {
 				cleanup()
-				return perr
+				return rep, perr
 			}
 		}
 	} else {
@@ -977,29 +1165,35 @@ func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *relea
 		if probe.size <= 0 {
 			probe = nil
 		}
-		if err := sequentialDownload(ctx, client, f, src, probe, onProgress); err != nil {
+		si, err := sequentialDownload(ctx, client, f, src, probe, onProgress)
+		if err != nil {
 			cleanup()
-			return err
+			return rep, err
 		}
+		var got int64
+		if probe != nil {
+			got = probe.size
+		}
+		rep.Lines, rep.Retried = sequentialUsage(src, got, si), 0
 	}
 
 	st, err := f.Stat()
 	if err != nil {
 		cleanup()
-		return err
+		return rep, err
 	}
 	size := st.Size()
 	if size == 0 {
 		cleanup()
-		return errors.New("下载文件为空")
+		return rep, errors.New("下载文件为空")
 	}
 	if err := f.Sync(); err != nil {
 		cleanup()
-		return fmt.Errorf("刷盘失败: %w", err)
+		return rep, fmt.Errorf("刷盘失败: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("关闭文件失败: %w", err)
+		return rep, fmt.Errorf("关闭文件失败: %w", err)
 	}
 
 	// fpk 实体是 tar.gz / zip 包，校验魔数防止把错误页存成更新包
@@ -1012,11 +1206,11 @@ func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *relea
 	zipMagic := head[0] == 'P' && head[1] == 'K'
 	if !gzipMagic && !zipMagic {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("文件校验失败: 内容异常 (%q)", head)
+		return rep, fmt.Errorf("文件校验失败: 内容异常 (%q)", head)
 	}
 	if info != nil && info.FPKSize > 0 && size != info.FPKSize {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("文件大小不匹配: 期望 %d 字节, 实际 %d 字节", info.FPKSize, size)
+		return rep, fmt.Errorf("文件大小不匹配: 期望 %d 字节, 实际 %d 字节", info.FPKSize, size)
 	}
 
 	// 完整性：分片来自不同第三方代理，大小与魔数都可伪造；分片拼接后必须整文件
@@ -1024,7 +1218,7 @@ func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *relea
 	got, err := sha256File(tmp)
 	if err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("计算摘要失败: %w", err)
+		return rep, fmt.Errorf("计算摘要失败: %w", err)
 	}
 	digest := ""
 	md5sum := ""
@@ -1037,27 +1231,27 @@ func fetchFPK(ctx context.Context, rawURL, dest string, direct bool, info *relea
 		// 所以经代理链路仍要求至少有一种摘要，同时在日志里标明用的是弱摘要。
 		if sum, err := md5File(tmp); err != nil {
 			_ = os.Remove(tmp)
-			return fmt.Errorf("计算摘要失败: %w", err)
+			return rep, fmt.Errorf("计算摘要失败: %w", err)
 		} else if !strings.EqualFold(sum, md5sum) {
 			_ = os.Remove(tmp)
-			return errors.New("文件校验失败: MD5 与发布版本不一致（下载链路可能被替换）")
+			return rep, errors.New("文件校验失败: MD5 与发布版本不一致（下载链路可能被替换）")
 		}
 		slog.Warn("发布资源仅提供 MD5 摘要，已按 MD5 校验", "fpk", fpkNameOf(info))
-		return os.Rename(tmp, dest)
+		return rep, os.Rename(tmp, dest)
 	}
 	if digest == "" {
 		// 无摘要可校验时，经代理链路一律拒绝——否则「校验」形同虚设。
 		// GitHub 直连下载时文件与元数据同源，才降级为仅告警。
 		if !direct {
 			_ = os.Remove(tmp)
-			return errors.New("发布资源未提供 SHA-256 摘要，无法校验经代理下载的更新包")
+			return rep, errors.New("发布资源未提供 SHA-256 摘要，无法校验经代理下载的更新包")
 		}
 		slog.Warn("发布资源未提供 SHA-256 摘要，本次仅校验了大小与魔数", "fpk", fpkNameOf(info), "sha256", got)
 	} else if !strings.EqualFold(got, digest) {
 		_ = os.Remove(tmp)
-		return errors.New("文件校验失败: SHA-256 与发布版本不一致（下载链路可能被替换）")
+		return rep, errors.New("文件校验失败: SHA-256 与发布版本不一致（下载链路可能被替换）")
 	}
-	return os.Rename(tmp, dest)
+	return rep, os.Rename(tmp, dest)
 }
 
 // md5File 全文件 MD5（仅在上游未提供 SHA-256 时作为弱摘要兜底）

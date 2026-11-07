@@ -142,7 +142,7 @@ var listTorrentFields = []string{
 	"status", "rateDownload", "rateUpload", "eta", "uploadedEver", "downloadedEver",
 	"uploadRatio", "secondsSeeding", "error", "errorString", "labels", "queuePosition",
 	"peersConnected", "peersSendingToUs", "peersGettingFromUs", "downloadDir",
-	"addedDate", "doneDate", "activityDate", "isFinished", "isStalled",
+	"addedDate", "dateCreated", "doneDate", "activityDate", "isFinished", "isStalled",
 	"isPrivate", "magnetLink", "file-count", "haveValid", "haveUnchecked",
 	"leftUntilDone", "comment", "peer-limit", "seedIdleLimit", "seedIdleMode",
 	"seedRatioLimit", "seedRatioMode", "bandwidthPriority", "downloadLimited",

@@ -30,11 +30,11 @@ import (
 	// 空导入即完成 fnOS 平台注册；不导入时服务自动降级为通用部署
 	_ "github.com/sushazhi/seedark/backend/internal/platform/fnos"
 	"github.com/sushazhi/seedark/backend/internal/pt"
-	"github.com/sushazhi/seedark/backend/internal/traffic"
 	"github.com/sushazhi/seedark/backend/internal/rpc"
 	"github.com/sushazhi/seedark/backend/internal/seedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/speedpolicy"
 	"github.com/sushazhi/seedark/backend/internal/state"
+	"github.com/sushazhi/seedark/backend/internal/traffic"
 )
 
 func main() {
@@ -119,6 +119,11 @@ func main() {
 	if ptErr != nil {
 		slog.Warn("PT 中心服务初始化失败，相关接口将不可用", "err", ptErr)
 		ptSvc = nil
+	}
+	// 做种策略删种前先留档：批量的自动删种恰恰最需要「后悔药」。
+	// pt 服务不可用时留档能力为 nil，策略照常工作（只是不留档）。
+	if ptSvc != nil {
+		policySvc.SetArchiver(ptSvc)
 	}
 	// 历史流量（统计面板的上下行折线图）：与 PT 中心同样的降级方式，
 	// 数据目录不可写时置 nil、接口回 503，不影响其余功能

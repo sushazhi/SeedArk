@@ -179,8 +179,13 @@ func (s *store) recordSample(now time.Time, ups map[string]int64) int {
 	return n
 }
 
-// baseline30 返回该 hash 在 since 之后最早一天的上传高水位。
-// ok=false 表示还没有覆盖到窗口内的采样，调用方需退化为折算估算。
+// baseline30 返回该 hash 在窗口内最早一天的上传高水位。
+//
+// 「最早一天」按 hash 各自算，而不是全库最早那一天：采样是逐颗累积的，后加入的
+// 种子本来就错过了全库第一天，若要求它出现在全库最早那天，它会在有数据的情况下
+// 一直显示「无数据」（上传窗口只能靠这颗种子自己的第一条采样建立）。
+//
+// ok=false 表示窗口内还没有这颗种子的采样，调用方按「无数据」处理（不折算、不猜）。
 func (s *store) baseline30(hash string, now time.Time) (value int64, at time.Time, ok bool) {
 	if hash == "" {
 		return 0, time.Time{}, false
@@ -188,9 +193,13 @@ func (s *store) baseline30(hash string, now time.Time) (value int64, at time.Tim
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cutoff := dayKey(now.AddDate(0, 0, -30))
+	today := dayKey(now)
 	best := ""
-	for k := range s.sample.Days {
-		if k < cutoff || k > dayKey(now) {
+	for k, day := range s.sample.Days {
+		if k < cutoff || k > today || day == nil {
+			continue
+		}
+		if _, exists := day.Up[hash]; !exists {
 			continue
 		}
 		if best == "" || k < best {
@@ -200,10 +209,7 @@ func (s *store) baseline30(hash string, now time.Time) (value int64, at time.Tim
 	if best == "" {
 		return 0, time.Time{}, false
 	}
-	v, exists := s.sample.Days[best].Up[hash]
-	if !exists {
-		return 0, time.Time{}, false
-	}
+	v := s.sample.Days[best].Up[hash]
 	t, err := time.ParseInLocation("2006-01-02", best, now.Location())
 	if err != nil {
 		return 0, time.Time{}, false
@@ -275,22 +281,31 @@ func (s *store) contractDelete(hash string) (bool, error) {
 
 // ---------- 采样覆盖与活跃度（②） ----------
 
-// coverage 采样窗口的覆盖情况。Days 不足 29 时，uploaded30d 必然是折算值，
-// 界面要据此说明「≈」的可信度，而不是让用户对着一堆 ≈ 猜。
+// coverage 采样窗口的覆盖情况：最早采样日到今天有多少天（0 = 不足一天）。
+// 上传量只报实测增量、不做折算，因此这个天数就是「上传量统计了几天」，
+// 界面照它写「近 N 天上传」，不用再解释 ≈ 是怎么算出来的。
 func (s *store) coverage(now time.Time) SampleCoverage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cutoff := dayKey(now.AddDate(0, 0, -30))
 	today := dayKey(now)
-	days := 0
 	from := ""
 	for k := range s.sample.Days {
 		if k < cutoff || k > today {
 			continue
 		}
-		days++
 		if from == "" || k < from {
 			from = k
+		}
+	}
+	days := 0
+	if from != "" {
+		// 起点按当天 00:00 算：采样是持续滚动的，跨过几个自然日就覆盖了几天
+		if at, err := time.ParseInLocation("2006-01-02", from, now.Location()); err == nil {
+			days = int(now.Sub(at).Hours() / 24)
+		}
+		if days > 30 {
+			days = 30
 		}
 	}
 	return SampleCoverage{
@@ -409,6 +424,23 @@ func (s *store) todayDelta(now time.Time) TodayDelta {
 }
 
 // ---------- 档案 ----------
+
+// vaultSetReason 给已留档的记录补删除原因（策略自动删种用）。
+// 返回错误只在写盘失败时；找不到记录返回 nil——留档本身可能因拉不到详情而失败，
+// 这时不该让删种流程因为「没有记录可标记」而报错。
+func (s *store) vaultSetReason(hash, reason, note string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.vault.Records {
+		if s.vault.Records[i].Hash != hash {
+			continue
+		}
+		s.vault.Records[i].Reason = reason
+		s.vault.Records[i].ReasonNote = note
+		return s.writeJSON("vault.json", s.vault)
+	}
+	return nil
+}
 
 func (s *store) vaultPut(rec vaultRecord) error {
 	s.mu.Lock()

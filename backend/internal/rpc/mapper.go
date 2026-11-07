@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"encoding/base64"
+	"strings"
 	"time"
 
 	"github.com/hekmon/cunits/v2"
@@ -119,6 +120,8 @@ func mapTorrent(t trpc.Torrent, detail bool) *Torrent {
 		PeersGettingFromUs:  toI64(t.PeersGettingFromUs),
 		DownloadDir:         toStr(t.DownloadDir),
 		AddedDate:           toUnix(t.AddedDate),
+		DateCreated:         toUnix(t.DateCreated),
+		ContentPath:         trContentPath(t),
 		DoneDate:            toUnix(t.DoneDate),
 		ActivityDate:        toUnix(t.ActivityDate),
 		IsFinished:          toBool(t.IsFinished),
@@ -300,4 +303,24 @@ func mapSession(s trpc.SessionArguments) *Session {
 		IdleSeedingLimitEnabled:          toBool(s.IdleSeedingLimitEnabled),
 		IdleSeedingLimit:                 toI64(s.IdleSeedingLimit),
 	}
+}
+
+// trContentPath 拼出内容在磁盘上的路径。
+//
+// Transmission 没有 qB 那样的 content_path 字段，但语义可以还原：
+// 多文件种子 name 是目录名、单文件种子 name 是文件名，两者都落在 downloadDir 下，
+// 所以 downloadDir + name 就是内容路径。拼不出来时返回空串，
+// 上层会当成「路径未知」处理（不对共用/重复下断言），而不是拿假路径去比较。
+func trContentPath(t trpc.Torrent) string {
+	dir, name := "", ""
+	if t.DownloadDir != nil {
+		dir = strings.TrimSpace(*t.DownloadDir)
+	}
+	if t.Name != nil {
+		name = strings.TrimSpace(*t.Name)
+	}
+	if dir == "" || name == "" {
+		return ""
+	}
+	return strings.TrimRight(dir, "/") + "/" + name
 }

@@ -265,8 +265,15 @@ type updateService struct {
 	message  string
 	latest   string
 	fpkName  string
-	cached   gin.H
-	cachedAt time.Time
+	// 线路信息：界面据此显示本次下载走的是「直连 GitHub」还是「加速源 N/M（host）」，
+	// 不再只有一个主机名。lines 是本次实际承担分片/字节的线路（完成或失败后都有值）。
+	line        string
+	lineKind    string
+	directProbe string
+	lines       []lineUsage
+	retried     int
+	cached      gin.H
+	cachedAt    time.Time
 }
 
 func newUpdateService() *updateService { return &updateService{} }
@@ -400,6 +407,12 @@ func (u *updateHandler) status(c *gin.Context) {
 		"message":       svc.message,
 		"latestVersion": svc.latest,
 		"fpkFilename":   svc.fpkName,
+		// 线路：line=当前/最近使用的线路名，lines=本次各线路实际用量
+		"line":        svc.line,
+		"lineKind":    svc.lineKind,
+		"directProbe": svc.directProbe,
+		"retried":     svc.retried,
+		"lines":       svc.lines,
 	}
 	svc.mu.Unlock()
 	if !result["updating"].(bool) && result["progress"].(int) >= 100 && fileExists(u.fpkPath()) {
@@ -435,20 +448,21 @@ type downloadSource struct {
 // downloadSources 按尝试顺序给出下载来源：GitHub 直连在前，加速镜像按 UpdateMirrors 顺序兜底。
 // 直连不经第三方中转，且文件与 api.github.com 的元数据同源；直连被墙时由
 // directProbeTimeout 限时，超时即整体切到加速源，不会让用户白等整轮。
+//
+// 注意：运行期真正生效的候选序列由 fetchFPK 内部的 sourceSet 构造（它自带健康度轮转），
+// 这里只用来给出初始文案与直连主机名。
 func downloadSources(fpURL string) []downloadSource {
 	out := make([]downloadSource, 0, len(UpdateMirrors)+1)
 	out = append(out, downloadSource{
 		url:     fpURL,
 		direct:  true,
-		msg:     "正在从 GitHub 直连下载...",
+		msg:     "正在直连 GitHub 下载更新包...",
 		display: "github.com",
 	})
 	for i, m := range UpdateMirrors {
-		msg := "直连未成功，切换加速源..."
-		if i > 0 {
-			msg = fmt.Sprintf("加速源切换中...（%d/%d）", i+1, len(UpdateMirrors))
-		}
-		out = append(out, downloadSource{url: m + fpURL, msg: msg, display: strings.TrimSuffix(strings.TrimPrefix(m, "https://"), "/")})
+		display := strings.TrimSuffix(strings.TrimPrefix(m, "https://"), "/")
+		msg := fmt.Sprintf("直连不可用，切换到加速源 %d/%d（%s）...", i+1, len(UpdateMirrors), display)
+		out = append(out, downloadSource{url: m + fpURL, msg: msg, display: display})
 	}
 	return out
 }
@@ -489,10 +503,42 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 	defer cancel()
 
 	set(10, primary.msg)
-	progress := func(written, total int64, doneChunks, totalChunks int, label string) {
-		if label == "" {
-			label = primary.display
+	// 线路落地：界面据此显示「直连 GitHub」/「加速源 1/4（gh-proxy.com）」
+	applyReport := func(rep downloadReport) {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		if rep.DirectProbe != "" {
+			svc.directProbe = rep.DirectProbe
 		}
+		if rep.ProbeLine != "" {
+			svc.line = rep.ProbeLine
+		}
+		if len(rep.Lines) > 0 {
+			svc.lines = rep.Lines
+		}
+		svc.retried = rep.Retried
+	}
+	// 成功文案：把「实际走到的线路」写出来（对齐参考实现的「已通过 X 下载完成」）
+	successMessage := func(rep downloadReport) string {
+		if brief := linesBrief(rep.Lines); brief != "" {
+			return "已通过「" + brief + "」下载完成"
+		}
+		return "下载完成"
+	}
+	// 失败文案追加「已尝试过哪些线路」，避免用户只看到一句失败
+	attempted := func(rep downloadReport) string {
+		if brief := linesBrief(rep.Lines); brief != "" {
+			return "（已尝试：" + brief + "）"
+		}
+		return ""
+	}
+	progress := func(written, total int64, doneChunks, totalChunks int, line lineInfo) {
+		if line.Name == "" {
+			line = lineInfo{Name: "直连 GitHub", Kind: lineKindDirect, Host: primary.display}
+		}
+		svc.mu.Lock()
+		svc.line, svc.lineKind = line.Name, line.Kind
+		svc.mu.Unlock()
 		if totalChunks > 0 {
 			pct := 10
 			if total > 0 {
@@ -501,8 +547,8 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 			if pct > 60 {
 				pct = 60
 			}
-			set(pct, fmt.Sprintf("正在从 %s 下载 · %d/%d 分片 %.1fMB/%.1fMB",
-				label, doneChunks, totalChunks, float64(written)/(1<<20), float64(total)/(1<<20)))
+			set(pct, fmt.Sprintf("%s：正在下载 %d/%d 分片 %.1fMB/%.1fMB",
+				line.Name, doneChunks, totalChunks, float64(written)/(1<<20), float64(total)/(1<<20)))
 			return
 		}
 		pct := 10
@@ -512,29 +558,33 @@ func (u *updateHandler) performUpdate(info *releaseInfo) {
 		if pct > 60 {
 			pct = 60
 		}
-		set(pct, fmt.Sprintf("正在从 %s 下载... %.1fMB/%.1fMB",
-			label, float64(written)/(1<<20), float64(total)/(1<<20)))
+		set(pct, fmt.Sprintf("%s：正在下载 %.1fMB/%.1fMB",
+			line.Name, float64(written)/(1<<20), float64(total)/(1<<20)))
 	}
 
 	set(15, "正在校验更新包...")
-	if err := fetchFPK(ctx, info.FPKURL, dest, false, info, progress); err != nil {
+	rep, err := fetchFPK(ctx, info.FPKURL, dest, false, info, progress)
+	if err != nil {
 		slog.Warn("更新包下载失败", "url", info.FPKURL, "err", err)
+		applyReport(rep)
 		// 兜底：直连与分片链路都失败时，再纯粹走一次直连顺序下载
 		// （直连文件与元数据同源，上游无摘要时仍属可信来源）
 		if ctx.Err() == nil {
 			set(20, "加速源均失败，再试一次直连 GitHub...")
-			if derr := fetchFPK(ctx, info.FPKURL, dest, true, info, progress); derr == nil {
-				set(100, "下载完成")
+			drep, derr := fetchFPK(ctx, info.FPKURL, dest, true, info, progress)
+			if derr == nil {
+				applyReport(drep)
+				set(100, successMessage(drep))
 				return
-			} else {
-				slog.Warn("更新包直连下载失败", "err", derr)
-				err = fmt.Errorf("%v；直连也失败: %v", err, derr)
 			}
+			slog.Warn("更新包直连下载失败", "err", derr)
+			err = fmt.Errorf("%v；直连也失败: %v", err, derr)
 		}
-		fail(err.Error())
+		fail(err.Error() + attempted(rep))
 		return
 	}
-	set(100, "下载完成")
+	applyReport(rep)
+	set(100, successMessage(rep))
 }
 
 // failureNextStep 失败信息里的可操作下一步：给出发布页让用户手动下载 fpk 安装，
@@ -551,12 +601,12 @@ func failureNextStep(info *releaseInfo) string {
 }
 
 // downloadFPK 下载单个更新包（旧接口，保留给外部调用/测试）：
-// 全部走 fetchFPK，镜像列表由 UpdateMirrors（或打包侧清单）决定。
+// 全部走 fetchFPK，加速源顺序由 UpdateMirrors（内置常量）决定。
 func downloadFPK(rawURL, dest string, direct bool, info *releaseInfo, set func(int, string)) error {
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
 	var lastPct int
-	progress := func(written, total int64, doneChunks, totalChunks int, label string) {
+	progress := func(written, total int64, doneChunks, totalChunks int, line lineInfo) {
 		if total <= 0 {
 			return
 		}
@@ -569,12 +619,13 @@ func downloadFPK(rawURL, dest string, direct bool, info *releaseInfo, set func(i
 		}
 		lastPct = pct
 		if totalChunks > 0 {
-			set(pct, fmt.Sprintf("正在从 %s 下载 · %d/%d 分片", label, doneChunks, totalChunks))
+			set(pct, fmt.Sprintf("%s：正在下载 %d/%d 分片", line.Name, doneChunks, totalChunks))
 			return
 		}
-		set(pct, fmt.Sprintf("正在从 %s 下载... %.1fMB/%.1fMB", label, float64(written)/(1<<20), float64(total)/(1<<20)))
+		set(pct, fmt.Sprintf("%s：正在下载 %.1fMB/%.1fMB", line.Name, float64(written)/(1<<20), float64(total)/(1<<20)))
 	}
-	return fetchFPK(ctx, rawURL, dest, direct, info, progress)
+	_, err := fetchFPK(ctx, rawURL, dest, direct, info, progress)
+	return err
 }
 
 func fileExists(p string) bool {

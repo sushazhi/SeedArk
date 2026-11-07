@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { trafficApi } from '@/api/traffic'
@@ -104,6 +105,8 @@ function Chart({ data, range }: { data: TrafficHistory; range: TrafficRange }) {
   const { t } = useTranslation()
   const points = data.points
   const { totals, peak, coverage } = data
+  // 悬停 / 点按查看单个时间点的数值。null = 没有在看哪一个桶
+  const [hover, setHover] = useState<number | null>(null)
 
   // 一个点画不出线；全 0 说明这段时间还没采到东西，给空态而不是一条贴底的直线
   const hasData = points.length >= 2 && (totals.down > 0 || totals.up > 0)
@@ -116,6 +119,24 @@ function Chart({ data, range }: { data: TrafficHistory; range: TrafficRange }) {
     return best
   }, [points])
 
+  // 描边与圆点的尺寸基准。viewBox 只有 280 宽，容器是 w-full：桌面弹窗里整张图放大 3 倍多，
+  // 留在坐标系里的 strokeWidth=2 会被画成 7px 粗线——所以描边一律用 non-scaling-stroke
+  // 钉在 CSS px 上；圆点半径没法这么钉，按实测宽度换算成固定 4 CSS px。
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [unitPerPx, setUnitPerPx] = useState(1)
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const sync = () => {
+      const w = el.clientWidth
+      if (w > 0) setUnitPerPx(W / w)
+    }
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [hasData])
+
   // x 轴刻度取 4 个：手机上再多就叠字，且桶是等距的，按下标取点即等距
   const ticks = useMemo(() => {
     const n = 4
@@ -124,6 +145,35 @@ function Chart({ data, range }: { data: TrafficHistory; range: TrafficRange }) {
       return { idx, t: points[idx]?.t ?? data.start }
     })
   }, [points, data.start])
+
+  // 指针纵向位置 → 最近的桶下标。桶在区间内等距，所以按容器宽度按比例换算即可，
+  // 不做折线命中测试：时间序列图要回答的是「这个时刻多少流量」，不是「离哪条线近」。
+  const indexAt = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0) return null
+    const ratio = (e.clientX - rect.left) / rect.width
+    return Math.min(points.length - 1, Math.max(0, Math.round(ratio * (points.length - 1))))
+  }
+
+  // 键盘也能逐点看：图是可聚焦的，←/→ 移动，Home/End 跳到两端，Esc 收起
+  const onKeyDown = (e: ReactKeyboardEvent<SVGSVGElement>) => {
+    if (e.key === 'Escape') {
+      setHover(null)
+      return
+    }
+    if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault()
+      setHover(e.key === 'Home' ? 0 : points.length - 1)
+      return
+    }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const step = e.key === 'ArrowRight' ? 1 : -1
+    setHover((cur) => {
+      const from = cur ?? (step > 0 ? -1 : points.length)
+      return Math.min(points.length - 1, Math.max(0, from + step))
+    })
+  }
 
   // 覆盖不全时把「从什么时候才有记录」摆在图下，而不是让人把前面的空桶当成没流量
   const coverageNote = coverage.since > data.start && (
@@ -143,10 +193,27 @@ function Chart({ data, range }: { data: TrafficHistory; range: TrafficRange }) {
   }
 
   const yMax = Math.max(1, peak.down, peak.up)
-  const x = (i: number) => (i / (points.length - 1)) * W
+  const x = (i: number) => (points.length > 1 ? (i / (points.length - 1)) * W : 0)
   const y = (v: number) => H - PAD - (v / yMax) * (H - PAD * 2)
-  const toPath = (key: 'down' | 'up') =>
-    points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ')
+  // 两条折线只在数据变化时重算：悬停是 60Hz 级的 setState，每次都拼 288 个坐标点没必要
+  const paths = useMemo(() => {
+    const build = (key: 'down' | 'up') =>
+      points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ')
+    return { down: build('down'), up: build('up') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- x/y 只由 points 与 yMax 决定
+  }, [points, yMax])
+
+  // 光标位置与提示框。viewBox 等比缩放到容器宽度，所以百分比在两边都成立。
+  // 切换区间后点数组会变短，下标按当前长度夹一下，免得读到空位
+  const cursorIdx = hover !== null && points.length > 0 ? Math.min(hover, points.length - 1) : null
+  const cursor = cursorIdx !== null ? points[cursorIdx] : null
+  const cursorX = cursorIdx !== null ? (x(cursorIdx) / W) * 100 : 0
+  const cursorY = cursor ? (y(Math.max(cursor.down, cursor.up)) / H) * 100 : 0
+  // 圆点半径：4 CSS px 换算回坐标系单位（见上面的 unitPerPx）
+  const dotR = 4 * unitPerPx
+  // 靠边的桶把提示框往回收，避免溢出图外；靠顶的点把框放到下方
+  const tooltipX = cursorX < 14 ? '0%' : cursorX > 86 ? '-100%' : '-50%'
+  const tooltipY = cursorY > 30 ? 'calc(-100% - 8px)' : '8px'
 
   return (
     <div>
@@ -159,14 +226,79 @@ function Chart({ data, range }: { data: TrafficHistory; range: TrafficRange }) {
           <span className="translate-y-1/2">{formatBytes(0)}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={t('traffic.title')}>
-            {/* 网格线对齐上下两条刻度：顶=峰值、中=峰值一半，底是基线 */}
-            {[PAD, H / 2, H - PAD].map((gy) => (
-              <line key={gy} x1="0" y1={gy} x2={W} y2={gy} stroke="rgba(128,128,128,0.15)" strokeWidth="1" />
-            ))}
-            <path d={toPath('down')} fill="none" strokeWidth="2" strokeLinejoin="round" className="stroke-green-600 dark:stroke-green-400" />
-            <path d={toPath('up')} fill="none" strokeWidth="2" strokeLinejoin="round" className="stroke-blue-600 dark:stroke-blue-400" />
-          </svg>
+          {/* 图外面包一层 relative：提示框是 HTML（SVG 文本会随容器整体缩放，
+              桌面端会被放大到 20px 以上），要贴着光标定位在图内 */}
+          <div className="relative" ref={boxRef}>
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              // touch-pan-y：竖向滑动仍然滚动弹窗，只有横向拖动才落到图上取点
+              className="block h-auto w-full touch-pan-y focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              role="img"
+              aria-label={t('traffic.title')}
+              tabIndex={0}
+              onPointerMove={(e) => {
+                const i = indexAt(e)
+                if (i !== null) setHover(i)
+              }}
+              onPointerDown={(e) => {
+                const i = indexAt(e)
+                if (i !== null) setHover(i)
+              }}
+              // 手指离开就收起；鼠标靠 pointerleave，不必等抬起
+              onPointerUp={(e) => {
+                if (e.pointerType !== 'mouse') setHover(null)
+              }}
+              onPointerCancel={() => setHover(null)}
+              onPointerLeave={() => setHover(null)}
+              onKeyDown={onKeyDown}
+            >
+              {/* 网格线对齐上下两条刻度：顶=峰值、中=峰值一半，底是基线 */}
+              {[PAD, H / 2, H - PAD].map((gy) => (
+                <line key={gy} x1="0" y1={gy} x2={W} y2={gy} stroke="rgba(128,128,128,0.15)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+              ))}
+              <path d={paths.down} fill="none" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" className="stroke-green-600 dark:stroke-green-400" />
+              <path d={paths.up} fill="none" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" className="stroke-blue-600 dark:stroke-blue-400" />
+              {/* 取中的那一桶：竖虚线 + 两条线上的点，先看清「看的是哪一列」 */}
+              {cursor && cursorIdx !== null && (
+                <g>
+                  <line
+                    x1={x(cursorIdx)}
+                    y1={PAD}
+                    x2={x(cursorIdx)}
+                    y2={H - PAD}
+                    stroke="rgba(128,128,128,0.55)"
+                    strokeWidth="1"
+                    strokeDasharray="2 2"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <circle cx={x(cursorIdx)} cy={y(cursor.down)} r={dotR} strokeWidth="1" vectorEffect="non-scaling-stroke" className="fill-green-600 stroke-white dark:fill-green-400 dark:stroke-gray-900" />
+                  <circle cx={x(cursorIdx)} cy={y(cursor.up)} r={dotR} strokeWidth="1" vectorEffect="non-scaling-stroke" className="fill-blue-600 stroke-white dark:fill-blue-400 dark:stroke-gray-900" />
+                </g>
+              )}
+            </svg>
+            {cursor && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="pointer-events-none absolute z-10 rounded-lg border border-gray-200/70 bg-white/95 px-2 py-1 text-caption1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-900/95"
+                style={{ left: `${cursorX}%`, top: `${cursorY}%`, transform: `translate(${tooltipX}, ${tooltipY})` }}
+              >
+                <div className="whitespace-nowrap tabular-nums text-gray-500 dark:text-gray-400">
+                  {formatDate(cursor.t, EXACT_FMT[range])}
+                </div>
+                <div className="mt-0.5 flex gap-2 whitespace-nowrap tabular-nums">
+                  <span className="text-green-600 dark:text-green-400">
+                    ↓ {formatBytes(cursor.down)}
+                  </span>
+                  <span className="text-blue-600 dark:text-blue-400">
+                    ↑ {formatBytes(cursor.up)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* 屏读用户看不到悬停，用方向键也能逐点走 */}
+          <span className="sr-only">{t('traffic.keyboardHint')}</span>
           {/* x 轴刻度与图同宽同一列：不靠左内边距猜 y 轴标签的宽度 */}
           <div className="mt-0.5 flex justify-between text-caption2 tabular-nums text-gray-400 dark:text-gray-500">
             {ticks.map((tk) => (

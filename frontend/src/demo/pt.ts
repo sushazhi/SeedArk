@@ -34,10 +34,20 @@ const NOW = Math.floor(Date.now() / 1000)
 const dayKey = (offsetDays: number) => new Date((NOW + offsetDays * DAY) * 1000).toISOString().slice(0, 10)
 
 // —— 站点规则（与真实实现同构：一处配置，释放日历与做种策略都取它）——
+// 三个站正好覆盖三档时魔引擎，演示里就能看出「同一列在不同站不是同一个东西」：
+//   影音之家 = nexusphp（录了公式常数，只能算单颗边际值）
+//   开源镜像站 = manual（抄了站点时魔，唯一能与站方对账）
+//   综合站   = none（该站没有时魔概念）
 let profiles: PTSiteProfile[] = [
-  { id: 'sp-1', name: '影音之家', match: 'private-hd.club', minSeedDays: 7, minRatio: 1.2, hrSeedHours: 72, budgetGb: 200, enabled: true },
-  { id: 'sp-2', name: '开源镜像站', match: 'open-mirror.net', minSeedDays: 3, minRatio: 1, hrSeedHours: 0, budgetGb: 80, enabled: true },
-  { id: 'sp-3', name: '综合站', match: 'public.pushep.com', minSeedDays: 0, minRatio: 0, hrSeedHours: 0, budgetGb: 0, enabled: true },
+  {
+    id: 'sp-1', name: '影音之家', match: 'private-hd.club', minSeedDays: 7, minRatio: 1.2, hrSeedHours: 72, budgetGb: 200, enabled: true,
+    bonusEngine: 'nexusphp', bonusT0Weeks: 4, bonusN0: 7, bonusB0: 100, bonusL: 300, bonusPerSeeding: 1, bonusMaxSeeding: 7,
+  },
+  {
+    id: 'sp-2', name: '开源镜像站', match: 'open-mirror.net', minSeedDays: 3, minRatio: 1, hrSeedHours: 0, budgetGb: 80, enabled: true,
+    bonusEngine: 'manual', bonusManualPerHour: 42, bonusManualAt: NOW - 3 * DAY,
+  },
+  { id: 'sp-3', name: '综合站', match: 'public.pushep.com', minSeedDays: 0, minRatio: 0, hrSeedHours: 0, budgetGb: 0, enabled: true, bonusEngine: 'none' },
 ]
 
 // —— 保种契约（①）——
@@ -62,7 +72,21 @@ function ref(r: Partial<PTTorrentRef> & Pick<PTTorrentRef, 'id' | 'name' | 'hash
     hrDeadline: 0,
     releaseAt: 0,
     releaseReason: 'unknown',
-    estimated: true,
+    // 上传量只报实测增量：演示数据是「已采样满 30 天」的状态
+    windowDays: 30,
+    // v3：稀缺度 / 释放安全 / 时魔 / 年龄
+    seeders: 24,
+    leechers: 3,
+    scarcity: 11,
+    swarm: 'normal',
+    safeToRelease: false,
+    releaseNote: '义务未满足',
+    ageDays: 40,
+    ageSource: 'client',
+    bonusPerHour: 0,
+    bonusPerGb: 0,
+    // 没配口径 = none（不是 0）：界面靠这个键区分「没录」与「该站本来没有」
+    bonusMethodKey: 'none',
     idleDays: 0,
     uploadedToday: 0,
     todayQuality: 'exact',
@@ -84,6 +108,9 @@ const rows: PTTorrentRef[] = [
     idleDays: 0, uploadedToday: 3.8 * GB, todayQuality: 'exact',
     releaseAt: NOW + 21 * DAY, releaseReason: 'min_days',
     hasContract: true, contractUntil: NOW + 3 * DAY, contractDaysLeft: 3,
+    // NPHP 公式复刻：单个种子 = 删掉这个种子损失的时魔（精确差值）
+    bonusPerHour: 39.4, bonusPerGb: 0.635, bonusMethodKey: 'nexusphp',
+    bonusMethod: '估算 · 删掉这个种子损失 39.4/h（口径：NPHP atan；精确差值）',
   }),
   ref({
     id: 2, name: 'The.Wire.S01.1080p.BluRay', hash: 'bb22cc33dd44ee55ff6677889900112233445566',
@@ -91,6 +118,9 @@ const rows: PTTorrentRef[] = [
     efficiency: 3.2, score: 62, status: 'seeding', labels: ['video'], hrRisk: true,
     hrDeadline: NOW + 9 * HOUR, idleDays: 1, uploadedToday: 120 * 1024 * 1024, todayQuality: 'exact',
     releaseAt: NOW + 9 * HOUR, releaseReason: 'hr',
+    // 老种周龄乘子已顶满，删种损失接近全部 A 贡献（NPHP 公式性质：老种体积乘子线性）
+    bonusPerHour: 38, bonusPerGb: 1, bonusMethodKey: 'nexusphp',
+    bonusMethod: '估算 · 删掉这个种子损失 38/h（口径：NPHP atan；精确差值）',
   }),
   ref({
     id: 3, name: 'LibreOffice.Help.Docs.All.Langs', hash: 'ff00ee11dd22cc33bb44aa556677889900112233',
@@ -99,6 +129,9 @@ const rows: PTTorrentRef[] = [
     idleDays: 63, uploadedToday: 0, todayQuality: 'unknown',
     releaseAt: NOW - 20 * DAY, releaseReason: 'ratio',
     hasContract: true, contractUntil: NOW - 2 * DAY, contractDaysLeft: -2, contractBreach: true,
+    // 抄录档：42/h 是站点侧读数，本站做种 7.7GB → 5.45 点/GB·h
+    bonusPerHour: 42, bonusPerGb: 5.45, bonusMethodKey: 'site',
+    bonusMethod: '录入 · 站点时魔（42/h ÷ 本站在做种体积）',
   }),
   ref({
     id: 4, name: 'Vintage.Film.Collection.Remastered', hash: 'cc33dd44ee55ff66778899001122334455667788',
@@ -106,6 +139,8 @@ const rows: PTTorrentRef[] = [
     efficiency: 0, score: 8, status: 'paused', labels: ['video'],
     idleDays: 88, uploadedToday: 0, todayQuality: 'rollback',
     invalidSeed: true, invalidReason: 'Torrent not registered with this tracker',
+    bonusPerHour: 148, bonusPerGb: 1, bonusMethodKey: 'nexusphp',
+    bonusMethod: '估算 · 删掉这个种子损失 148/h（口径：NPHP atan；精确差值）',
   }),
   ref({
     id: 5, name: 'ubuntu-24.04.1-desktop-amd64.iso', hash: 'dd44ee55ff6677889900112233445566778899aa',
@@ -113,6 +148,8 @@ const rows: PTTorrentRef[] = [
     efficiency: 36.2, score: 96, status: 'seeding', labels: ['linux', 'iso'],
     idleDays: 0, uploadedToday: 7.2 * GB, todayQuality: 'exact',
     releaseAt: NOW - 2 * DAY, releaseReason: 'min_days',
+    bonusPerHour: 42, bonusPerGb: 5.45, bonusMethodKey: 'site',
+    bonusMethod: '录入 · 站点时魔（42/h ÷ 本站在做种体积）',
   }),
   ref({
     id: 6, name: 'KDE.Plasma.Wallpapers.Pack', hash: 'ee55ff6677889900112233445566778899aabb',
@@ -171,14 +208,34 @@ export function ptOverview(): PTOverview {
     vaultCount: 3,
     vaultBytes: 12.4 * GB,
     groupCount: 2,
-    duplicateBytes: 55.5 * GB,
+    // 演示数据：只有一组能证明是真重复，可省 5.8GB；另一组是跨机无法判定
+    reclaimableBytes: 5.8 * GB,
+    sharedGroups: 0,
     sites: ['影音之家', '开源镜像站', '综合站'].map(siteStatOf),
     upcoming: [
       { date: dayKey(1), count: 1, bytes: 62 * GB },
       { date: dayKey(21), count: 1, bytes: 38 * GB },
     ],
     generatedAt: NOW,
-    coverage: { days: 34, from: dayKey(-34), to: dayKey(0), lastSample: NOW - 60, full: true },
+    coverage: { days: 30, from: dayKey(-30), to: dayKey(0), lastSample: NOW - 60, full: true },
+    // v3：磁盘余量与稀缺汇总（演示数据给出「空间充足、但有几颗在兜底」的形态）
+    disk: { path: '/volume1/video', freeBytes: 880 * GB, totalBytes: 2000 * GB, usedPercent: 56, lowSpace: false, targetFreeGb: 100 },
+    scarcity: { scarceCount: 1, scarceBytes: 2 * GB, unknownCount: 0 },
+    // 头条是各配置站「实际每小时」的合计；上限与 ΣA 对账在 sites 明细里，供提示行展示
+    bonusCap: {
+      perHour: 107,
+      configured: true,
+      bestSite: '影音之家',
+      engine: 'nexusphp',
+      configCount: 2,
+      totalPerHour: 107 * 0.83 + 96,
+      sites: [
+        { site: '影音之家', engine: 'nexusphp', perHour: 107 * 0.83, capPerHour: 107, localSumA: 640, count: 28, observedA: 758.9, verified: true },
+        { site: '综合站', engine: 'nexusphp', perHour: 96, capPerHour: 150, localSumA: 895, count: 24, verified: false },
+      ],
+    },
+    // 上传量列的天数取各行最大值（与后端同口径）
+    windowDays: Math.max(...rows.map((r) => r.windowDays)),
     idleCount: rows.filter((r) => r.idleDays >= 7).length,
     idleBytes: rows.filter((r) => r.idleDays >= 7).reduce((a, r) => a + r.size, 0),
     invalidCount: rows.filter((r) => r.invalidSeed).length,
@@ -193,9 +250,9 @@ export function ptOverview(): PTOverview {
     todayQuality: 'partial',
     todayNote: `相对 ${dayKey(-1)}：部分种子当日新加或未被采到，合计偏小`,
     warnings: [
-      '1 颗种子的站点已判为未注册（站点已删种），占 148 GB',
-      '2 颗种子连续 7 天以上没有上传增长，占 150 GB',
-      '1 颗种子的保种契约已过期未解除',
+      '1 个种子的站点已判为未注册（站点已删种），占 148 GB',
+      '2 个种子连续 7 天以上没有上传增长，占 150 GB',
+      '1 个种子的保种契约已过期未解除',
       '1 个站点超出保种预算，合计超出 148 GB',
     ],
   }
@@ -211,7 +268,8 @@ export function ptLedger(): PTLedger {
       size: rows.reduce((a, r) => a + r.size, 0),
       uploaded30d: rows.reduce((a, r) => a + r.uploaded30d, 0),
       avgEfficiency: Math.round((eff.reduce((a, r) => a + r.efficiency, 0) / eff.length) * 10) / 10,
-      zeroUpload: rows.filter((r) => r.uploaded30d <= 0).length,
+      zeroUpload: rows.filter((r) => r.windowDays > 0 && r.uploaded30d <= 0).length,
+      windowDays: 30,
       idleCount: rows.filter((r) => r.idleDays >= 7).length,
       invalidCount: rows.filter((r) => r.invalidSeed).length,
       contractBreach: rows.filter((r) => r.contractBreach).length,
@@ -283,8 +341,12 @@ export function ptMatrix(): PTMatrix {
         name: 'Dune.Part.Two.2024.2160p.WEB-DL',
         size: 62 * GB,
         totalBytes: 130 * GB,
-        duplicateBytes: 68 * GB,
+        // 跨下载器、体积也不同：演示「无法判断」这一档（不给可省数字）
+        reclaimableBytes: 0,
+        verdict: 'unknown',
+        sites: ['影音之家', '综合站'],
         sameDownloader: false,
+        multiServer: true,
         copies: [
           { id: 1, site: '影音之家', serverName: 'qBittorrent', kind: 'qbittorrent', status: 'seeding', size: 62 * GB, uploaded: 480 * GB, labels: ['video'] },
           { id: 9, site: '综合站', serverName: 'Transmission', kind: 'transmission', status: 'seeding', size: 68 * GB, uploaded: 96 * GB, labels: ['video'] },
@@ -295,15 +357,19 @@ export function ptMatrix(): PTMatrix {
         name: 'ubuntu-24.04.1-desktop-amd64.iso',
         size: 5.8 * GB,
         totalBytes: 11.6 * GB,
-        duplicateBytes: 5.8 * GB,
+        // 同一台下载器里两条不同路径 → 真重复，这是唯一能给「可省」的情形
+        reclaimableBytes: 5.8 * GB,
+        verdict: 'duplicate',
+        sites: ['开源镜像站'],
         sameDownloader: true,
+        multiServer: false,
         copies: [
           { id: 5, site: '开源镜像站', serverName: 'qBittorrent', kind: 'qbittorrent', status: 'seeding', size: 5.8 * GB, uploaded: 210 * GB, labels: ['linux'] },
           { id: 10, site: '开源镜像站', serverName: 'qBittorrent', kind: 'qbittorrent', status: 'paused', size: 5.8 * GB, uploaded: 0, labels: ['linux'] },
         ],
       },
     ],
-    summary: { groups: 2, duplicateBytes: 73.8 * GB },
+    summary: { groups: 2, reclaimableBytes: 5.8 * GB, sharedGroups: 0 },
   }
 }
 

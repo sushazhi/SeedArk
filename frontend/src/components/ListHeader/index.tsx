@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownUp, ArrowUpDown, BarChart3, FilePlus2, LayoutGrid, LayoutList, RefreshCw } from 'lucide-react'
+import { ArrowDownUp, ArrowUpDown, FilePlus2, LayoutGrid, LayoutList, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { torrentApi } from '@/api/torrent'
 import { useAppStore } from '@/stores/appStore'
@@ -56,7 +56,7 @@ const SORT_OPTIONS = [
 const SORT_LABEL: Record<string, string> = Object.fromEntries(SORT_OPTIONS.map((o) => [o.key, o.label]))
 
 // 排序 / 视图切换 / 刷新 控制组（桌面端并入 TopBar，移动端留在 ListHeader）
-export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate }: { compact?: boolean; isMobile?: boolean; onOpenDashboard?: () => void; onOpenCreate?: () => void }) {
+export function ListControls({ compact, isMobile, onOpenCreate }: { compact?: boolean; isMobile?: boolean; onOpenCreate?: () => void }) {
   const { t } = useTranslation()
   const { isCoarse } = useResponsive()
   const sortField = useAppStore((s) => s.sortField)
@@ -184,27 +184,12 @@ export function ListControls({ compact, isMobile, onOpenDashboard, onOpenCreate 
           <FilePlus2 className={iconSize} />
         </button>
       )}
-
-      {/* 统计仪表盘 */}
-      {onOpenDashboard && (
-        <button
-          onClick={onOpenDashboard}
-          className={cn(
-            iconBtn,
-            'flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/60 dark:hover:bg-white/10 transition-colors',
-          )}
-          title={t('dashboard.title')}
-          aria-label={t('dashboard.title')}
-        >
-          <BarChart3 className={iconSize} />
-        </button>
-      )}
     </div>
   )
 }
 
 // 主区标题栏：分类标题（点击下拉切换状态分组）+ 计数 + 排序/视图/刷新（仅移动端渲染）
-export function ListHeader({ count, isMobile, onOpenDashboard, onOpenCreate }: { count: number; isMobile?: boolean; onOpenDashboard?: () => void; onOpenCreate?: () => void }) {
+export function ListHeader({ count, isMobile, onOpenCreate }: { count: number; isMobile?: boolean; onOpenCreate?: () => void }) {
   const { t } = useTranslation()
   const filters = useAppStore((s) => s.filters)
   const setFilters = useAppStore((s) => s.setFilters)
@@ -289,7 +274,7 @@ export function ListHeader({ count, isMobile, onOpenDashboard, onOpenCreate }: {
       </Popover>
 
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
-        <ListControls isMobile onOpenDashboard={onOpenDashboard} onOpenCreate={onOpenCreate} />
+        <ListControls isMobile onOpenCreate={onOpenCreate} />
       </div>
     </div>
   )
